@@ -41,7 +41,14 @@ Rules:
 - quantity: numeric quantity mentioned or reasonable default of 1
 - unit: each, ft, sq ft, hour, roll, box, etc.
 - unitPrice: estimated CAD price per unit
-- scopeOfWork: concise professional summary of the job scope`,
+- scopeOfWork: concise professional summary of the job scope
+
+Common brand names to watch for (even if transcript spelling looks slightly off):
+Electrical: Leviton, Legrand, Square D, Eaton, Siemens, GE, Southwire, Carlon, Milwaukee, DeWalt, Klein Tools
+Plumbing: Kohler, Moen, Delta, American Standard, IPEX, Uponor, Rheem, Bradford White
+HVAC: Carrier, Lennox, Trane, Goodman, Honeywell, Rheem
+
+The transcript may contain speech-to-text errors, especially for brand names that sound similar to common words (e.g. "Kohler" may be transcribed as "cold air" or "coaler"; "Leviton" may become "lever on" or similar). When a material name in the transcript sounds phonetically similar to a known brand from the list above, and the context (item type) matches that brand's product category (e.g. faucets, outlets, wire), correct the brand field to the most likely intended brand rather than defaulting to "Generic". Only use "Generic" when no brand is mentioned or implied at all.`,
         },
         {
           role: "user",
