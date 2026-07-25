@@ -16,7 +16,8 @@ interface StepPreviewProps {
   validityDays: number;
   materials: MaterialItem[];
   taxRate: number;
-  onSend: () => void;
+  onSend: () => void | Promise<void>;
+  isSending?: boolean;
   onDownload: () => void;
   onSaveDraft: () => void;
 }
@@ -31,6 +32,7 @@ export function StepPreview({
   materials,
   taxRate,
   onSend,
+  isSending = false,
   onDownload,
   onSaveDraft,
 }: StepPreviewProps) {
@@ -134,9 +136,10 @@ export function StepPreview({
         <button
           type="button"
           onClick={onSend}
-          className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-600"
+          disabled={isSending}
+          className="rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Send Quote
+          {isSending ? "Sending..." : "Send Quote"}
         </button>
         <button
           type="button"

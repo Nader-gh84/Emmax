@@ -29,6 +29,7 @@ export function NewQuoteWizard() {
   const [notes, setNotes] = useState("");
   const [validityDays, setValidityDays] = useState(30);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   function handleVoiceComplete(
     newTranscript: string,
@@ -79,8 +80,44 @@ export function NewQuoteWizard() {
     }
   }
 
-  function handleSendQuote() {
-    setActionMessage("Quote sent! (Email delivery coming soon)");
+  async function handleSendQuote() {
+    setIsSending(true);
+    setActionMessage(null);
+
+    try {
+      const response = await fetch("/api/send-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName,
+          customerEmail,
+          projectName,
+          notes,
+          validityDays,
+          taxRate,
+          materials: materials.map(({ item, quantity, unit, unitPrice }) => ({
+            item,
+            quantity,
+            unit,
+            unitPrice,
+          })),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to send quote");
+      }
+
+      setActionMessage(`Quote sent to ${customerEmail}!`);
+    } catch (err) {
+      setActionMessage(
+        err instanceof Error ? err.message : "Failed to send quote"
+      );
+    } finally {
+      setIsSending(false);
+    }
   }
 
   function handleDownloadPdf() {
@@ -103,7 +140,13 @@ export function NewQuoteWizard() {
       <StepIndicator currentStep={step} />
 
       {actionMessage && (
-        <div className="mb-6 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-accent">
+        <div
+          className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
+            actionMessage.startsWith("Quote sent")
+              ? "border-accent/30 bg-accent/10 text-accent"
+              : "border-red-500/30 bg-red-500/10 text-red-400"
+          }`}
+        >
           {actionMessage}
         </div>
       )}
@@ -146,6 +189,7 @@ export function NewQuoteWizard() {
           materials={materials}
           taxRate={taxRate}
           onSend={handleSendQuote}
+          isSending={isSending}
           onDownload={handleDownloadPdf}
           onSaveDraft={handleSaveDraft}
         />
