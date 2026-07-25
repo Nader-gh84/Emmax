@@ -2,17 +2,36 @@
 
 import { useEffect, useRef, useState } from "react";
 import { IconMicrophone } from "@/components/dashboard/icons";
-import { formatTimer } from "@/types/quote";
+import { QuoteLivePreview } from "@/components/quotes/quote-live-preview";
+import { touchBtnPrimary, touchBtnSecondary, touchTextarea } from "@/components/quotes/ui";
+import { MaterialItem, formatTimer } from "@/types/quote";
 
 type RecordingStatus = "idle" | "recording" | "processing";
 
 interface StepVoiceProps {
-  onComplete: (transcript: string, scopeOfWork: string, materials: unknown[]) => void;
+  materials: MaterialItem[];
+  taxRate: number;
+  transcript: string;
+  processed: boolean;
+  onProcessed: (
+    transcript: string,
+    scopeOfWork: string,
+    materials: unknown[]
+  ) => void;
+  onContinue: () => void;
 }
 
-export function StepVoice({ onComplete }: StepVoiceProps) {
+export function StepVoice({
+  materials,
+  taxRate,
+  transcript,
+  processed,
+  onProcessed,
+  onContinue,
+}: StepVoiceProps) {
   const [status, setStatus] = useState<RecordingStatus>("idle");
   const [seconds, setSeconds] = useState(0);
+  const [localTranscript, setLocalTranscript] = useState(transcript);
   const [manualMode, setManualMode] = useState(false);
   const [manualText, setManualText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +39,10 @@ export function StepVoice({ onComplete }: StepVoiceProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    setLocalTranscript(transcript);
+  }, [transcript]);
 
   useEffect(() => {
     return () => {
@@ -30,12 +53,9 @@ export function StepVoice({ onComplete }: StepVoiceProps) {
     };
   }, []);
 
-  async function processAudio(blob: Blob) {
+  async function processTranscription(formData: FormData) {
     setStatus("processing");
     setError(null);
-
-    const formData = new FormData();
-    formData.append("audio", blob, "recording.webm");
 
     try {
       const response = await fetch("/api/transcribe", {
@@ -46,42 +66,29 @@ export function StepVoice({ onComplete }: StepVoiceProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to process recording");
+        throw new Error(data.error || "Failed to process");
       }
 
-      onComplete(data.transcript, data.scopeOfWork, data.materials);
+      setLocalTranscript(data.transcript);
+      onProcessed(data.transcript, data.scopeOfWork, data.materials);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
       setStatus("idle");
     }
   }
 
+  async function processAudio(blob: Blob) {
+    const formData = new FormData();
+    formData.append("audio", blob, "recording.webm");
+    await processTranscription(formData);
+  }
+
   async function processManualText() {
     if (!manualText.trim()) return;
-
-    setStatus("processing");
-    setError(null);
-
     const formData = new FormData();
     formData.append("text", manualText.trim());
-
-    try {
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to process text");
-      }
-
-      onComplete(data.transcript, data.scopeOfWork, data.materials);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-      setStatus("idle");
-    }
+    await processTranscription(formData);
   }
 
   async function startRecording() {
@@ -141,126 +148,263 @@ export function StepVoice({ onComplete }: StepVoiceProps) {
     }
   }
 
-  const statusText =
-    status === "recording"
-      ? "Listening..."
-      : status === "processing"
-        ? "Processing with AI..."
-        : "Tap to start recording";
-
-  if (manualMode) {
-    return (
-      <div className="mx-auto max-w-xl text-center">
-        <h2 className="text-xl font-semibold text-white">Type your quote details</h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Describe materials, quantities, and scope of work.
-        </p>
-
-        {error && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-            {error}
-          </div>
-        )}
-
-        <textarea
-          value={manualText}
-          onChange={(e) => setManualText(e.target.value)}
-          rows={8}
-          placeholder="e.g. Need 20 amp breaker panel upgrade, 50 ft of 12/2 wire, 4 hours labour for kitchen rewire..."
-          className="mt-6 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-        />
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <button
-            type="button"
-            onClick={() => setManualMode(false)}
-            className="rounded-lg border border-white/20 px-6 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
-          >
-            Back to voice
-          </button>
-          <button
-            type="button"
-            onClick={processManualText}
-            disabled={!manualText.trim() || status === "processing"}
-            className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {status === "processing" ? "Processing..." : "Process with AI"}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const controls = manualMode ? (
+    <ManualEntry
+      manualText={manualText}
+      setManualText={setManualText}
+      error={error}
+      status={status}
+      onBack={() => setManualMode(false)}
+      onSubmit={processManualText}
+    />
+  ) : (
+    <RecordingControls
+      status={status}
+      seconds={seconds}
+      error={error}
+      processed={processed}
+      localTranscript={localTranscript}
+      onMicClick={handleMicClick}
+      onManual={() => setManualMode(true)}
+      onContinue={onContinue}
+    />
+  );
 
   return (
-    <div className="mx-auto max-w-xl text-center">
-      <h2 className="text-xl font-semibold text-white">Record your quote</h2>
-      <p className="mt-2 text-sm text-slate-400">
-        Describe the job, materials, and quantities out loud.
+    <div className="min-w-0">
+      {/* Mobile: preview on top when processed, controls below */}
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:gap-8">
+        {/* Live preview — shown first on mobile after processing, always on desktop left */}
+        <div
+          className={`min-w-0 ${
+            processed ? "order-1 lg:order-none" : "hidden lg:block"
+          }`}
+        >
+          <QuoteLivePreview
+            materials={materials}
+            taxRate={taxRate}
+            isPlaceholder={!processed}
+          />
+        </div>
+
+        {/* Recording controls */}
+        <div className="order-2 flex min-w-0 flex-col lg:order-none">
+          {!processed && (
+            <div className="mb-4 lg:hidden">
+              <QuoteLivePreview
+                materials={materials}
+                taxRate={taxRate}
+                isPlaceholder
+              />
+            </div>
+          )}
+          <div className="flex flex-1 flex-col items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-8 sm:px-8">
+            {controls}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecordingControls({
+  status,
+  seconds,
+  error,
+  processed,
+  localTranscript,
+  onMicClick,
+  onManual,
+  onContinue,
+}: {
+  status: RecordingStatus;
+  seconds: number;
+  error: string | null;
+  processed: boolean;
+  localTranscript: string;
+  onMicClick: () => void;
+  onManual: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <div className="flex w-full max-w-sm flex-col items-center text-center">
+      <h2 className="text-xl font-semibold text-white sm:text-2xl">
+        {processed ? "Quote captured" : "Record your quote"}
+      </h2>
+      <p className="mt-2 text-base text-slate-400">
+        {processed
+          ? "Review the transcript, then continue."
+          : "Describe materials, quantities, and scope of work."}
       </p>
 
       {error && (
-        <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div className="mt-4 w-full rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
           {error}
         </div>
       )}
 
-      <div className="mt-10 flex flex-col items-center">
-        {status === "processing" ? (
-          <div className="flex h-28 w-28 items-center justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-accent" />
+      {!processed && (
+        <>
+          <div className="mt-8 flex flex-col items-center">
+            {status === "processing" ? (
+              <div className="flex h-32 w-32 items-center justify-center">
+                <div className="h-14 w-14 animate-spin rounded-full border-4 border-white/10 border-t-accent" />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onMicClick}
+                aria-label={
+                  status === "recording" ? "Stop recording" : "Start recording"
+                }
+                className={`relative flex h-32 w-32 items-center justify-center rounded-full transition ${
+                  status === "recording"
+                    ? "animate-pulse bg-accent shadow-xl shadow-accent/40 ring-4 ring-accent/30"
+                    : "bg-accent shadow-xl shadow-accent/25 hover:bg-blue-600 active:scale-95"
+                }`}
+              >
+                <IconMicrophone className="h-14 w-14 text-white" />
+              </button>
+            )}
+
+            <StatusLine status={status} />
+
+            {status === "recording" && (
+              <>
+                <p className="mt-3 font-mono text-3xl font-bold text-white">
+                  {formatTimer(seconds)}
+                </p>
+                <Waveform />
+              </>
+            )}
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={handleMicClick}
-            className={`relative flex h-28 w-28 items-center justify-center rounded-full transition ${
-              status === "recording"
-                ? "bg-accent shadow-lg shadow-accent/40 animate-pulse ring-4 ring-accent/30"
-                : "bg-accent shadow-lg shadow-accent/25 hover:bg-blue-600"
-            }`}
-          >
-            <IconMicrophone className="h-12 w-12 text-white" />
-          </button>
-        )}
 
-        <p className="mt-6 text-sm font-medium text-slate-300">{statusText}</p>
+          {status === "idle" && (
+            <button
+              type="button"
+              onClick={onManual}
+              className="mt-8 min-h-[44px] text-base font-medium text-accent hover:text-blue-400"
+            >
+              Or type manually
+            </button>
+          )}
+        </>
+      )}
 
-        {status === "recording" && (
-          <>
-            <p className="mt-2 font-mono text-2xl font-bold text-white">
-              {formatTimer(seconds)}
-            </p>
-            <Waveform />
-          </>
-        )}
-      </div>
-
-      {status === "idle" && (
-        <button
-          type="button"
-          onClick={() => setManualMode(true)}
-          className="mt-10 text-sm font-medium text-accent hover:text-blue-400"
-        >
-          Or type manually
-        </button>
+      {(processed || localTranscript) && (
+        <div className="mt-6 w-full animate-fade-in">
+          <p className="mb-2 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+            Transcript
+          </p>
+          <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-navy/50 p-4 text-left text-base leading-relaxed text-slate-300">
+            {localTranscript || "Processing..."}
+          </div>
+          {processed && (
+            <button
+              type="button"
+              onClick={onContinue}
+              className={`${touchBtnPrimary} mt-6 w-full`}
+            >
+              Continue to Materials
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
 }
 
+function StatusLine({ status }: { status: RecordingStatus }) {
+  if (status === "recording") {
+    return (
+      <div className="mt-5 flex items-center gap-2">
+        <span className="h-2.5 w-2.5 animate-pulse-dot rounded-full bg-red-500" />
+        <p className="text-base font-medium text-white">Listening...</p>
+      </div>
+    );
+  }
+
+  if (status === "processing") {
+    return (
+      <p className="mt-5 text-base font-medium text-slate-300">
+        Processing with AI...
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-5 text-base font-medium text-slate-300">
+      Tap to start recording
+    </p>
+  );
+}
+
 function Waveform() {
   return (
-    <div className="mt-6 flex h-12 items-end justify-center gap-1">
-      {Array.from({ length: 16 }).map((_, i) => (
+    <div className="mt-5 flex h-10 items-end justify-center gap-1.5">
+      {Array.from({ length: 7 }).map((_, i) => (
         <div
           key={i}
-          className="w-1.5 origin-bottom rounded-full bg-accent animate-waveform"
+          className="w-2 origin-bottom rounded-full bg-accent animate-waveform"
           style={{
-            animationDelay: `${i * 0.08}s`,
-            height: `${30 + (i % 5) * 12}%`,
+            animationDelay: `${i * 0.1}s`,
+            height: `${40 + (i % 3) * 20}%`,
           }}
         />
       ))}
+    </div>
+  );
+}
+
+function ManualEntry({
+  manualText,
+  setManualText,
+  error,
+  status,
+  onBack,
+  onSubmit,
+}: {
+  manualText: string;
+  setManualText: (v: string) => void;
+  error: string | null;
+  status: RecordingStatus;
+  onBack: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="w-full max-w-md text-center">
+      <h2 className="text-xl font-semibold text-white">Type your quote</h2>
+      <p className="mt-2 text-base text-slate-400">
+        Describe materials, quantities, and scope of work.
+      </p>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+          {error}
+        </div>
+      )}
+
+      <textarea
+        value={manualText}
+        onChange={(e) => setManualText(e.target.value)}
+        rows={6}
+        placeholder="e.g. Panel upgrade, 50 ft of 12/2 wire, 4 hours labour..."
+        className={`${touchTextarea} mt-6 text-left`}
+      />
+
+      <div className="mt-6 flex flex-col gap-3">
+        <button type="button" onClick={onBack} className={`${touchBtnSecondary} w-full`}>
+          Back to voice
+        </button>
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!manualText.trim() || status === "processing"}
+          className={`${touchBtnPrimary} w-full`}
+        >
+          {status === "processing" ? "Processing with AI..." : "Process with AI"}
+        </button>
+      </div>
     </div>
   );
 }

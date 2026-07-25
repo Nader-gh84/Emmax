@@ -1,5 +1,7 @@
 "use client";
 
+import { touchBtnPrimary, touchBtnSecondary, touchInput, touchTextarea } from "@/components/quotes/ui";
+
 interface StepCustomerProps {
   customerName: string;
   customerEmail: string;
@@ -30,88 +32,83 @@ export function StepCustomer({
   }
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold text-white">Customer details</h2>
-      <p className="mt-2 text-sm text-slate-400">
-        Who is this quote for?
-      </p>
+    <div className="min-w-0">
+      <h2 className="text-xl font-semibold text-white sm:text-2xl">
+        Customer details
+      </h2>
+      <p className="mt-2 text-base text-slate-400">Who is this quote for?</p>
 
-      <form onSubmit={handleSubmit} className="mt-6 max-w-xl space-y-5">
-        <Field label="Customer name" required>
-          <input
-            type="text"
-            value={customerName}
-            onChange={(e) => onChange("customerName", e.target.value)}
-            required
-            className={inputClass}
-            placeholder="John Smith"
-          />
-        </Field>
+      <form onSubmit={handleSubmit} className="mt-6 max-w-3xl">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <Field label="Customer name" required className="md:col-span-2">
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => onChange("customerName", e.target.value)}
+              required
+              className={touchInput}
+              placeholder="John Smith"
+            />
+          </Field>
 
-        <Field label="Customer email" required>
-          <input
-            type="email"
-            value={customerEmail}
-            onChange={(e) => onChange("customerEmail", e.target.value)}
-            required
-            className={inputClass}
-            placeholder="john@example.com"
-          />
-        </Field>
+          <Field label="Customer email" required>
+            <input
+              type="email"
+              value={customerEmail}
+              onChange={(e) => onChange("customerEmail", e.target.value)}
+              required
+              className={touchInput}
+              placeholder="john@example.com"
+            />
+          </Field>
 
-        <Field label="Customer phone">
-          <input
-            type="tel"
-            value={customerPhone}
-            onChange={(e) => onChange("customerPhone", e.target.value)}
-            className={inputClass}
-            placeholder="(416) 555-0123"
-          />
-        </Field>
+          <Field label="Customer phone">
+            <input
+              type="tel"
+              value={customerPhone}
+              onChange={(e) => onChange("customerPhone", e.target.value)}
+              className={touchInput}
+              placeholder="(416) 555-0123"
+            />
+          </Field>
 
-        <Field label="Project name">
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => onChange("projectName", e.target.value)}
-            className={inputClass}
-            placeholder="Kitchen panel upgrade"
-          />
-        </Field>
+          <Field label="Project name" className="md:col-span-2">
+            <input
+              type="text"
+              value={projectName}
+              onChange={(e) => onChange("projectName", e.target.value)}
+              className={touchInput}
+              placeholder="Kitchen panel upgrade"
+            />
+          </Field>
 
-        <Field label="Notes / scope of work">
-          <textarea
-            value={notes}
-            onChange={(e) => onChange("notes", e.target.value)}
-            rows={4}
-            className={inputClass}
-          />
-        </Field>
+          <Field label="Notes / scope of work" className="md:col-span-2">
+            <textarea
+              value={notes}
+              onChange={(e) => onChange("notes", e.target.value)}
+              rows={4}
+              className={touchTextarea}
+            />
+          </Field>
 
-        <Field label="Quote validity (days)">
-          <input
-            type="number"
-            min="1"
-            value={validityDays}
-            onChange={(e) =>
-              onChange("validityDays", parseInt(e.target.value) || 30)
-            }
-            className={inputClass}
-          />
-        </Field>
+          <Field label="Quote validity (days)">
+            <input
+              type="number"
+              min="1"
+              value={validityDays}
+              onChange={(e) =>
+                onChange("validityDays", parseInt(e.target.value) || 30)
+              }
+              className={touchInput}
+            />
+          </Field>
+        </div>
 
-        <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:justify-between">
-          <button
-            type="button"
-            onClick={onBack}
-            className="rounded-lg border border-white/20 px-6 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
-          >
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-between">
+          <button type="button" onClick={onBack} className={`${touchBtnSecondary} w-full sm:w-auto`}>
             Back
           </button>
-          <button
-            type="submit"
-            className="rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600"
-          >
+          <button type="submit" className={`${touchBtnPrimary} w-full sm:w-auto`}>
             Generate Quote
           </button>
         </div>
@@ -120,21 +117,20 @@ export function StepCustomer({
   );
 }
 
-const inputClass =
-  "w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent";
-
 function Field({
   label,
   required,
+  className = "",
   children,
 }: {
   label: string;
   required?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-slate-300">
+    <div className={className}>
+      <label className="block text-base font-medium text-slate-300">
         {label}
         {required && <span className="text-accent"> *</span>}
       </label>

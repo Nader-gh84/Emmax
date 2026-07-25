@@ -18,6 +18,7 @@ interface ExtractedMaterial {
 export function NewQuoteWizard() {
   const [step, setStep] = useState(1);
   const [transcript, setTranscript] = useState("");
+  const [voiceProcessed, setVoiceProcessed] = useState(false);
   const [materials, setMaterials] = useState<MaterialItem[]>([
     createMaterialItem(),
   ]);
@@ -31,13 +32,14 @@ export function NewQuoteWizard() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
-  function handleVoiceComplete(
+  function handleVoiceProcessed(
     newTranscript: string,
     scopeOfWork: string,
     extractedMaterials: unknown[]
   ) {
     setTranscript(newTranscript);
     setNotes(scopeOfWork);
+    setVoiceProcessed(true);
 
     const parsed = (extractedMaterials as ExtractedMaterial[]).map((m) =>
       createMaterialItem({
@@ -49,12 +51,17 @@ export function NewQuoteWizard() {
     );
 
     setMaterials(parsed.length > 0 ? parsed : [createMaterialItem()]);
+  }
+
+  function handleContinueFromVoice() {
     setStep(2);
   }
 
   function handleReRecord() {
     setStep(1);
     setTranscript("");
+    setVoiceProcessed(false);
+    setMaterials([createMaterialItem()]);
   }
 
   function handleCustomerChange(field: string, value: string | number) {
@@ -129,10 +136,10 @@ export function NewQuoteWizard() {
   }
 
   return (
-    <div>
-      <div className="mb-2">
-        <h1 className="text-2xl font-bold text-white">New Quote</h1>
-        <p className="mt-1 text-sm text-slate-400">
+    <div className="min-w-0">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-2xl font-bold text-white sm:text-3xl">New Quote</h1>
+        <p className="mt-1 text-base text-slate-400">
           Create a professional quote with your voice.
         </p>
       </div>
@@ -141,7 +148,7 @@ export function NewQuoteWizard() {
 
       {actionMessage && (
         <div
-          className={`mb-6 rounded-lg border px-4 py-3 text-sm ${
+          className={`mb-6 rounded-xl border px-4 py-3 text-base ${
             actionMessage.startsWith("Quote sent")
               ? "border-accent/30 bg-accent/10 text-accent"
               : "border-red-500/30 bg-red-500/10 text-red-400"
@@ -151,7 +158,16 @@ export function NewQuoteWizard() {
         </div>
       )}
 
-      {step === 1 && <StepVoice onComplete={handleVoiceComplete} />}
+      {step === 1 && (
+        <StepVoice
+          materials={materials}
+          taxRate={taxRate}
+          transcript={transcript}
+          processed={voiceProcessed}
+          onProcessed={handleVoiceProcessed}
+          onContinue={handleContinueFromVoice}
+        />
+      )}
 
       {step === 2 && (
         <StepMaterials
@@ -196,11 +212,11 @@ export function NewQuoteWizard() {
       )}
 
       {transcript && step > 1 && (
-        <details className="mt-10 rounded-lg border border-white/10 bg-white/[0.02] p-4">
-          <summary className="cursor-pointer text-sm font-medium text-slate-400">
+        <details className="mt-10 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <summary className="cursor-pointer text-base font-medium text-slate-400">
             View original transcript
           </summary>
-          <p className="mt-3 text-sm leading-relaxed text-slate-300">
+          <p className="mt-3 break-words text-base leading-relaxed text-slate-300">
             {transcript}
           </p>
         </details>

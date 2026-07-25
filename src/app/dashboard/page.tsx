@@ -19,7 +19,7 @@ export default async function DashboardPage() {
   const firstName = user ? getFirstName(user) : "there";
 
   return (
-    <main className="flex-1 p-6 lg:p-8">
+    <main className="min-w-0 p-4 sm:p-6 lg:p-8">
       {/* Header */}
       <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
