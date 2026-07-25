@@ -86,10 +86,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 6,
   },
-  colItem: { width: "36%" },
-  colQty: { width: "10%", textAlign: "center" },
-  colUnit: { width: "14%", textAlign: "center" },
-  colPrice: { width: "20%", textAlign: "right" },
+  colItem: { width: "28%" },
+  colBrand: { width: "14%", textAlign: "center" },
+  colQty: { width: "8%", textAlign: "center" },
+  colUnit: { width: "12%", textAlign: "center" },
+  colPrice: { width: "18%", textAlign: "right" },
   colTotal: { width: "20%", textAlign: "right" },
   th: {
     fontSize: 8,
@@ -203,6 +204,7 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
 
         <View style={styles.tableHeader}>
           <Text style={[styles.th, styles.colItem]}>Item</Text>
+          <Text style={[styles.th, styles.colBrand]}>Brand</Text>
           <Text style={[styles.th, styles.colQty]}>Qty</Text>
           <Text style={[styles.th, styles.colUnit]}>Unit</Text>
           <Text style={[styles.th, styles.colPrice]}>Unit Price</Text>
@@ -212,6 +214,7 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
         {data.materials.map((item, index) => (
           <View key={index} style={styles.tableRow}>
             <Text style={[styles.td, styles.colItem]}>{item.item}</Text>
+            <Text style={[styles.td, styles.colBrand]}>{item.brand}</Text>
             <Text style={[styles.td, styles.colQty]}>{item.quantity}</Text>
             <Text style={[styles.td, styles.colUnit]}>{item.unit}</Text>
             <Text style={[styles.td, styles.colPrice]}>

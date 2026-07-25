@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 interface ExtractedMaterial {
   item: string;
+  brand: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -31,11 +32,12 @@ async function extractQuoteData(
           content: `You extract structured quote data from tradespeople voice transcripts for Canadian contractors.
 Return valid JSON with this exact shape:
 {
-  "materials": [{ "item": string, "quantity": number, "unit": string, "unitPrice": number }],
+  "materials": [{ "item": string, "brand": string, "quantity": number, "unit": string, "unitPrice": number }],
   "scopeOfWork": string
 }
 Rules:
 - item: clear material or labour description
+- brand: manufacturer or brand name if mentioned (e.g. "Leviton", "Legrand"); use "Generic" if not mentioned
 - quantity: numeric quantity mentioned or reasonable default of 1
 - unit: each, ft, sq ft, hour, roll, box, etc.
 - unitPrice: estimated CAD price per unit

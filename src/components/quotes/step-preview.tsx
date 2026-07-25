@@ -60,8 +60,9 @@ export function StepPreview({
           notes,
           validityDays,
           taxRate,
-          materials: materials.map(({ item, quantity, unit, unitPrice }) => ({
+          materials: materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
             item,
+            brand,
             quantity,
             unit,
             unitPrice,
@@ -270,7 +271,9 @@ function QuotePreviewBody({
             className="flex items-start justify-between gap-2 border-b border-white/5 pb-3"
           >
             <div className="min-w-0 flex-1">
-              <p className="break-words text-base text-white">{item.item}</p>
+              <p className="break-words text-base text-white">
+                {formatItemWithBrand(item.item, item.brand)}
+              </p>
               <p className="text-sm text-slate-400">
                 {item.quantity} {item.unit}
               </p>
@@ -296,7 +299,9 @@ function QuotePreviewBody({
           <tbody>
             {materials.map((item) => (
               <tr key={item.id} className="border-b border-white/5">
-                <td className="break-words py-2 text-white">{item.item}</td>
+                <td className="break-words py-2 text-white">
+                  {formatItemWithBrand(item.item, item.brand)}
+                </td>
                 <td className="py-2 text-slate-300">{item.quantity}</td>
                 <td className="py-2 text-slate-300">{item.unit}</td>
                 <td className="py-2 text-right text-white">
@@ -324,4 +329,9 @@ function QuotePreviewBody({
       </div>
     </div>
   );
+}
+
+function formatItemWithBrand(item: string, brand: string): string {
+  const trimmedBrand = brand.trim();
+  return trimmedBrand ? `${item} — ${trimmedBrand}` : item;
 }

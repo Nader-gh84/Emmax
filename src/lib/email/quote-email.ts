@@ -6,6 +6,7 @@ import {
 
 export interface QuoteEmailItem {
   item: string;
+  brand: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -35,6 +36,7 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
       (item) => `
       <tr>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#0f172a;">${escapeHtml(item.item)}</td>
+        <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${escapeHtml(item.brand)}</td>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${item.quantity}</td>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${escapeHtml(item.unit)}</td>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#0f172a;text-align:right;">${formatCurrency(materialLineTotal({ id: "", ...item }))}</td>
@@ -88,6 +90,7 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
                 <thead>
                   <tr style="background-color:#f8fafc;">
                     <th style="padding:12px;text-align:left;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Item</th>
+                    <th style="padding:12px;text-align:center;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Brand</th>
                     <th style="padding:12px;text-align:center;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Qty</th>
                     <th style="padding:12px;text-align:center;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Unit</th>
                     <th style="padding:12px;text-align:right;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Total</th>

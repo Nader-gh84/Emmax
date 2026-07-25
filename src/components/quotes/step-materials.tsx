@@ -89,6 +89,18 @@ export function StepMaterials({
               className={`${touchInput} mt-1`}
             />
 
+            <div className="mt-3">
+              <label className="text-xs font-medium uppercase text-slate-500">
+                Brand
+              </label>
+              <input
+                type="text"
+                value={item.brand}
+                onChange={(e) => updateMaterial(item.id, "brand", e.target.value)}
+                className={`${touchInput} mt-1`}
+              />
+            </div>
+
             <div className="mt-3 grid grid-cols-3 gap-2">
               <div>
                 <label className="text-xs font-medium uppercase text-slate-500">
@@ -151,6 +163,7 @@ export function StepMaterials({
           <thead>
             <tr className="border-b border-white/10 bg-white/5">
               <th className="px-4 py-3 font-medium text-slate-300">Item</th>
+              <th className="w-28 px-4 py-3 font-medium text-slate-300">Brand</th>
               <th className="w-24 px-4 py-3 font-medium text-slate-300">Qty</th>
               <th className="w-24 px-4 py-3 font-medium text-slate-300">Unit</th>
               <th className="w-32 px-4 py-3 font-medium text-slate-300">
@@ -169,6 +182,16 @@ export function StepMaterials({
                     value={item.item}
                     onChange={(e) =>
                       updateMaterial(item.id, "item", e.target.value)
+                    }
+                    className="w-full min-h-[44px] rounded border border-white/10 bg-navy px-2 py-1.5 text-base text-white focus:border-accent focus:outline-none"
+                  />
+                </td>
+                <td className="px-4 py-2">
+                  <input
+                    type="text"
+                    value={item.brand}
+                    onChange={(e) =>
+                      updateMaterial(item.id, "brand", e.target.value)
                     }
                     className="w-full min-h-[44px] rounded border border-white/10 bg-navy px-2 py-1.5 text-base text-white focus:border-accent focus:outline-none"
                   />

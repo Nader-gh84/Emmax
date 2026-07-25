@@ -3,6 +3,7 @@ import { generateId } from "@/lib/id";
 export interface MaterialItem {
   id: string;
   item: string;
+  brand: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -33,6 +34,7 @@ export function createMaterialItem(
   return {
     id: generateId(),
     item: partial.item ?? "",
+    brand: partial.brand ?? "",
     quantity: partial.quantity ?? 1,
     unit: partial.unit ?? "each",
     unitPrice: partial.unitPrice ?? 0,

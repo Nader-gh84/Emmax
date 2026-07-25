@@ -10,6 +10,7 @@ import { MaterialItem, createMaterialItem } from "@/types/quote";
 
 interface ExtractedMaterial {
   item: string;
+  brand: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -44,6 +45,7 @@ export function NewQuoteWizard() {
     const parsed = (extractedMaterials as ExtractedMaterial[]).map((m) =>
       createMaterialItem({
         item: m.item ?? "",
+        brand: m.brand ?? "",
         quantity: m.quantity ?? 1,
         unit: m.unit ?? "each",
         unitPrice: m.unitPrice ?? 0,
@@ -102,8 +104,9 @@ export function NewQuoteWizard() {
           notes,
           validityDays,
           taxRate,
-          materials: materials.map(({ item, quantity, unit, unitPrice }) => ({
+          materials: materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
             item,
+            brand,
             quantity,
             unit,
             unitPrice,

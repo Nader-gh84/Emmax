@@ -82,7 +82,7 @@ export function QuoteLivePreview({
               >
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-base text-white">
-                    {item.item || "Untitled item"}
+                    {formatItemWithBrand(item.item, item.brand)}
                   </p>
                   <p className="mt-0.5 text-sm text-slate-400">
                     {item.quantity} {item.unit} ×{" "}
@@ -116,6 +116,12 @@ export function QuoteLivePreview({
       </div>
     </div>
   );
+}
+
+function formatItemWithBrand(item: string, brand: string): string {
+  const label = item.trim() || "Untitled item";
+  const trimmedBrand = brand.trim();
+  return trimmedBrand ? `${label} — ${trimmedBrand}` : label;
 }
 
 function PreviewField({
