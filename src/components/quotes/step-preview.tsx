@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   MaterialItem,
   calculateQuoteTotals,
@@ -19,7 +20,6 @@ interface StepPreviewProps {
   taxRate: number;
   onSend: () => void | Promise<void>;
   isSending?: boolean;
-  onDownload: () => void;
   onSaveDraft: () => void;
 }
 
@@ -34,13 +34,63 @@ export function StepPreview({
   taxRate,
   onSend,
   isSending = false,
-  onDownload,
   onSaveDraft,
 }: StepPreviewProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
   const { subtotal, tax, grandTotal } = calculateQuoteTotals(
     materials,
     taxRate
   );
+
+  async function handleDownloadPdf() {
+    setIsDownloading(true);
+    setPdfError(null);
+
+    try {
+      const response = await fetch("/api/generate-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName,
+          customerEmail,
+          customerPhone,
+          projectName,
+          notes,
+          validityDays,
+          taxRate,
+          materials: materials.map(({ item, quantity, unit, unitPrice }) => ({
+            item,
+            quantity,
+            unit,
+            unitPrice,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to generate PDF");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "quote.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setPdfError(
+        err instanceof Error ? err.message : "Failed to generate PDF"
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  }
 
   const preview = (
     <QuotePreviewBody
@@ -68,8 +118,13 @@ export function StepPreview({
       >
         {isSending ? "Sending..." : "Send Quote"}
       </button>
-      <button type="button" onClick={onDownload} className={`${touchBtnSecondary} w-full`}>
-        Download PDF
+      <button
+        type="button"
+        onClick={handleDownloadPdf}
+        disabled={isDownloading}
+        className={`${touchBtnSecondary} w-full disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        {isDownloading ? "Generating PDF..." : "Download PDF"}
       </button>
       <button type="button" onClick={onSaveDraft} className={`${touchBtnSecondary} w-full`}>
         Save as Draft
@@ -86,6 +141,12 @@ export function StepPreview({
         Review your quote before sending to the customer.
       </p>
 
+      {pdfError && (
+        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+          {pdfError}
+        </div>
+      )}
+
       {/* Mobile: scrollable preview + sticky bottom send */}
       <div className="mt-6 lg:hidden">
         <div className="max-h-[50vh] overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -100,8 +161,13 @@ export function StepPreview({
           >
             {isSending ? "Sending..." : "Send Quote"}
           </button>
-          <button type="button" onClick={onDownload} className={`${touchBtnSecondary} w-full`}>
-            Download PDF
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={isDownloading}
+            className={`${touchBtnSecondary} w-full disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {isDownloading ? "Generating PDF..." : "Download PDF"}
           </button>
           <button type="button" onClick={onSaveDraft} className={`${touchBtnSecondary} w-full`}>
             Save as Draft

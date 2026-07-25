@@ -127,10 +127,6 @@ export function NewQuoteWizard() {
     }
   }
 
-  function handleDownloadPdf() {
-    setActionMessage("PDF download coming soon.");
-  }
-
   function handleSaveDraft() {
     setActionMessage("Quote saved as draft. (Database storage coming soon)");
   }
@@ -206,7 +202,6 @@ export function NewQuoteWizard() {
           taxRate={taxRate}
           onSend={handleSendQuote}
           isSending={isSending}
-          onDownload={handleDownloadPdf}
           onSaveDraft={handleSaveDraft}
         />
       )}
