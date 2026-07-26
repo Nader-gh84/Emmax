@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { StepProfileVoice } from "@/components/onboarding/step-profile-voice";
+import { StepProfile } from "@/components/onboarding/step-profile";
 import { StepQuoteDefaults } from "@/components/onboarding/step-quote-defaults";
 import type { ProfileData } from "@/types/onboarding";
 
@@ -63,7 +63,7 @@ export function OnboardingWizard() {
         </div>
 
         {step === 1 ? (
-          <StepProfileVoice onComplete={handleProfileComplete} />
+          <StepProfile onComplete={handleProfileComplete} />
         ) : (
           <StepQuoteDefaults onComplete={handleDefaultsComplete} />
         )}
