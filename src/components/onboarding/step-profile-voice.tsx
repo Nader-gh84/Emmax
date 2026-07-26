@@ -87,6 +87,9 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   const inputModeRef = useRef<InputMode>("voice");
 
   const tts = useTtsPlayback();
+  const ttsStopRef = useRef(tts.stop);
+  ttsStopRef.current = tts.stop;
+  const startRecordingRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     phaseRef.current = phase;
@@ -169,6 +172,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   const startVoiceFlowRef = useRef<() => Promise<void>>(async () => {});
 
   const recorder = useVoiceRecorder({
+    autoStopOnSilence: false,
     onRecordingComplete: async (blob) => {
       setFlowError(null);
 
@@ -243,6 +247,25 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     },
   });
 
+  startRecordingRef.current = recorder.startRecording;
+
+  const handleTapToAnswer = useCallback(async () => {
+    setFlowError(null);
+    recorder.setError(null);
+    setAwaitingVoiceAnswer(false);
+
+    try {
+      await startRecordingRef.current?.();
+    } catch (error) {
+      const message =
+        error instanceof DOMException && error.name === "AbortError"
+          ? "Microphone request was interrupted. Tap to answer to try again."
+          : "Microphone access denied. You can type your answer instead.";
+      setFlowError(message);
+      setAwaitingVoiceAnswer(true);
+    }
+  }, [recorder]);
+
   const runSummaryStep = useCallback(async () => {
     setPhase("summary");
     phaseRef.current = "summary";
@@ -263,20 +286,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     await askQuestion(field.question);
   }, [askQuestion, runSummaryStep]);
 
-  const handleTapToAnswer = useCallback(async () => {
-    setFlowError(null);
-    setAwaitingVoiceAnswer(false);
-
-    try {
-      await recorder.startRecording();
-    } catch {
-      setFlowError(
-        "Microphone access denied. You can type your answer instead."
-      );
-      setAwaitingVoiceAnswer(true);
-    }
-  }, [recorder]);
-
   useEffect(() => {
     runSummaryStepRef.current = runSummaryStep;
     startVoiceFlowRef.current = startVoiceFlow;
@@ -284,9 +293,9 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
 
   useEffect(() => {
     return () => {
-      tts.stop();
+      ttsStopRef.current();
     };
-  }, [tts]);
+  }, []);
 
   useEffect(() => {
     if (inputMode !== "voice") return;

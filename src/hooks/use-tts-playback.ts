@@ -17,6 +17,7 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
   const rafRef = useRef<number | null>(null);
   const durationRef = useRef(0);
   const textRef = useRef("");
+  const speakGenerationRef = useRef(0);
 
   const [visibleChars, setVisibleChars] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -64,6 +65,7 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
   }, [stopAnimation]);
 
   const stop = useCallback(() => {
+    speakGenerationRef.current += 1;
     cleanupAudio();
     setIsSpeaking(false);
     setIsLoading(false);
@@ -71,6 +73,9 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
 
   const speak = useCallback(
     async (text: string) => {
+      speakGenerationRef.current += 1;
+      const generation = speakGenerationRef.current;
+
       cleanupAudio();
       setError(null);
       setIsLoading(true);
@@ -84,12 +89,16 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
           body: JSON.stringify({ text }),
         });
 
+        if (generation !== speakGenerationRef.current) return;
+
         if (!response.ok) {
           const data = await response.json();
           throw new Error(data.error || "Failed to load speech");
         }
 
         const blob = await response.blob();
+        if (generation !== speakGenerationRef.current) return;
+
         const url = URL.createObjectURL(blob);
         audioUrlRef.current = url;
 
@@ -112,6 +121,8 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
           );
         });
 
+        if (generation !== speakGenerationRef.current) return;
+
         setIsLoading(false);
         setIsSpeaking(true);
 
@@ -126,22 +137,35 @@ export function useTtsPlayback(): UseTtsPlaybackResult {
           audio
             .play()
             .then(() => {
+              if (generation !== speakGenerationRef.current) {
+                resolve();
+                return;
+              }
               rafRef.current = requestAnimationFrame(syncTypewriter);
             })
             .catch(reject);
         });
 
+        if (generation !== speakGenerationRef.current) return;
+
         setVisibleChars(text.length);
         setIsSpeaking(false);
         stopAnimation();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Speech failed");
+        if (generation !== speakGenerationRef.current) return;
+
+        const message = err instanceof Error ? err.message : "Speech failed";
+        if (message.toLowerCase().includes("aborted")) return;
+
+        setError(message);
         setIsSpeaking(false);
         setIsLoading(false);
         stopAnimation();
         throw err;
       } finally {
-        setIsLoading(false);
+        if (generation === speakGenerationRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [cleanupAudio, stopAnimation, syncTypewriter]

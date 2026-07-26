@@ -8,23 +8,43 @@ interface UseVoiceRecorderOptions {
   onRecordingComplete: (blob: Blob) => void | Promise<void>;
   silenceThreshold?: number;
   silenceDurationMs?: number;
+  autoStopOnSilence?: boolean;
+}
+
+function getMicErrorMessage(error: unknown): string {
+  if (error instanceof DOMException) {
+    if (error.name === "NotAllowedError") {
+      return "Microphone access denied.";
+    }
+    if (error.name === "AbortError") {
+      return "Microphone request was interrupted. Tap to answer to try again.";
+    }
+  }
+
+  return "Microphone access denied.";
 }
 
 export function useVoiceRecorder({
   onRecordingComplete,
   silenceThreshold = 0.015,
   silenceDurationMs = 1800,
+  autoStopOnSilence = true,
 }: UseVoiceRecorderOptions) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const rafRef = useRef<number | null>(null);
   const silenceStartRef = useRef<number | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const startingRef = useRef(false);
+  const statusRef = useRef<RecorderStatus>("idle");
   const onCompleteRef = useRef(onRecordingComplete);
 
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
+
+  statusRef.current = status;
 
   useEffect(() => {
     onCompleteRef.current = onRecordingComplete;
@@ -40,6 +60,10 @@ export function useVoiceRecorder({
 
   const cleanupStream = useCallback(() => {
     stopAnalyser();
+    if (timerRef.current !== null) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
   }, [stopAnalyser]);
@@ -53,6 +77,8 @@ export function useVoiceRecorder({
       ) {
         mediaRecorderRef.current.stop();
       }
+      mediaRecorderRef.current = null;
+      startingRef.current = false;
     };
   }, [cleanupStream]);
 
@@ -65,15 +91,26 @@ export function useVoiceRecorder({
   }, [stopAnalyser]);
 
   const startRecording = useCallback(async () => {
+    if (
+      startingRef.current ||
+      statusRef.current === "recording" ||
+      statusRef.current === "processing"
+    ) {
+      return;
+    }
+
+    startingRef.current = true;
     setError(null);
     chunksRef.current = [];
     setSeconds(0);
+
+    let audioContext: AudioContext | null = null;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const audioContext = new AudioContext();
+      audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
@@ -88,7 +125,9 @@ export function useVoiceRecorder({
 
       mediaRecorder.onstop = async () => {
         cleanupStream();
-        await audioContext.close();
+        if (audioContext) {
+          await audioContext.close();
+        }
 
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         if (blob.size > 0) {
@@ -106,6 +145,8 @@ export function useVoiceRecorder({
       const dataArray = new Uint8Array(analyser.fftSize);
 
       const monitorSilence = () => {
+        if (!autoStopOnSilence) return;
+
         analyser.getByteTimeDomainData(dataArray);
         let sum = 0;
         for (let i = 0; i < dataArray.length; i += 1) {
@@ -117,7 +158,9 @@ export function useVoiceRecorder({
         if (volume < silenceThreshold) {
           if (!silenceStartRef.current) {
             silenceStartRef.current = Date.now();
-          } else if (Date.now() - silenceStartRef.current >= silenceDurationMs) {
+          } else if (
+            Date.now() - silenceStartRef.current >= silenceDurationMs
+          ) {
             finishRecording();
             return;
           }
@@ -130,25 +173,31 @@ export function useVoiceRecorder({
 
       mediaRecorder.start();
       setStatus("recording");
-      rafRef.current = requestAnimationFrame(monitorSilence);
+      if (autoStopOnSilence) {
+        rafRef.current = requestAnimationFrame(monitorSilence);
+      }
 
-      const timer = window.setInterval(() => {
+      timerRef.current = window.setInterval(() => {
         setSeconds((value) => value + 1);
       }, 1000);
-
-      mediaRecorder.addEventListener(
-        "stop",
-        () => {
-          window.clearInterval(timer);
-        },
-        { once: true }
-      );
-    } catch {
-      setError("Microphone access denied.");
+    } catch (err) {
+      cleanupStream();
+      if (audioContext) {
+        await audioContext.close().catch(() => undefined);
+      }
+      setError(getMicErrorMessage(err));
       setStatus("idle");
-      throw new Error("Microphone access denied.");
+      throw err;
+    } finally {
+      startingRef.current = false;
     }
-  }, [cleanupStream, finishRecording, silenceDurationMs, silenceThreshold]);
+  }, [
+    autoStopOnSilence,
+    cleanupStream,
+    finishRecording,
+    silenceDurationMs,
+    silenceThreshold,
+  ]);
 
   return {
     status,
