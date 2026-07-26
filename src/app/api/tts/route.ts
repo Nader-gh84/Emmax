@@ -27,9 +27,12 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "tts-1",
+        model: "gpt-4o-mini-tts",
         voice,
         input: text,
+        speed: 0.92,
+        instructions:
+          "Speak warmly and with a friendly smile in your voice — upbeat, welcoming, and a little playful, like you're genuinely happy to meet the person for the first time. Not rushed — natural, relaxed pacing with light pauses between sentences.",
       }),
     });
 
