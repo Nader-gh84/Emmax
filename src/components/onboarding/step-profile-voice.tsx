@@ -77,7 +77,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   const [tableDraft, setTableDraft] = useState<ProfileData>(EMPTY_PROFILE);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [micReady, setMicReady] = useState<boolean | null>(null);
+  const [awaitingVoiceAnswer, setAwaitingVoiceAnswer] = useState(false);
 
   const flowStartedRef = useRef(false);
   const phaseRef = useRef<Phase>("collect");
@@ -85,7 +85,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   const revisingFieldRef = useRef<ProfileFieldKey | null>(null);
   const profileRef = useRef<ProfileData>(EMPTY_PROFILE);
   const inputModeRef = useRef<InputMode>("voice");
-  const micReadyRef = useRef<boolean | null>(null);
 
   const tts = useTtsPlayback();
 
@@ -109,10 +108,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     inputModeRef.current = inputMode;
   }, [inputMode]);
 
-  useEffect(() => {
-    micReadyRef.current = micReady;
-  }, [micReady]);
-
   const activeField = useMemo(() => {
     if (phase === "revise" && revisingField) {
       return PROFILE_FIELDS.find((field) => field.key === revisingField) ?? null;
@@ -126,8 +121,12 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   const askQuestion = useCallback(
     async (question: string) => {
       setFlowError(null);
+      setAwaitingVoiceAnswer(false);
       try {
         await tts.speak(question);
+        if (inputModeRef.current === "voice") {
+          setAwaitingVoiceAnswer(true);
+        }
       } catch (error) {
         setFlowError(
           error instanceof Error ? error.message : "Unable to play question"
@@ -178,8 +177,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
 
         if (transcript.toLowerCase().includes("enable microphone")) {
           setInputMode("voice");
-          setMicReady(true);
-          micReadyRef.current = true;
           inputModeRef.current = "voice";
           return;
         }
@@ -189,8 +186,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
 
           if (result.intent === "enable_microphone") {
             setInputMode("voice");
-            setMicReady(true);
-            micReadyRef.current = true;
             inputModeRef.current = "voice";
             await runSummaryStepRef.current();
             return;
@@ -216,9 +211,6 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
             );
             if (fieldDef) {
               await askQuestion(fieldDef.question);
-              if (inputModeRef.current === "voice" && micReadyRef.current) {
-                await recorder.startRecording();
-              }
             }
             return;
           }
@@ -256,11 +248,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     phaseRef.current = "summary";
     const summaryText = buildSummarySpeech(profileRef.current);
     await askQuestion(summaryText);
-
-    if (inputModeRef.current === "voice" && micReadyRef.current) {
-      await recorder.startRecording();
-    }
-  }, [askQuestion, recorder]);
+  }, [askQuestion]);
 
   const startVoiceFlow = useCallback(async () => {
     const field = revisingFieldRef.current
@@ -273,11 +261,21 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     }
 
     await askQuestion(field.question);
+  }, [askQuestion, runSummaryStep]);
 
-    if (micReadyRef.current) {
+  const handleTapToAnswer = useCallback(async () => {
+    setFlowError(null);
+    setAwaitingVoiceAnswer(false);
+
+    try {
       await recorder.startRecording();
+    } catch {
+      setFlowError(
+        "Microphone access denied. You can type your answer instead."
+      );
+      setAwaitingVoiceAnswer(true);
     }
-  }, [askQuestion, recorder, runSummaryStep]);
+  }, [recorder]);
 
   useEffect(() => {
     runSummaryStepRef.current = runSummaryStep;
@@ -285,43 +283,18 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
   }, [runSummaryStep, startVoiceFlow]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function initMicrophone() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        if (!cancelled) {
-          setMicReady(true);
-          micReadyRef.current = true;
-          setInputMode("voice");
-          inputModeRef.current = "voice";
-        }
-      } catch {
-        if (!cancelled) {
-          setMicReady(false);
-          micReadyRef.current = false;
-          setInputMode("typing_table");
-          inputModeRef.current = "typing_table";
-        }
-      }
-    }
-
-    initMicrophone();
-
     return () => {
-      cancelled = true;
       tts.stop();
     };
   }, [tts]);
 
   useEffect(() => {
-    if (micReady !== true || inputMode !== "voice") return;
+    if (inputMode !== "voice") return;
     if (flowStartedRef.current) return;
 
     flowStartedRef.current = true;
     startVoiceFlow();
-  }, [inputMode, micReady, startVoiceFlow]);
+  }, [inputMode, startVoiceFlow]);
 
   async function submitTypedAnswer() {
     if (!activeField || !typedValue.trim()) return;
@@ -334,7 +307,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
       const outcome = await handleFieldAnswer(activeField.key, transcript);
 
       if (outcome === "summary") {
-        if (inputMode === "voice" && micReady) {
+        if (inputMode === "voice") {
           await runSummaryStep();
         } else {
           setPhase("summary");
@@ -343,7 +316,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
         return;
       }
 
-      if (inputMode === "voice" && micReady) {
+      if (inputMode === "voice") {
         await startVoiceFlow();
       }
     } catch (error) {
@@ -370,7 +343,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     profileRef.current = tableDraft;
     setProfile(tableDraft);
 
-    if (inputMode === "voice" && micReady) {
+    if (inputMode === "voice") {
       await runSummaryStep();
     } else {
       setPhase("summary");
@@ -378,25 +351,29 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     }
   }
 
+  function switchToTypingMode() {
+    setInputMode("typing_table");
+    inputModeRef.current = "typing_table";
+    setAwaitingVoiceAnswer(false);
+    tts.stop();
+  }
+
+  function switchToVoiceMode() {
+    setInputMode("voice");
+    inputModeRef.current = "voice";
+    flowStartedRef.current = false;
+  }
+
   async function enableMicrophone() {
     setFlowError(null);
+    switchToVoiceMode();
 
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      setMicReady(true);
-      micReadyRef.current = true;
-      setInputMode("voice");
-      inputModeRef.current = "voice";
-
-      if (phase === "summary") {
-        await runSummaryStep();
-      } else {
-        flowStartedRef.current = true;
-        await startVoiceFlow();
-      }
-    } catch {
-      setFlowError("Microphone access is still blocked.");
+    if (phase === "summary") {
+      flowStartedRef.current = true;
+      await runSummaryStep();
+    } else if (phase === "collect" || phase === "revise") {
+      flowStartedRef.current = true;
+      await startVoiceFlow();
     }
   }
 
@@ -422,11 +399,10 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
     revisingFieldRef.current = field;
     setTypedValue(profile[field]);
 
-    if (inputMode === "voice" && micReady) {
+    if (inputMode === "voice") {
       const fieldDef = PROFILE_FIELDS.find((item) => item.key === field);
       if (fieldDef) {
         await askQuestion(fieldDef.question);
-        await recorder.startRecording();
       }
     }
   }
@@ -458,6 +434,12 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
           visibleChars={tts.visibleChars}
           questionText={buildSummarySpeech(profile)}
           isSpeaking={tts.isSpeaking}
+          awaitingVoiceAnswer={awaitingVoiceAnswer}
+          recorderStatus={recorder.status}
+          seconds={recorder.seconds}
+          showVoiceControls={inputMode === "voice"}
+          onTapToAnswer={handleTapToAnswer}
+          onDoneRecording={recorder.stopRecording}
           onConfirm={confirmProfile}
           onChangeField={requestFieldChange}
           isSaving={isSaving}
@@ -467,24 +449,24 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
           question={currentQuestion}
           visibleChars={tts.visibleChars}
           isSpeaking={tts.isSpeaking}
+          awaitingVoiceAnswer={awaitingVoiceAnswer}
           typedValue={typedValue}
           onTypedValueChange={setTypedValue}
           onSubmitTyped={submitTypedAnswer}
           recorderStatus={recorder.status}
           seconds={recorder.seconds}
+          onTapToAnswer={handleTapToAnswer}
           onDoneRecording={recorder.stopRecording}
-          onEnableMic={enableMicrophone}
-          showMicControls={inputMode === "voice" && micReady === true}
+          onSwitchToTyping={switchToTypingMode}
+          showVoiceControls={inputMode === "voice"}
         />
       )}
 
-      {micReady === false &&
-        phase === "collect" &&
-        inputMode === "typing_table" && (
-          <p className="mt-6 max-w-2xl text-center text-base leading-relaxed text-slate-400">
-            {MIC_DENIED_MESSAGE}
-          </p>
-        )}
+      {inputMode === "typing_table" && phase === "collect" && (
+        <p className="mt-6 max-w-2xl text-center text-base leading-relaxed text-slate-400">
+          {MIC_DENIED_MESSAGE}
+        </p>
+      )}
 
       {(flowError || tts.error || recorder.error) && (
         <div className="mt-6 w-full max-w-2xl rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
@@ -500,7 +482,7 @@ export function StepProfileVoice({ onComplete }: StepProfileVoiceProps) {
               ? "Ema is speaking..."
               : recorder.status === "processing"
                 ? "Processing your answer..."
-                : "Listening..."}
+                : null}
         </p>
       )}
     </div>
@@ -534,26 +516,30 @@ function QuestionView({
   question,
   visibleChars,
   isSpeaking,
+  awaitingVoiceAnswer,
   typedValue,
   onTypedValueChange,
   onSubmitTyped,
   recorderStatus,
   seconds,
+  onTapToAnswer,
   onDoneRecording,
-  onEnableMic,
-  showMicControls,
+  onSwitchToTyping,
+  showVoiceControls,
 }: {
   question: string;
   visibleChars: number;
   isSpeaking: boolean;
+  awaitingVoiceAnswer: boolean;
   typedValue: string;
   onTypedValueChange: (value: string) => void;
   onSubmitTyped: () => void;
   recorderStatus: "idle" | "recording" | "processing";
   seconds: number;
+  onTapToAnswer: () => void;
   onDoneRecording: () => void;
-  onEnableMic: () => void;
-  showMicControls: boolean;
+  onSwitchToTyping: () => void;
+  showVoiceControls: boolean;
 }) {
   const visibleQuestion = question.slice(0, visibleChars);
 
@@ -566,34 +552,41 @@ function QuestionView({
         )}
       </p>
 
-      {showMicControls && (
+      {showVoiceControls && (
         <div className="mt-8 flex flex-col items-center">
           {recorderStatus === "recording" ? (
             <>
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-accent/20 ring-4 ring-accent/30">
+                <IconMicrophone className="h-10 w-10 animate-pulse text-accent" />
+              </div>
+              <p className="mt-4 text-base font-medium text-white">Listening...</p>
+              <p className="mt-1 font-mono text-2xl font-bold text-white">
+                {formatTimer(seconds)}
+              </p>
               <button
                 type="button"
                 onClick={onDoneRecording}
-                className="relative flex h-24 w-24 items-center justify-center rounded-full bg-accent shadow-xl shadow-accent/30 ring-4 ring-accent/30"
-                aria-label="Done speaking"
+                className={`${touchBtnPrimary} mt-4 min-w-[160px]`}
               >
-                <IconMicrophone className="h-10 w-10 text-white" />
+                Done
               </button>
-              <p className="mt-4 font-mono text-2xl font-bold text-white">
-                {formatTimer(seconds)}
-              </p>
-              <p className="mt-2 text-base text-slate-400">
-                Listening... tap when done
-              </p>
             </>
           ) : recorderStatus === "processing" ? (
             <div className="flex h-24 w-24 items-center justify-center">
               <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-accent" />
             </div>
-          ) : (
-            <p className="text-base text-slate-400">
-              {isSpeaking ? "Listen to Ema..." : "Waiting for your answer..."}
-            </p>
-          )}
+          ) : isSpeaking ? (
+            <p className="text-base text-slate-400">Listen to Ema...</p>
+          ) : awaitingVoiceAnswer ? (
+            <button
+              type="button"
+              onClick={onTapToAnswer}
+              className={`${touchBtnPrimary} inline-flex items-center gap-2`}
+            >
+              <IconMicrophone className="h-5 w-5" />
+              Tap to answer
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -615,14 +608,13 @@ function QuestionView({
         </button>
       </div>
 
-      {!showMicControls && (
+      {showVoiceControls && (
         <button
           type="button"
-          onClick={onEnableMic}
+          onClick={onSwitchToTyping}
           className="mt-4 inline-flex min-h-[44px] items-center gap-2 text-base font-medium text-accent hover:text-blue-400"
         >
-          <IconMicrophone className="h-5 w-5" />
-          Enable microphone
+          Use typing mode
         </button>
       )}
     </div>
@@ -701,6 +693,12 @@ function SummaryView({
   visibleChars,
   questionText,
   isSpeaking,
+  awaitingVoiceAnswer,
+  recorderStatus,
+  seconds,
+  showVoiceControls,
+  onTapToAnswer,
+  onDoneRecording,
   onConfirm,
   onChangeField,
   isSaving,
@@ -709,6 +707,12 @@ function SummaryView({
   visibleChars: number;
   questionText: string;
   isSpeaking: boolean;
+  awaitingVoiceAnswer: boolean;
+  recorderStatus: "idle" | "recording" | "processing";
+  seconds: number;
+  showVoiceControls: boolean;
+  onTapToAnswer: () => void;
+  onDoneRecording: () => void;
   onConfirm: () => void;
   onChangeField: (field: ProfileFieldKey) => void;
   isSaving: boolean;
@@ -743,6 +747,44 @@ function SummaryView({
           <span className="ml-0.5 inline-block h-5 w-0.5 animate-pulse bg-accent align-middle" />
         )}
       </p>
+
+      {showVoiceControls && (
+        <div className="mt-6 flex flex-col items-center">
+          {recorderStatus === "recording" ? (
+            <>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent/20 ring-4 ring-accent/30">
+                <IconMicrophone className="h-8 w-8 animate-pulse text-accent" />
+              </div>
+              <p className="mt-3 text-base font-medium text-white">Listening...</p>
+              <p className="mt-1 font-mono text-xl font-bold text-white">
+                {formatTimer(seconds)}
+              </p>
+              <button
+                type="button"
+                onClick={onDoneRecording}
+                className={`${touchBtnPrimary} mt-4 min-w-[160px]`}
+              >
+                Done
+              </button>
+            </>
+          ) : recorderStatus === "processing" ? (
+            <div className="flex h-20 w-20 items-center justify-center">
+              <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-accent" />
+            </div>
+          ) : isSpeaking ? (
+            <p className="text-base text-slate-400">Listen to Ema...</p>
+          ) : awaitingVoiceAnswer ? (
+            <button
+              type="button"
+              onClick={onTapToAnswer}
+              className={`${touchBtnPrimary} inline-flex items-center gap-2`}
+            >
+              <IconMicrophone className="h-5 w-5" />
+              Tap to answer
+            </button>
+          ) : null}
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         {PROFILE_FIELDS.map((field) => (
