@@ -5,6 +5,7 @@ create table if not exists public.business_profiles (
   full_name text not null default '',
   company_name text not null default '',
   trade text not null default '',
+  country text not null default '',
   city text not null default '',
   email text not null default '',
   phone text,

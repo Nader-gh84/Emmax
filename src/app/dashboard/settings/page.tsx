@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProfileFormFields } from "@/components/profile/profile-form-fields";
 import { touchBtnPrimary, touchInput } from "@/components/quotes/ui";
+import {
+  DEFAULT_COUNTRY,
+  formatPhoneForStorage,
+  parsePhoneFromStorage,
+} from "@/lib/location";
 import { createClient } from "@/lib/supabase";
 import {
+  EMPTY_PROFILE,
   PROFILE_FIELDS,
-  TRADE_OPTIONS,
   type ProfileData,
   type ProfileFieldKey,
   type QuoteDefaults,
@@ -14,18 +20,14 @@ import {
 type SettingsFormData = ProfileData & QuoteDefaults;
 
 const EMPTY_FORM: SettingsFormData = {
-  fullName: "",
-  companyName: "",
-  trade: "",
-  city: "",
-  email: "",
-  phone: "",
+  ...EMPTY_PROFILE,
   defaultTaxRate: 13,
   defaultValidityDays: 30,
 };
 
 export default function SettingsPage() {
   const [form, setForm] = useState<SettingsFormData>(EMPTY_FORM);
+  const [phoneLocal, setPhoneLocal] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +49,7 @@ export default function SettingsPage() {
       const { data, error: fetchError } = await supabase
         .from("business_profiles")
         .select(
-          "full_name, company_name, trade, city, email, phone, default_tax_rate, default_validity_days"
+          "full_name, company_name, trade, country, city, email, phone, default_tax_rate, default_validity_days"
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -59,16 +61,20 @@ export default function SettingsPage() {
       }
 
       if (data) {
+        const country = data.country || DEFAULT_COUNTRY;
+
         setForm({
           fullName: data.full_name ?? "",
           companyName: data.company_name ?? "",
           trade: data.trade ?? "",
+          country,
           city: data.city ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
           defaultTaxRate: Number(data.default_tax_rate) || 13,
           defaultValidityDays: Number(data.default_validity_days) || 30,
         });
+        setPhoneLocal(parsePhoneFromStorage(data.phone, country));
       }
 
       setIsLoading(false);
@@ -79,6 +85,15 @@ export default function SettingsPage() {
 
   function updateField(key: ProfileFieldKey, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
+    setSuccess(false);
+  }
+
+  function handleCountryChange(country: string) {
+    setForm((current) => ({
+      ...current,
+      country,
+      city: current.country === country ? current.city : "",
+    }));
     setSuccess(false);
   }
 
@@ -107,6 +122,8 @@ export default function SettingsPage() {
     setIsSaving(true);
 
     try {
+      const phone = formatPhoneForStorage(form.country, phoneLocal);
+
       const response = await fetch("/api/onboarding/save-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,9 +131,10 @@ export default function SettingsPage() {
           fullName: form.fullName.trim(),
           companyName: form.companyName.trim(),
           trade: form.trade.trim(),
+          country: form.country.trim(),
           city: form.city.trim(),
           email: form.email.trim(),
-          phone: form.phone.trim(),
+          phone,
           defaultTaxRate: form.defaultTaxRate,
           defaultValidityDays: form.defaultValidityDays,
         }),
@@ -128,6 +146,7 @@ export default function SettingsPage() {
         throw new Error(result.error ?? "Failed to save profile");
       }
 
+      setForm((current) => ({ ...current, phone }));
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
@@ -154,71 +173,17 @@ export default function SettingsPage() {
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-          {PROFILE_FIELDS.map((field) => (
-            <div key={field.key}>
-              <label
-                htmlFor={`settings-${field.key}`}
-                className="block text-base font-medium text-slate-300"
-              >
-                {field.label}
-                {!field.optional && <span className="text-accent"> *</span>}
-              </label>
-
-              {field.key === "trade" ? (
-                <select
-                  id={`settings-${field.key}`}
-                  value={form.trade}
-                  onChange={(event) => updateField("trade", event.target.value)}
-                  className={`${touchInput} mt-1.5 appearance-none`}
-                  required
-                >
-                  <option value="" disabled>
-                    Select your trade
-                  </option>
-                  {TRADE_OPTIONS.map((option) => (
-                    <option
-                      key={option}
-                      value={option}
-                      className="bg-navy text-white"
-                    >
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  id={`settings-${field.key}`}
-                  type={
-                    field.key === "email"
-                      ? "email"
-                      : field.key === "phone"
-                        ? "tel"
-                        : "text"
-                  }
-                  value={form[field.key]}
-                  onChange={(event) =>
-                    updateField(field.key, event.target.value)
-                  }
-                  className={`${touchInput} mt-1.5`}
-                  placeholder={field.optional ? "Optional" : field.label}
-                  required={!field.optional}
-                  autoComplete={
-                    field.key === "fullName"
-                      ? "name"
-                      : field.key === "email"
-                        ? "email"
-                        : field.key === "phone"
-                          ? "tel"
-                          : field.key === "city"
-                            ? "address-level2"
-                            : field.key === "companyName"
-                              ? "organization"
-                              : undefined
-                  }
-                />
-              )}
-            </div>
-          ))}
+          <ProfileFormFields
+            profile={form}
+            phoneLocal={phoneLocal}
+            idPrefix="settings"
+            onFieldChange={updateField}
+            onPhoneLocalChange={(value) => {
+              setPhoneLocal(value);
+              setSuccess(false);
+            }}
+            onCountryChange={handleCountryChange}
+          />
 
           <div>
             <label

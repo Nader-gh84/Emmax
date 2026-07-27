@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       payload.company_name = body.companyName.trim();
     }
     if (body.trade !== undefined) payload.trade = body.trade.trim();
+    if (body.country !== undefined) payload.country = body.country.trim();
     if (body.city !== undefined) payload.city = body.city.trim();
     if (body.email !== undefined) payload.email = body.email.trim();
     if (body.phone !== undefined) {

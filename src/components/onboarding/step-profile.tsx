@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { touchBtnPrimary, touchInput } from "@/components/quotes/ui";
+import { ProfileFormFields } from "@/components/profile/profile-form-fields";
+import { touchBtnPrimary } from "@/components/quotes/ui";
+import { formatPhoneForStorage } from "@/lib/location";
 import {
   EMPTY_PROFILE,
   PROFILE_FIELDS,
-  TRADE_OPTIONS,
   type ProfileData,
   type ProfileFieldKey,
 } from "@/types/onboarding";
@@ -16,11 +17,20 @@ interface StepProfileProps {
 
 export function StepProfile({ onComplete }: StepProfileProps) {
   const [profile, setProfile] = useState<ProfileData>(EMPTY_PROFILE);
+  const [phoneLocal, setPhoneLocal] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function updateField(key: ProfileFieldKey, value: string) {
     setProfile((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleCountryChange(country: string) {
+    setProfile((current) => ({
+      ...current,
+      country,
+      city: current.country === country ? current.city : "",
+    }));
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -39,14 +49,17 @@ export function StepProfile({ onComplete }: StepProfileProps) {
     setIsSaving(true);
 
     try {
+      const phone = formatPhoneForStorage(profile.country, phoneLocal);
+
       await onComplete({
         ...profile,
         fullName: profile.fullName.trim(),
         companyName: profile.companyName.trim(),
         trade: profile.trade.trim(),
+        country: profile.country.trim(),
         city: profile.city.trim(),
         email: profile.email.trim(),
-        phone: profile.phone.trim(),
+        phone,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
@@ -65,65 +78,14 @@ export function StepProfile({ onComplete }: StepProfileProps) {
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-        {PROFILE_FIELDS.map((field) => (
-          <div key={field.key}>
-            <label
-              htmlFor={`profile-${field.key}`}
-              className="block text-base font-medium text-slate-300"
-            >
-              {field.label}
-              {!field.optional && <span className="text-accent"> *</span>}
-            </label>
-
-            {field.key === "trade" ? (
-              <select
-                id={`profile-${field.key}`}
-                value={profile.trade}
-                onChange={(event) => updateField("trade", event.target.value)}
-                className={`${touchInput} mt-1.5 appearance-none`}
-                required
-              >
-                <option value="" disabled>
-                  Select your trade
-                </option>
-                {TRADE_OPTIONS.map((option) => (
-                  <option key={option} value={option} className="bg-navy text-white">
-                    {option}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                id={`profile-${field.key}`}
-                type={
-                  field.key === "email"
-                    ? "email"
-                    : field.key === "phone"
-                      ? "tel"
-                      : "text"
-                }
-                value={profile[field.key]}
-                onChange={(event) => updateField(field.key, event.target.value)}
-                className={`${touchInput} mt-1.5`}
-                placeholder={field.optional ? "Optional" : field.label}
-                required={!field.optional}
-                autoComplete={
-                  field.key === "fullName"
-                    ? "name"
-                    : field.key === "email"
-                      ? "email"
-                      : field.key === "phone"
-                        ? "tel"
-                        : field.key === "city"
-                          ? "address-level2"
-                          : field.key === "companyName"
-                            ? "organization"
-                            : undefined
-                }
-              />
-            )}
-          </div>
-        ))}
+        <ProfileFormFields
+          profile={profile}
+          phoneLocal={phoneLocal}
+          idPrefix="profile"
+          onFieldChange={updateField}
+          onPhoneLocalChange={setPhoneLocal}
+          onCountryChange={handleCountryChange}
+        />
 
         {error && (
           <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
