@@ -102,6 +102,7 @@ export interface Quote {
   created_at: string;
   updated_at: string;
   sent_at: string | null;
+  pdf_url: string | null;
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {

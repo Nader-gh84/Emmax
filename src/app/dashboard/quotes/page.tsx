@@ -146,6 +146,8 @@ function QuoteRow({
 }
 
 export default function QuotesPage() {
+  // Drafts saved from the Materials step (status='draft') appear in this list
+  // alongside sent quotes. Consider adding a filter/tab to highlight drafts.
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -50,7 +50,8 @@ export function buildQuoteRecordPayload(
   userId: string,
   status: "draft" | "sent",
   customerId: string | null,
-  sentAt?: string | null
+  sentAt?: string | null,
+  pdfUrl?: string | null
 ) {
   const { subtotal, tax, grandTotal } = calculateQuoteTotals(
     state.materials,
@@ -75,6 +76,7 @@ export function buildQuoteRecordPayload(
     transcript: state.transcript.trim() || null,
     updated_at: new Date().toISOString(),
     sent_at: status === "sent" ? (sentAt ?? new Date().toISOString()) : null,
+    pdf_url: pdfUrl ?? null,
   };
 }
 

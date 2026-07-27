@@ -80,3 +80,20 @@ export async function pickContactForForm(): Promise<CustomerFormData | null> {
     notes: "",
   };
 }
+
+export async function pickContactForQuote(): Promise<{
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+} | null> {
+  const form = await pickContactForForm();
+  if (!form) {
+    return null;
+  }
+
+  return {
+    customerName: `${form.first_name} ${form.last_name}`.trim(),
+    customerEmail: form.email,
+    customerPhone: form.phone,
+  };
+}

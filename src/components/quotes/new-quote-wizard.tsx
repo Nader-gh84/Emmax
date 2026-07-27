@@ -7,6 +7,11 @@ import { StepMaterials } from "@/components/quotes/step-materials";
 import { StepPreview } from "@/components/quotes/step-preview";
 import { StepVoice } from "@/components/quotes/step-voice";
 import {
+  saveQuoteDraftWithPdf,
+  sendQuoteEmailAndPersist,
+  type QuoteActionState,
+} from "@/lib/quote-actions";
+import {
   buildNewCustomerPayload,
   buildQuoteRecordPayload,
   quoteToWizardState,
@@ -168,6 +173,41 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
     setMaterials([createMaterialItem()]);
   }
 
+  function getQuoteActionState(): QuoteActionState {
+    return {
+      quoteId,
+      transcript,
+      materials,
+      taxRate,
+      customerMode,
+      selectedCustomerId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      projectName,
+      notes,
+      validityDays,
+    };
+  }
+
+  async function handleMaterialsSaveDraft() {
+    const result = await saveQuoteDraftWithPdf(getQuoteActionState());
+    setQuoteId(result.quoteId);
+    return result;
+  }
+
+  async function handleMaterialsSendQuote() {
+    const result = await sendQuoteEmailAndPersist(getQuoteActionState());
+    setQuoteId(result.quoteId);
+  }
+
+  function handleCustomerFieldChange(
+    field: "customerName" | "customerEmail" | "customerPhone",
+    value: string
+  ) {
+    handleCustomerChange(field, value);
+  }
+
   function handleCustomerChange(field: string, value: string | number) {
     switch (field) {
       case "customerName":
@@ -307,34 +347,8 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
     setActionMessage(null);
 
     try {
-      const response = await fetch("/api/send-quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerName,
-          customerEmail,
-          projectName,
-          notes,
-          validityDays,
-          taxRate,
-          materials: materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
-            item,
-            brand,
-            quantity,
-            unit,
-            unitPrice,
-          })),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send quote");
-      }
-
-      const sentAt = new Date().toISOString();
-      await persistQuote("sent", sentAt);
+      const result = await sendQuoteEmailAndPersist(getQuoteActionState());
+      setQuoteId(result.quoteId);
       setActionMessage(`Quote sent to ${customerEmail}!`);
     } catch (err) {
       setActionMessage(
@@ -387,7 +401,8 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
         <div
           className={`mb-6 rounded-xl border px-4 py-3 text-base ${
             actionMessage.startsWith("Quote sent") ||
-            actionMessage.startsWith("Quote saved")
+            actionMessage.startsWith("Quote saved") ||
+            actionMessage.startsWith("Saved to Drafts")
               ? "border-green-500/30 bg-green-500/10 text-green-400"
               : "border-red-500/30 bg-red-500/10 text-red-400"
           }`}
@@ -411,10 +426,16 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
         <StepMaterials
           materials={materials}
           taxRate={taxRate}
+          quoteState={getQuoteActionState()}
           onMaterialsChange={setMaterials}
           onTaxRateChange={setTaxRate}
           onReRecord={handleReRecord}
-          onContinue={() => setStep(3)}
+          onQuoteIdChange={setQuoteId}
+          onCustomerModeChange={setCustomerMode}
+          onSelectCustomer={setSelectedCustomerId}
+          onCustomerFieldChange={handleCustomerFieldChange}
+          onSaveDraftWithPdf={handleMaterialsSaveDraft}
+          onSendQuote={handleMaterialsSendQuote}
         />
       )}
 

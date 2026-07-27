@@ -5,21 +5,9 @@ import type { QuotePdfData } from "@/lib/pdf/quote-pdf";
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as QuotePdfData;
-
-    if (!body.customerName?.trim()) {
-      return NextResponse.json(
-        { error: "Customer name is required" },
-        { status: 400 }
-      );
-    }
-
-    if (!body.customerEmail?.trim()) {
-      return NextResponse.json(
-        { error: "Customer email is required" },
-        { status: 400 }
-      );
-    }
+    const body = (await request.json()) as QuotePdfData & {
+      allowDraftPlaceholders?: boolean;
+    };
 
     if (!body.materials?.length) {
       return NextResponse.json(
@@ -28,9 +16,30 @@ export async function POST(request: Request) {
       );
     }
 
+    const customerName =
+      body.customerName?.trim() ||
+      (body.allowDraftPlaceholders ? "Quote Draft" : "");
+    const customerEmail =
+      body.customerEmail?.trim() ||
+      (body.allowDraftPlaceholders ? "draft@emax.local" : "");
+
+    if (!customerName) {
+      return NextResponse.json(
+        { error: "Customer name is required" },
+        { status: 400 }
+      );
+    }
+
+    if (!customerEmail) {
+      return NextResponse.json(
+        { error: "Customer email is required" },
+        { status: 400 }
+      );
+    }
+
     const quoteData: QuoteEmailData = {
-      customerName: body.customerName,
-      customerEmail: body.customerEmail,
+      customerName,
+      customerEmail,
       projectName: body.projectName ?? "",
       notes: body.notes,
       validityDays: body.validityDays ?? 30,
