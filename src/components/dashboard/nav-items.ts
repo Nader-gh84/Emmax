@@ -3,6 +3,7 @@ import {
   IconHome,
   IconMicrophone,
   IconSettings,
+  IconSuppliers,
   IconUsers,
 } from "@/components/dashboard/icons";
 
@@ -33,6 +34,13 @@ export const dashboardNavItems = [
     shortLabel: "People",
     href: "/dashboard/customers",
     icon: IconUsers,
+    highlight: false,
+  },
+  {
+    label: "Suppliers",
+    shortLabel: "Supply",
+    href: "/dashboard/suppliers",
+    icon: IconSuppliers,
     highlight: false,
   },
   {
