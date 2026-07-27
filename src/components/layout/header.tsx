@@ -34,7 +34,7 @@ export function Header() {
             href="/login"
             className="text-sm font-medium text-slate-300 transition hover:text-white"
           >
-            Log in
+            Sign In
           </Link>
           <Link
             href="/signup"
