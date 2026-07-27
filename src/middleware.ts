@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { hasBusinessProfile } from "@/lib/business-profile";
+import { isOnboardingComplete } from "@/lib/business-profile";
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -32,9 +32,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const isProtectedRoute =
-    pathname.startsWith("/dashboard") ||
-    pathname === "/welcome" ||
-    pathname === "/onboarding";
+    pathname.startsWith("/dashboard") || pathname === "/onboarding";
 
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();
@@ -43,23 +41,23 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user) {
-    const profileExists = await hasBusinessProfile(supabase, user.id);
+    const onboardingComplete = await isOnboardingComplete(supabase, user.id);
 
     if (pathname === "/login" || pathname === "/signup") {
       const url = request.nextUrl.clone();
-      url.pathname = profileExists ? "/dashboard" : "/welcome";
+      url.pathname = onboardingComplete ? "/dashboard" : "/onboarding";
       return NextResponse.redirect(url);
     }
 
-    if (profileExists && (pathname === "/welcome" || pathname === "/onboarding")) {
+    if (onboardingComplete && pathname === "/onboarding") {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
 
-    if (!profileExists && pathname.startsWith("/dashboard")) {
+    if (!onboardingComplete && pathname.startsWith("/dashboard")) {
       const url = request.nextUrl.clone();
-      url.pathname = "/welcome";
+      url.pathname = "/onboarding";
       return NextResponse.redirect(url);
     }
   }
@@ -68,11 +66,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    "/dashboard/:path*",
-    "/login",
-    "/signup",
-    "/welcome",
-    "/onboarding",
-  ],
+  matcher: ["/dashboard/:path*", "/login", "/signup", "/onboarding"],
 };

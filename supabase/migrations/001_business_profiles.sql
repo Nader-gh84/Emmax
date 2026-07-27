@@ -10,6 +10,7 @@ create table if not exists public.business_profiles (
   phone text,
   default_tax_rate numeric not null default 13,
   default_validity_days integer not null default 30,
+  onboarding_completed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

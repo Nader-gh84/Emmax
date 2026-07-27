@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as SaveProfileBody;
     const step = body.step ?? "profile";
 
-    const payload: Record<string, string | number | null> = {
+    const payload: Record<string, string | number | boolean | null> = {
       user_id: user.id,
       updated_at: new Date().toISOString(),
     };
@@ -40,6 +40,9 @@ export async function POST(request: Request) {
     }
     if (body.defaultValidityDays !== undefined) {
       payload.default_validity_days = body.defaultValidityDays;
+    }
+    if (step === "defaults") {
+      payload.onboarding_completed = true;
     }
 
     const { data, error } = await supabase

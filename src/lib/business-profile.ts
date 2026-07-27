@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export async function hasBusinessProfile(
+export async function isOnboardingComplete(
   supabase: SupabaseClient,
   userId: string
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("business_profiles")
-    .select("id")
+    .select("onboarding_completed")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -15,5 +15,5 @@ export async function hasBusinessProfile(
     return false;
   }
 
-  return Boolean(data);
+  return Boolean(data?.onboarding_completed);
 }
