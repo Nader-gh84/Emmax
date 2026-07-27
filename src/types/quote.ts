@@ -71,3 +71,85 @@ export function formatTimer(seconds: number): string {
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
+
+export type QuoteStatus = "draft" | "sent";
+
+export interface StoredMaterial {
+  item: string;
+  brand?: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface Quote {
+  id: string;
+  user_id: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  project_name: string | null;
+  notes: string | null;
+  materials: StoredMaterial[];
+  tax_rate: number;
+  validity_days: number;
+  subtotal: number;
+  tax: number;
+  grand_total: number;
+  status: QuoteStatus;
+  transcript: string | null;
+  created_at: string;
+  updated_at: string;
+  sent_at: string | null;
+}
+
+export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
+  return materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
+    item,
+    brand: brand || undefined,
+    quantity,
+    unit,
+    unitPrice,
+  }));
+}
+
+export function storedToMaterials(stored: StoredMaterial[]): MaterialItem[] {
+  return stored.map((material) =>
+    createMaterialItem({
+      item: material.item ?? "",
+      brand: material.brand ?? "",
+      quantity: material.quantity ?? 1,
+      unit: material.unit ?? "each",
+      unitPrice: material.unitPrice ?? 0,
+    })
+  );
+}
+
+export function splitCustomerName(fullName: string): {
+  first_name: string;
+  last_name: string;
+} {
+  const trimmed = fullName.trim();
+  if (!trimmed) {
+    return { first_name: "", last_name: "" };
+  }
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return { first_name: parts[0], last_name: "" };
+  }
+
+  return {
+    first_name: parts[0],
+    last_name: parts.slice(1).join(" "),
+  };
+}
+
+export function formatQuoteDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}

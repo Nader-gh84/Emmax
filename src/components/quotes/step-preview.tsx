@@ -20,7 +20,8 @@ interface StepPreviewProps {
   taxRate: number;
   onSend: () => void | Promise<void>;
   isSending?: boolean;
-  onSaveDraft: () => void;
+  onSaveDraft: () => void | Promise<void>;
+  isSavingDraft?: boolean;
 }
 
 export function StepPreview({
@@ -35,6 +36,7 @@ export function StepPreview({
   onSend,
   isSending = false,
   onSaveDraft,
+  isSavingDraft = false,
 }: StepPreviewProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
@@ -127,8 +129,13 @@ export function StepPreview({
       >
         {isDownloading ? "Generating PDF..." : "Download PDF"}
       </button>
-      <button type="button" onClick={onSaveDraft} className={`${touchBtnSecondary} w-full`}>
-        Save as Draft
+      <button
+        type="button"
+        onClick={onSaveDraft}
+        disabled={isSavingDraft}
+        className={`${touchBtnSecondary} w-full disabled:cursor-not-allowed disabled:opacity-60`}
+      >
+        {isSavingDraft ? "Saving draft..." : "Save as Draft"}
       </button>
     </div>
   );
@@ -170,8 +177,13 @@ export function StepPreview({
           >
             {isDownloading ? "Generating PDF..." : "Download PDF"}
           </button>
-          <button type="button" onClick={onSaveDraft} className={`${touchBtnSecondary} w-full`}>
-            Save as Draft
+          <button
+            type="button"
+            onClick={onSaveDraft}
+            disabled={isSavingDraft}
+            className={`${touchBtnSecondary} w-full disabled:cursor-not-allowed disabled:opacity-60`}
+          >
+            {isSavingDraft ? "Saving draft..." : "Save as Draft"}
           </button>
         </div>
       </div>
@@ -335,3 +347,5 @@ function formatItemWithBrand(item: string, brand: string): string {
   const trimmedBrand = brand.trim();
   return trimmedBrand ? `${item} — ${trimmedBrand}` : item;
 }
+
+export { QuotePreviewBody };
