@@ -26,45 +26,57 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  const pathname = request.nextUrl.pathname;
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
+  const isDashboardRoute = pathname.startsWith("/dashboard");
+  const isOnboardingRoute = pathname === "/onboarding";
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
-  const isProtectedRoute =
-    pathname.startsWith("/dashboard") || pathname === "/onboarding";
+  // Unauthenticated visitors: allow /login and /signup through with no redirect.
+  // Only gate dashboard and onboarding behind login.
+  if (!user) {
+    if (isDashboardRoute || isOnboardingRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
 
-  if (!user && isProtectedRoute) {
+    return supabaseResponse;
+  }
+
+  // Authenticated users only from here onward.
+  const onboardingComplete = await isOnboardingComplete(supabase, user.id);
+
+  if (isAuthPage) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = onboardingComplete ? "/dashboard" : "/onboarding";
     return NextResponse.redirect(url);
   }
 
-  if (user) {
-    const onboardingComplete = await isOnboardingComplete(supabase, user.id);
+  if (isOnboardingRoute && onboardingComplete) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
 
-    if (pathname === "/login" || pathname === "/signup") {
-      const url = request.nextUrl.clone();
-      url.pathname = onboardingComplete ? "/dashboard" : "/onboarding";
-      return NextResponse.redirect(url);
-    }
-
-    if (onboardingComplete && pathname === "/onboarding") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-
-    if (!onboardingComplete && pathname.startsWith("/dashboard")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/onboarding";
-      return NextResponse.redirect(url);
-    }
+  if (isDashboardRoute && !onboardingComplete) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/onboarding";
+    return NextResponse.redirect(url);
   }
 
   return supabaseResponse;
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login", "/signup", "/onboarding"],
+  matcher: [
+    "/dashboard",
+    "/dashboard/:path*",
+    "/login",
+    "/signup",
+    "/onboarding",
+  ],
 };
