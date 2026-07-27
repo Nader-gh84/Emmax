@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { BuildVersionIndicator } from "@/components/layout/build-version-indicator";
 
 export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-navy/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="shrink-0">
+        <Link href="/" className="flex shrink-0 flex-col items-start gap-0.5">
           <Image
             src="/images/logo.png"
             alt="EmaX"
@@ -14,6 +15,7 @@ export function Header() {
             className="h-9 w-auto"
             priority
           />
+          <BuildVersionIndicator />
         </Link>
         <nav className="hidden items-center gap-8 sm:flex">
           <Link

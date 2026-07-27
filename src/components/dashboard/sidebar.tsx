@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { dashboardNavItems } from "@/components/dashboard/nav-items";
+import { BuildVersionIndicator } from "@/components/layout/build-version-indicator";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 
 interface DashboardSidebarProps {
@@ -21,7 +22,7 @@ export function DashboardSidebar({ email, fullName }: DashboardSidebarProps) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-white/10 bg-navy md:flex">
       <div className="flex h-16 items-center border-b border-white/10 px-6">
-        <Link href="/" className="shrink-0">
+        <Link href="/" className="flex shrink-0 flex-col items-start gap-0.5">
           <Image
             src="/images/logo.png"
             alt="EmaX"
@@ -30,6 +31,7 @@ export function DashboardSidebar({ email, fullName }: DashboardSidebarProps) {
             className="h-9 w-auto"
             priority
           />
+          <BuildVersionIndicator />
         </Link>
       </div>
 
