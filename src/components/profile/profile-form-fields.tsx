@@ -5,6 +5,7 @@ import { touchInput } from "@/components/quotes/ui";
 import { SearchableSelect } from "@/components/profile/searchable-select";
 import {
   ALL_COUNTRIES,
+  CITY_NATIVE_SELECT_THRESHOLD,
   getCitiesForCountry,
   getPhoneCode,
 } from "@/lib/location";
@@ -53,6 +54,8 @@ export function ProfileFormFields({
   }, [profile.country]);
 
   const phonePrefix = profile.country ? `+${getPhoneCode(profile.country)}` : "+";
+  const useNativeCitySelect =
+    profile.country && cityOptions.length <= CITY_NATIVE_SELECT_THRESHOLD;
 
   return (
     <>
@@ -75,6 +78,7 @@ export function ProfileFormFields({
                 placeholder="Search or select country"
                 required
                 maxResults={50}
+                emptyQueryMaxResults={ALL_COUNTRIES.length}
               />
             </div>
           );
@@ -90,20 +94,49 @@ export function ProfileFormFields({
                 City
                 <span className="text-accent"> *</span>
               </label>
-              <SearchableSelect
-                id={`${idPrefix}-city`}
-                value={profile.city}
-                onChange={(value) => onFieldChange("city", value)}
-                options={cityOptions}
-                placeholder={
-                  profile.country
-                    ? "Search or select city"
-                    : "Select a country first"
-                }
-                disabled={!profile.country}
-                required
-                maxResults={80}
-              />
+
+              {!profile.country ? (
+                <select
+                  id={`${idPrefix}-city`}
+                  disabled
+                  className={`${touchInput} mt-1.5 appearance-none opacity-60`}
+                >
+                  <option>Select a country first</option>
+                </select>
+              ) : useNativeCitySelect ? (
+                <select
+                  id={`${idPrefix}-city`}
+                  value={profile.city}
+                  onChange={(event) =>
+                    onFieldChange("city", event.target.value)
+                  }
+                  className={`${touchInput} mt-1.5 appearance-none`}
+                  required
+                >
+                  <option value="" disabled>
+                    Select city
+                  </option>
+                  {cityOptions.map((option) => (
+                    <option
+                      key={option.value}
+                      value={option.value}
+                      className="bg-navy text-white"
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <SearchableSelect
+                  id={`${idPrefix}-city`}
+                  value={profile.city}
+                  onChange={(value) => onFieldChange("city", value)}
+                  options={cityOptions}
+                  placeholder="Type to search cities..."
+                  required
+                  maxResults={80}
+                />
+              )}
             </div>
           );
         }
@@ -119,7 +152,7 @@ export function ProfileFormFields({
               </label>
               <div className="mt-1.5 flex">
                 <span
-                  className={`${touchInput} flex min-w-[4.5rem] shrink-0 items-center justify-center rounded-r-none border-r-0 bg-white/10 px-3 text-slate-300`}
+                  className={`${touchInput} pointer-events-none flex min-w-[4.5rem] shrink-0 select-none items-center justify-center rounded-r-none border-r-0 bg-white/10 px-3 text-slate-300`}
                   aria-hidden="true"
                 >
                   {phonePrefix}
@@ -127,6 +160,7 @@ export function ProfileFormFields({
                 <input
                   id={`${idPrefix}-phone`}
                   type="tel"
+                  inputMode="numeric"
                   value={phoneLocal}
                   onChange={(event) =>
                     onPhoneLocalChange(

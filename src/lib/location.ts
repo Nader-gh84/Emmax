@@ -22,8 +22,13 @@ export function getCitiesForCountry(countryName: string) {
   const isoCode = getCountryIsoCode(countryName);
   if (!isoCode) return [];
 
-  return City.getCitiesOfCountry(isoCode) ?? [];
+  return (City.getCitiesOfCountry(isoCode) ?? []).sort((a, b) =>
+    a.name.localeCompare(b.name)
+  );
 }
+
+/** Use a native select when the city list is small enough to browse. */
+export const CITY_NATIVE_SELECT_THRESHOLD = 500;
 
 export function formatPhoneForStorage(
   countryName: string,

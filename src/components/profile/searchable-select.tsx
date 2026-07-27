@@ -18,6 +18,7 @@ interface SearchableSelectProps {
   disabled?: boolean;
   required?: boolean;
   maxResults?: number;
+  emptyQueryMaxResults?: number;
 }
 
 export function SearchableSelect({
@@ -29,6 +30,7 @@ export function SearchableSelect({
   disabled = false,
   required = false,
   maxResults = 60,
+  emptyQueryMaxResults,
 }: SearchableSelectProps) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -47,8 +49,30 @@ export function SearchableSelect({
         )
       : options;
 
-    return matches.slice(0, maxResults);
-  }, [maxResults, options, query]);
+    const limit = normalizedQuery
+      ? maxResults
+      : (emptyQueryMaxResults ?? maxResults);
+
+    return matches.slice(0, limit);
+  }, [emptyQueryMaxResults, maxResults, options, query]);
+
+  const isTruncated = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const matches = normalizedQuery
+      ? options.filter(
+          (option) =>
+            option.label.toLowerCase().includes(normalizedQuery) ||
+            option.value.toLowerCase().includes(normalizedQuery) ||
+            option.hint?.toLowerCase().includes(normalizedQuery)
+        )
+      : options;
+
+    const limit = normalizedQuery
+      ? maxResults
+      : (emptyQueryMaxResults ?? maxResults);
+
+    return matches.length > limit;
+  }, [emptyQueryMaxResults, maxResults, options, query]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -115,6 +139,11 @@ export function SearchableSelect({
                 </button>
               </li>
             ))
+          )}
+          {isTruncated && (
+            <li className="border-t border-white/10 px-4 py-2 text-xs text-slate-500">
+              Keep typing to narrow the list
+            </li>
           )}
         </ul>
       )}
