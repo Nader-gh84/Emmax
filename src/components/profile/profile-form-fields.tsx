@@ -150,9 +150,9 @@ export function ProfileFormFields({
               >
                 Phone
               </label>
-              <div className="mt-1.5 flex">
+              <div className="mt-1.5 flex w-full overflow-hidden rounded-xl border border-white/10 bg-white/5 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent">
                 <span
-                  className={`${touchInput} pointer-events-none flex min-w-[4.5rem] shrink-0 select-none items-center justify-center rounded-r-none border-r-0 bg-white/10 px-3 text-slate-300`}
+                  className="flex min-h-[44px] shrink-0 items-center border-r border-white/10 bg-white/10 px-3 text-base font-medium text-slate-300"
                   aria-hidden="true"
                 >
                   {phonePrefix}
@@ -167,8 +167,8 @@ export function ProfileFormFields({
                       event.target.value.replace(/[^\d\s()-]/g, "")
                     )
                   }
-                  className={`${touchInput} rounded-l-none`}
-                  placeholder="Optional"
+                  className="min-h-[44px] min-w-0 flex-1 border-0 bg-transparent px-4 py-2.5 text-base text-white placeholder-slate-500 focus:outline-none focus:ring-0"
+                  placeholder="Phone number"
                   autoComplete="tel-national"
                 />
               </div>

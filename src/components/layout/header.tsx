@@ -32,7 +32,7 @@ export function Header() {
         <div className="flex items-center gap-4">
           <Link
             href="/login"
-            className="hidden text-sm font-medium text-slate-300 transition hover:text-white sm:inline"
+            className="text-sm font-medium text-slate-300 transition hover:text-white"
           >
             Log in
           </Link>
@@ -40,7 +40,7 @@ export function Header() {
             href="/signup"
             className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-600"
           >
-            Start Free Trial
+            Sign Up
           </Link>
         </div>
       </div>

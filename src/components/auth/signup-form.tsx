@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  getAuthEmailValidationError,
+  getSignupAuthErrorMessage,
+  normalizeAuthEmail,
+} from "@/lib/auth-email";
 import { createClient } from "@/lib/supabase";
 
 export function SignupForm() {
@@ -15,16 +20,32 @@ export function SignupForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const normalizedEmail = normalizeAuthEmail(email);
+    const validationError = getAuthEmailValidationError(normalizedEmail);
+
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
 
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signUp({
-      email,
+      email: normalizedEmail,
       password,
     });
 
     if (authError) {
-      setError(authError.message);
+      const errorCode =
+        "code" in authError && typeof authError.code === "string"
+          ? authError.code
+          : undefined;
+
+      setError(
+        getSignupAuthErrorMessage(errorCode, authError.message, normalizedEmail)
+      );
       setLoading(false);
       return;
     }
