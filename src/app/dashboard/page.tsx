@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { IconMicrophone } from "@/components/dashboard/icons";
-import { createClient } from "@/lib/supabase/server";
-import { getFirstName } from "@/lib/user";
 
 const stats = [
   { label: "Quotes This Month", value: "0" },
@@ -10,27 +8,10 @@ const stats = [
   { label: "Revenue", value: "$0" },
 ];
 
-export default async function DashboardPage() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const firstName = user ? getFirstName(user) : "there";
-
+export default function DashboardPage() {
   return (
     <main className="min-w-0 p-4 sm:p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white sm:text-3xl">
-            Good morning, {firstName}
-          </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Here&apos;s what&apos;s happening with your quotes today.
-          </p>
-        </div>
-
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-end">
         <Link
           href="/dashboard/new-quote"
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"

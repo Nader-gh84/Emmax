@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/auth/sign-out-button";
@@ -15,8 +16,15 @@ export function DashboardSidebar({ email }: DashboardSidebarProps) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-white/10 bg-navy md:flex">
       <div className="flex h-16 items-center border-b border-white/10 px-6">
-        <Link href="/" className="text-xl font-bold text-white">
-          Ema<span className="text-accent">X</span>
+        <Link href="/" className="shrink-0">
+          <Image
+            src="/images/logo.png"
+            alt="EmaX"
+            width={120}
+            height={36}
+            className="h-9 w-auto"
+            priority
+          />
         </Link>
       </div>
 

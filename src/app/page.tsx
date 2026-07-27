@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -67,31 +68,46 @@ export default function LandingPage() {
         {/* Hero */}
         <section className="relative overflow-hidden px-6 py-24 sm:py-32">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(59,130,246,0.15)_0%,_transparent_60%)]" />
-          <div className="relative mx-auto max-w-4xl text-center">
-            <p className="mb-6 inline-block rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent">
-              AI-powered quotes for Canadian trades
-            </p>
-            <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
-              Stop Doing Paperwork.{" "}
-              <span className="text-accent">Start Doing More Jobs.</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300 sm:text-xl">
-              EmaX turns your voice into professional quotes in seconds. Built
-              for Canadian tradespeople.
-            </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <Link
-                href="/signup"
-                className="w-full rounded-lg bg-accent px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600 sm:w-auto"
-              >
-                Start Free Trial
-              </Link>
-              <Link
-                href="#how-it-works"
-                className="w-full rounded-lg border border-white/20 bg-white/5 px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
-              >
-                See How It Works
-              </Link>
+          <div className="relative mx-auto max-w-6xl">
+            <div className="flex flex-col gap-10 lg:grid lg:grid-cols-2 lg:items-center lg:gap-12">
+              <div className="order-2 text-center lg:order-1 lg:text-left">
+                <p className="mb-6 inline-block rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm font-medium text-accent">
+                  AI-powered quotes for Canadian trades
+                </p>
+                <h1 className="text-4xl font-bold leading-tight tracking-tight sm:text-6xl">
+                  Stop Doing Paperwork.{" "}
+                  <span className="text-accent">Start Doing More Jobs.</span>
+                </h1>
+                <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-300 sm:text-xl lg:mx-0">
+                  EmaX turns your voice into professional quotes in seconds. Built
+                  for Canadian tradespeople.
+                </p>
+                <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row lg:justify-start">
+                  <Link
+                    href="/signup"
+                    className="w-full rounded-lg bg-accent px-8 py-3.5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600 sm:w-auto"
+                  >
+                    Start Free Trial
+                  </Link>
+                  <Link
+                    href="#how-it-works"
+                    className="w-full rounded-lg border border-white/20 bg-white/5 px-8 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10 sm:w-auto"
+                  >
+                    See How It Works
+                  </Link>
+                </div>
+              </div>
+
+              <div className="order-1 flex justify-center lg:order-2 lg:justify-end">
+                <Image
+                  src="/images/hero-assistant.png"
+                  alt="Ema, your AI quote assistant"
+                  width={520}
+                  height={520}
+                  priority
+                  className="h-auto w-full max-w-xs rounded-2xl shadow-2xl shadow-accent/25 ring-1 ring-accent/20 sm:max-w-sm lg:max-w-md"
+                />
+              </div>
             </div>
           </div>
         </section>

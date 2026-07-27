@@ -1,11 +1,19 @@
+import Image from "next/image";
 import Link from "next/link";
 
 export function Header() {
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-navy/95 backdrop-blur-sm">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="text-xl font-bold text-white">
-          Ema<span className="text-accent">X</span>
+        <Link href="/" className="shrink-0">
+          <Image
+            src="/images/logo.png"
+            alt="EmaX"
+            width={120}
+            height={36}
+            className="h-9 w-auto"
+            priority
+          />
         </Link>
         <nav className="hidden items-center gap-8 sm:flex">
           <Link
