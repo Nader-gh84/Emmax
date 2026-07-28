@@ -9,14 +9,14 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
             Next.js priority would preload an image that is never used
             (console warning on mobile / narrow viewports). */}
         <Image
-          src="/images/hero-assistant-v2.png"
+          src="/images/hero-assistant-v3.png"
           alt="Ema AI assistant at work"
           fill
           sizes="50vw"
           className="object-cover object-top"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/60 to-navy/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-navy/40 via-transparent to-navy/10" />
+        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/55 to-navy/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy/35 via-transparent to-navy/10" />
 
         <div className="relative z-10 flex h-full min-h-screen w-full flex-col justify-between p-10 xl:p-14">
           <Link href="/" className="inline-flex w-fit">
@@ -43,9 +43,9 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
               className="mt-10 flex items-center gap-2"
               aria-hidden="true"
             >
-              <span className="h-2 w-2 rounded-full bg-accent" />
-              <span className="h-2 w-2 rounded-full bg-white/30" />
-              <span className="h-2 w-2 rounded-full bg-white/30" />
+              <span className="h-1 w-6 rounded-full bg-white/30" />
+              <span className="h-1 w-6 rounded-full bg-white/30" />
+              <span className="h-1 w-8 rounded-full bg-accent" />
             </div>
           </div>
         </div>
