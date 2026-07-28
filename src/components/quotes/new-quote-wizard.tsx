@@ -12,11 +12,8 @@ import {
   type QuoteActionState,
 } from "@/lib/quote-actions";
 import {
-  buildNewCustomerPayload,
-  buildQuoteRecordPayload,
   quoteToWizardState,
   type CustomerSelectionMode,
-  type QuoteWizardState,
 } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
 import {
@@ -35,36 +32,6 @@ interface ExtractedMaterial {
 
 interface NewQuoteWizardProps {
   draftId?: string;
-}
-
-function getWizardStateSnapshot(state: {
-  quoteId: string | null;
-  transcript: string;
-  materials: MaterialItem[];
-  taxRate: number;
-  customerMode: CustomerSelectionMode;
-  selectedCustomerId: string | null;
-  customerName: string;
-  customerEmail: string;
-  customerPhone: string;
-  projectName: string;
-  notes: string;
-  validityDays: number;
-}): QuoteWizardState {
-  return {
-    quoteId: state.quoteId,
-    transcript: state.transcript,
-    materials: state.materials,
-    taxRate: state.taxRate,
-    customerMode: state.customerMode,
-    selectedCustomerId: state.selectedCustomerId,
-    customerName: state.customerName,
-    customerEmail: state.customerEmail,
-    customerPhone: state.customerPhone,
-    projectName: state.projectName,
-    notes: state.notes,
-    validityDays: state.validityDays,
-  };
 }
 
 export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
@@ -231,112 +198,23 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
     }
   }
 
-  async function persistQuote(status: "draft" | "sent", sentAt?: string) {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  async function handleSaveDraft() {
+    setIsSavingDraft(true);
+    setActionMessage(null);
 
-    if (!user) {
-      throw new Error("You must be logged in to save quotes.");
+    try {
+      const result = await saveQuoteDraftWithPdf(getQuoteActionState());
+      setQuoteId(result.quoteId);
+      setActionMessage("Quote saved as draft.");
+    } catch (err) {
+      console.error("Save draft failed:", err);
+      setActionMessage(
+        err instanceof Error ? err.message : "Failed to save draft"
+      );
+    } finally {
+      setIsSavingDraft(false);
     }
-
-    const state = getWizardStateSnapshot({
-      quoteId,
-      transcript,
-      materials,
-      taxRate,
-      customerMode,
-      selectedCustomerId,
-      customerName,
-      customerEmail,
-      customerPhone,
-      projectName,
-      notes,
-      validityDays,
-    });
-
-    let customerId = selectedCustomerId;
-
-    if (status === "sent") {
-      if (customerMode === "existing" && customerId) {
-        const { error: customerUpdateError } = await supabase
-          .from("customers")
-          .update({ last_quoted_at: sentAt ?? new Date().toISOString() })
-          .eq("id", customerId)
-          .eq("user_id", user.id);
-
-        if (customerUpdateError) {
-          throw new Error("Failed to update customer quote history.");
-        }
-      } else if (customerMode === "new" && customerName.trim()) {
-        const { data: insertedCustomer, error: insertCustomerError } =
-          await supabase
-            .from("customers")
-            .insert({
-              ...buildNewCustomerPayload(state),
-              user_id: user.id,
-              last_quoted_at: sentAt ?? new Date().toISOString(),
-            })
-            .select("id")
-            .single();
-
-        if (insertCustomerError || !insertedCustomer) {
-          throw new Error("Failed to save customer before sending quote.");
-        }
-
-        customerId = insertedCustomer.id;
-        setSelectedCustomerId(customerId);
-        setCustomerMode("existing");
-      } else if (customerId) {
-        const { error: customerUpdateError } = await supabase
-          .from("customers")
-          .update({ last_quoted_at: sentAt ?? new Date().toISOString() })
-          .eq("id", customerId)
-          .eq("user_id", user.id);
-
-        if (customerUpdateError) {
-          throw new Error("Failed to update customer quote history.");
-        }
-      }
-    }
-
-    const payload = buildQuoteRecordPayload(
-      { ...state, selectedCustomerId: customerId },
-      user.id,
-      status,
-      customerId,
-      sentAt
-    );
-
-    if (quoteId) {
-      const { error: updateError } = await supabase
-        .from("quotes")
-        .update(payload)
-        .eq("id", quoteId)
-        .eq("user_id", user.id);
-
-      if (updateError) {
-        throw new Error("Failed to update quote.");
-      }
-
-      return quoteId;
-    }
-
-    const { data: insertedQuote, error: insertError } = await supabase
-      .from("quotes")
-      .insert(payload)
-      .select("id")
-      .single();
-
-    if (insertError || !insertedQuote) {
-      throw new Error("Failed to save quote.");
-    }
-
-    setQuoteId(insertedQuote.id);
-    return insertedQuote.id;
   }
-
   async function handleSendQuote() {
     if (!customerName.trim() || !customerEmail.trim()) {
       setActionMessage("Customer name and email are required to send a quote.");
@@ -351,27 +229,12 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
       setQuoteId(result.quoteId);
       setActionMessage(`Quote sent to ${customerEmail}!`);
     } catch (err) {
+      console.error("Send quote failed:", err);
       setActionMessage(
         err instanceof Error ? err.message : "Failed to send quote"
       );
     } finally {
       setIsSending(false);
-    }
-  }
-
-  async function handleSaveDraft() {
-    setIsSavingDraft(true);
-    setActionMessage(null);
-
-    try {
-      await persistQuote("draft");
-      setActionMessage("Quote saved as draft.");
-    } catch (err) {
-      setActionMessage(
-        err instanceof Error ? err.message : "Failed to save draft"
-      );
-    } finally {
-      setIsSavingDraft(false);
     }
   }
 

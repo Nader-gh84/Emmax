@@ -50,16 +50,19 @@ export function buildQuoteRecordPayload(
   userId: string,
   status: "draft" | "sent",
   customerId: string | null,
-  sentAt?: string | null,
-  pdfUrl?: string | null
+  options: {
+    sentAt?: string | null;
+    pdfUrl?: string | null;
+    includePdfUrl?: boolean;
+  } = {}
 ) {
+  const opts = options ?? {};
   const { subtotal, tax, grandTotal } = calculateQuoteTotals(
     state.materials,
     state.taxRate
   );
 
-  return {
-    user_id: userId,
+  const payload: Record<string, unknown> = {
     customer_id: customerId,
     customer_name: state.customerName.trim() || null,
     customer_email: state.customerEmail.trim() || null,
@@ -67,17 +70,56 @@ export function buildQuoteRecordPayload(
     project_name: state.projectName.trim() || null,
     notes: state.notes.trim() || null,
     materials: materialsToStored(state.materials),
-    tax_rate: state.taxRate,
-    validity_days: state.validityDays,
-    subtotal,
-    tax,
-    grand_total: grandTotal,
+    tax_rate: sanitizeNumeric(state.taxRate),
+    validity_days: sanitizeInteger(state.validityDays, 30),
+    subtotal: sanitizeNumeric(subtotal),
+    tax: sanitizeNumeric(tax),
+    grand_total: sanitizeNumeric(grandTotal),
     status,
     transcript: state.transcript.trim() || null,
     updated_at: new Date().toISOString(),
-    sent_at: status === "sent" ? (sentAt ?? new Date().toISOString()) : null,
-    pdf_url: pdfUrl ?? null,
+    sent_at:
+      status === "sent"
+        ? opts.sentAt ?? new Date().toISOString()
+        : null,
   };
+
+  if (opts.includePdfUrl) {
+    payload.pdf_url = opts.pdfUrl ?? null;
+  }
+
+  return payload;
+}
+
+export function buildQuoteInsertPayload(
+  state: QuoteWizardState,
+  userId: string,
+  status: "draft" | "sent",
+  customerId: string | null,
+  options: {
+    sentAt?: string | null;
+    pdfUrl?: string | null;
+  } = {}
+) {
+  return {
+    user_id: userId,
+    ...buildQuoteRecordPayload(state, userId, status, customerId, {
+      ...options,
+      includePdfUrl: true,
+    }),
+  };
+}
+
+function sanitizeNumeric(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function sanitizeInteger(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.round(value));
 }
 
 export function buildNewCustomerPayload(state: QuoteWizardState) {

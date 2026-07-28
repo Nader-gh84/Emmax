@@ -110,11 +110,16 @@ export interface Quote {
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
   return materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
     item,
-    brand: brand || undefined,
-    quantity,
+    brand: brand?.trim() || undefined,
+    quantity: sanitizeNumeric(quantity),
     unit,
-    unitPrice,
+    unitPrice: sanitizeNumeric(unitPrice),
   }));
+}
+
+function sanitizeNumeric(value: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function storedToMaterials(stored: StoredMaterial[]): MaterialItem[] {
@@ -122,9 +127,9 @@ export function storedToMaterials(stored: StoredMaterial[]): MaterialItem[] {
     createMaterialItem({
       item: material.item ?? "",
       brand: material.brand ?? "",
-      quantity: material.quantity ?? 1,
+      quantity: sanitizeNumeric(material.quantity ?? 1),
       unit: material.unit ?? "each",
-      unitPrice: material.unitPrice ?? 0,
+      unitPrice: sanitizeNumeric(material.unitPrice ?? 0),
     })
   );
 }

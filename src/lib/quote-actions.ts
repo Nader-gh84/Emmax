@@ -1,11 +1,13 @@
 import { fetchQuotePdfBlob } from "@/lib/quote-pdf-client";
 import {
   buildNewCustomerPayload,
+  buildQuoteInsertPayload,
   buildQuoteRecordPayload,
   type CustomerSelectionMode,
   type QuoteWizardState,
 } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
+import { throwSupabaseError } from "@/lib/supabase/errors";
 import type { MaterialItem } from "@/types/quote";
 
 export interface QuoteActionState {
@@ -108,32 +110,58 @@ async function upsertQuoteRecord(
   userId: string,
   status: "draft" | "sent",
   customerId: string | null,
-  pdfUrl: string | null,
-  sentAt?: string | null
+  options: {
+    sentAt?: string | null;
+    pdfUrl?: string | null;
+    includePdfUrl?: boolean;
+  } = {}
 ): Promise<string> {
   const supabase = createClient();
-  const payload = buildQuoteRecordPayload(
-    { ...toWizardState(state), selectedCustomerId: customerId },
-    userId,
-    status,
-    customerId,
-    sentAt,
-    pdfUrl
-  );
+  const opts = options ?? {};
+  const wizardState = { ...toWizardState(state), selectedCustomerId: customerId };
 
   if (state.quoteId) {
-    const { error } = await supabase
+    const payload = buildQuoteRecordPayload(
+      wizardState,
+      userId,
+      status,
+      customerId,
+      opts
+    );
+
+    const { data, error } = await supabase
       .from("quotes")
       .update(payload)
       .eq("id", state.quoteId)
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select("id")
+      .single();
 
     if (error) {
-      throw new Error("Failed to update quote.");
+      throwSupabaseError("upsertQuoteRecord.update", error, "Failed to update quote.", {
+        quoteId: state.quoteId,
+        status,
+        payload,
+      });
+    }
+
+    if (!data) {
+      throw new Error("Failed to update quote: row not found or access denied.");
     }
 
     return state.quoteId;
   }
+
+  const payload = buildQuoteInsertPayload(
+    wizardState,
+    userId,
+    status,
+    customerId,
+    {
+      sentAt: opts.sentAt,
+      pdfUrl: opts.pdfUrl,
+    }
+  );
 
   const { data, error } = await supabase
     .from("quotes")
@@ -141,8 +169,15 @@ async function upsertQuoteRecord(
     .select("id")
     .single();
 
-  if (error || !data) {
-    throw new Error("Failed to save quote.");
+  if (error) {
+    throwSupabaseError("upsertQuoteRecord.insert", error, "Failed to save quote.", {
+      status,
+      payload,
+    });
+  }
+
+  if (!data) {
+    throw new Error("Failed to save quote: insert returned no row.");
   }
 
   return data.id;
@@ -162,7 +197,12 @@ async function ensureConfirmationToken(
     .single();
 
   if (error) {
-    throw new Error("Failed to load quote confirmation token.");
+    throwSupabaseError(
+      "ensureConfirmationToken.select",
+      error,
+      "Failed to load quote confirmation token.",
+      { quoteId }
+    );
   }
 
   if (quote.confirmation_token) {
@@ -179,6 +219,15 @@ async function ensureConfirmationToken(
     .single();
 
   if (updateError || !updated?.confirmation_token) {
+    if (updateError) {
+      throwSupabaseError(
+        "ensureConfirmationToken.update",
+        updateError,
+        "Failed to create quote confirmation token.",
+        { quoteId }
+      );
+    }
+
     throw new Error("Failed to create quote confirmation token.");
   }
 
@@ -201,8 +250,7 @@ export async function saveQuoteDraftWithPdf(
     state,
     user.id,
     "draft",
-    state.selectedCustomerId,
-    null
+    state.selectedCustomerId
   );
 
   const pdfBlob = await fetchQuotePdfBlob({
@@ -221,7 +269,7 @@ export async function saveQuoteDraftWithPdf(
     user.id,
     "draft",
     state.selectedCustomerId,
-    pdfUrl
+    { pdfUrl, includePdfUrl: true }
   );
 
   return { quoteId, pdfUrl };
@@ -255,8 +303,7 @@ export async function sendQuoteEmailAndPersist(
     user.id,
     "sent",
     customerId,
-    null,
-    sentAt
+    { sentAt }
   );
 
   const confirmationToken = await ensureConfirmationToken(quoteId, user.id);
@@ -308,8 +355,7 @@ export async function sendQuoteEmailAndPersist(
       user.id,
       "sent",
       customerId,
-      pdfUrl,
-      sentAt
+      { sentAt, pdfUrl, includePdfUrl: true }
     );
   } catch {
     // PDF upload is best-effort after send succeeds.
