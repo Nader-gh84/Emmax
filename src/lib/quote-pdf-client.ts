@@ -48,6 +48,7 @@ export async function fetchQuotePdfBlob(input: QuotePdfInput): Promise<Blob> {
 }
 
 export function downloadPdfBlob(blob: Blob, filename = "quote.pdf") {
+  // Local browser download only — never pass this blob URL to email or storage.
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

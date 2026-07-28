@@ -118,27 +118,7 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
                 </tr>
               </table>
 
-              ${
-                data.acceptUrl
-                  ? `
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
-                <tr>
-                  <td align="center">
-                    <a href="${escapeHtml(data.acceptUrl)}" style="display:inline-block;background-color:#3B82F6;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:16px 32px;border-radius:10px;">
-                      Accept This Quote
-                    </a>
-                  </td>
-                </tr>
-                <tr>
-                  <td align="center" style="padding-top:12px;">
-                    <p style="margin:0;font-size:13px;color:#64748b;line-height:1.5;">
-                      Click above to confirm and accept this quote online.
-                    </p>
-                  </td>
-                </tr>
-              </table>`
-                  : ""
-              }
+              ${buildAcceptQuoteSection(data.acceptUrl ?? "")}
 
               <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">
                 If you have any questions, simply reply to this email. We look forward to working with you.
@@ -172,6 +152,47 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function isSafeAcceptUrl(url: string | undefined): url is string {
+  if (!url) return false;
+  if (url.startsWith("blob:") || url.startsWith("data:")) return false;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function buildAcceptQuoteSection(acceptUrl: string): string {
+  if (!isSafeAcceptUrl(acceptUrl)) {
+    return "";
+  }
+
+  const safeUrl = escapeHtml(acceptUrl);
+
+  return `
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+                <tr>
+                  <td align="center">
+                    <a href="${safeUrl}" style="display:inline-block;background-color:#3B82F6;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:16px 32px;border-radius:10px;">
+                      Accept This Quote
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:12px;">
+                    <p style="margin:0;font-size:13px;color:#64748b;line-height:1.5;">
+                      Click above to confirm and accept this quote online.
+                    </p>
+                    <p style="margin:8px 0 0;font-size:12px;color:#94a3b8;line-height:1.5;word-break:break-all;">
+                      Or copy this link: ${safeUrl}
+                    </p>
+                  </td>
+                </tr>
+              </table>`;
 }
 
 export function buildQuoteAcceptedEmailHtml({

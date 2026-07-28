@@ -1,4 +1,4 @@
-import { getAppBaseUrl } from "@/lib/app-url";
+import { getAppBaseUrl, isSafePublicUrl, isUuid } from "@/lib/app-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   Quote,
@@ -70,8 +70,21 @@ export function buildQuoteDashboardUrl(quoteId: string): string {
   return `${getAppBaseUrl()}/dashboard/quotes?quote=${quoteId}`;
 }
 
-export function buildQuoteAcceptUrl(confirmationToken: string): string {
-  return `${getAppBaseUrl()}/quote/confirm/${confirmationToken}`;
+export function buildQuoteAcceptUrl(
+  confirmationToken: string,
+  baseUrl: string = getAppBaseUrl()
+): string {
+  if (!isUuid(confirmationToken)) {
+    throw new Error("Invalid confirmation token.");
+  }
+
+  const url = `${baseUrl.replace(/\/$/, "")}/quote/confirm/${confirmationToken}`;
+
+  if (!isSafePublicUrl(url) && !baseUrl.includes("localhost")) {
+    throw new Error("Invalid confirmation URL base.");
+  }
+
+  return url;
 }
 
 export function formatPublicQuoteMaterials(materials: StoredMaterial[]) {

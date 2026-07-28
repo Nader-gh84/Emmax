@@ -1,10 +1,35 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
-import { buildQuoteAcceptUrl } from "@/lib/quote-confirmation";
+import { getBaseUrlFromRequest, isUuid } from "@/lib/app-url";
 import {
   QuoteEmailData,
   buildQuoteEmailHtml,
 } from "@/lib/email/quote-email";
+import { buildQuoteAcceptUrl } from "@/lib/quote-confirmation";
+import { generateQuotePdfBuffer } from "@/lib/pdf/generate-quote-pdf";
+
+interface SendQuoteRequestBody extends QuoteEmailData {
+  confirmationToken?: string;
+  customerPhone?: string;
+  // Never trust client-provided URLs in email content.
+  acceptUrl?: string;
+  pdfUrl?: string;
+}
+
+function pickQuoteEmailPayload(body: SendQuoteRequestBody): QuoteEmailData & {
+  customerPhone?: string;
+} {
+  return {
+    customerName: body.customerName.trim(),
+    customerEmail: body.customerEmail.trim(),
+    projectName: body.projectName?.trim() ?? "",
+    notes: body.notes?.trim() || undefined,
+    validityDays: body.validityDays ?? 30,
+    taxRate: body.taxRate ?? 13,
+    materials: body.materials,
+    customerPhone: body.customerPhone?.trim() || undefined,
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -17,50 +42,63 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as QuoteEmailData & {
-      confirmationToken?: string;
-    };
+    const body = (await request.json()) as SendQuoteRequestBody;
+    const payload = pickQuoteEmailPayload(body);
 
-    if (!body.customerName?.trim()) {
+    if (!payload.customerName) {
       return NextResponse.json(
         { error: "Customer name is required" },
         { status: 400 }
       );
     }
 
-    if (!body.customerEmail?.trim()) {
+    if (!payload.customerEmail) {
       return NextResponse.json(
         { error: "Customer email is required" },
         { status: 400 }
       );
     }
 
-    if (!body.materials?.length) {
+    if (!payload.materials?.length) {
       return NextResponse.json(
         { error: "At least one line item is required" },
         { status: 400 }
       );
     }
 
-    const resend = new Resend(apiKey);
-    const fromEmail =
-      process.env.RESEND_FROM_EMAIL ?? "EmaX <onboarding@resend.dev>";
-    const projectLabel = body.projectName?.trim() || "Your Project";
-    const acceptUrl = body.confirmationToken
-      ? buildQuoteAcceptUrl(body.confirmationToken)
-      : undefined;
+    if (!body.confirmationToken || !isUuid(body.confirmationToken)) {
+      return NextResponse.json(
+        { error: "A valid confirmation token is required to send quote emails." },
+        { status: 400 }
+      );
+    }
+
+    const baseUrl = getBaseUrlFromRequest(request);
+    const acceptUrl = buildQuoteAcceptUrl(body.confirmationToken, baseUrl);
+
     const html = buildQuoteEmailHtml({
-      ...body,
-      validityDays: body.validityDays ?? 30,
-      taxRate: body.taxRate ?? 13,
+      ...payload,
       acceptUrl,
     });
 
+    const pdfBuffer = await generateQuotePdfBuffer(payload);
+
+    const resend = new Resend(apiKey);
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL ?? "EmaX <onboarding@resend.dev>";
+    const projectLabel = payload.projectName || "Your Project";
+
     const { data, error } = await resend.emails.send({
       from: fromEmail,
-      to: [body.customerEmail.trim()],
+      to: [payload.customerEmail],
       subject: `Your Quote from EmaX — ${projectLabel}`,
       html,
+      attachments: [
+        {
+          filename: "quote.pdf",
+          content: pdfBuffer,
+        },
+      ],
     });
 
     if (error) {
@@ -70,7 +108,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, id: data?.id });
+    return NextResponse.json({ success: true, id: data?.id, acceptUrl });
   } catch (error) {
     console.error("Send quote error:", error);
     return NextResponse.json(

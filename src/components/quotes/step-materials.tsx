@@ -125,6 +125,7 @@ export function StepMaterials({
       });
 
       downloadPdfBlob(blob);
+      // Blob URLs stay in the browser only — email uses server-side PDF + confirm link.
       setShowPostDownloadSheet(true);
     } catch (err) {
       setFeedback({

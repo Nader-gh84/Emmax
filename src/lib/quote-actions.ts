@@ -148,6 +148,43 @@ async function upsertQuoteRecord(
   return data.id;
 }
 
+async function ensureConfirmationToken(
+  quoteId: string,
+  userId: string
+): Promise<string> {
+  const supabase = createClient();
+
+  const { data: quote, error } = await supabase
+    .from("quotes")
+    .select("confirmation_token")
+    .eq("id", quoteId)
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    throw new Error("Failed to load quote confirmation token.");
+  }
+
+  if (quote.confirmation_token) {
+    return quote.confirmation_token;
+  }
+
+  const newToken = crypto.randomUUID();
+  const { data: updated, error: updateError } = await supabase
+    .from("quotes")
+    .update({ confirmation_token: newToken })
+    .eq("id", quoteId)
+    .eq("user_id", userId)
+    .select("confirmation_token")
+    .single();
+
+  if (updateError || !updated?.confirmation_token) {
+    throw new Error("Failed to create quote confirmation token.");
+  }
+
+  return updated.confirmation_token;
+}
+
 export async function saveQuoteDraftWithPdf(
   state: QuoteActionState
 ): Promise<{ quoteId: string; pdfUrl: string }> {
@@ -222,15 +259,7 @@ export async function sendQuoteEmailAndPersist(
     sentAt
   );
 
-  const { data: quoteRecord, error: tokenError } = await supabase
-    .from("quotes")
-    .select("confirmation_token")
-    .eq("id", quoteId)
-    .single();
-
-  if (tokenError || !quoteRecord?.confirmation_token) {
-    throw new Error("Failed to prepare quote confirmation link.");
-  }
+  const confirmationToken = await ensureConfirmationToken(quoteId, user.id);
 
   const response = await fetch("/api/send-quote", {
     method: "POST",
@@ -238,11 +267,12 @@ export async function sendQuoteEmailAndPersist(
     body: JSON.stringify({
       customerName: state.customerName,
       customerEmail: state.customerEmail,
+      customerPhone: state.customerPhone,
       projectName: state.projectName,
       notes: state.notes,
       validityDays: state.validityDays,
       taxRate: state.taxRate,
-      confirmationToken: quoteRecord.confirmation_token,
+      confirmationToken,
       materials: state.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
           item,
