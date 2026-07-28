@@ -6,31 +6,33 @@ import {
   formatQuoteDate,
   materialLineTotal,
   storedToMaterials,
-  type StoredMaterial,
 } from "@/types/quote";
 import { touchBtnPrimary } from "@/components/quotes/ui";
+import type { PublicQuoteSummary } from "@/lib/quote-confirmation";
 
-interface PublicQuoteSummary {
-  id: string;
-  status: "draft" | "sent" | "accepted";
-  project_name: string | null;
-  customer_name: string | null;
-  materials: StoredMaterial[];
-  tax_rate: number;
-  grand_total: number;
-  confirmed_at: string | null;
-  company_name: string;
-}
-
-export function QuoteConfirmClient({ token }: { token: string }) {
-  const [quote, setQuote] = useState<PublicQuoteSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+export function QuoteConfirmClient({
+  token,
+  initialQuote = null,
+  initialError = null,
+}: {
+  token: string;
+  initialQuote?: PublicQuoteSummary | null;
+  initialError?: string | null;
+}) {
+  const [quote, setQuote] = useState<PublicQuoteSummary | null>(initialQuote);
+  const [isLoading, setIsLoading] = useState(!initialQuote && !initialError);
   const [isConfirming, setIsConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirmedAt, setConfirmedAt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
+  const [confirmedAt, setConfirmedAt] = useState<string | null>(
+    initialQuote?.confirmed_at ?? null
+  );
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
+    if (initialQuote || initialError) {
+      return;
+    }
+
     async function loadQuote() {
       setIsLoading(true);
       setError(null);
@@ -42,6 +44,11 @@ export function QuoteConfirmClient({ token }: { token: string }) {
         const data = await response.json();
 
         if (!response.ok) {
+          console.error("[QuoteConfirmClient] Quote fetch failed:", {
+            token,
+            status: response.status,
+            data,
+          });
           setQuote(null);
           setError(data.error || "This link is no longer valid.");
           return;
@@ -51,7 +58,8 @@ export function QuoteConfirmClient({ token }: { token: string }) {
         if (data.quote.status === "accepted") {
           setConfirmedAt(data.quote.confirmed_at);
         }
-      } catch {
+      } catch (fetchError) {
+        console.error("[QuoteConfirmClient] Quote fetch error:", fetchError);
         setError("This link is no longer valid.");
       } finally {
         setIsLoading(false);
@@ -59,7 +67,7 @@ export function QuoteConfirmClient({ token }: { token: string }) {
     }
 
     loadQuote();
-  }, [token]);
+  }, [token, initialQuote, initialError]);
 
   async function handleConfirm() {
     setIsConfirming(true);
@@ -74,6 +82,11 @@ export function QuoteConfirmClient({ token }: { token: string }) {
       const data = await response.json();
 
       if (!response.ok) {
+        console.error("[QuoteConfirmClient] Confirm failed:", {
+          token,
+          status: response.status,
+          data,
+        });
         throw new Error(data.error || "Failed to confirm quote");
       }
 
@@ -83,6 +96,7 @@ export function QuoteConfirmClient({ token }: { token: string }) {
         setQuote({ ...quote, status: "accepted" });
       }
     } catch (err) {
+      console.error("[QuoteConfirmClient] Confirm error:", err);
       setError(
         err instanceof Error ? err.message : "Failed to confirm quote"
       );
