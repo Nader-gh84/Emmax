@@ -53,7 +53,10 @@ export function StepVoice({
     };
   }, []);
 
-  async function processTranscription(formData: FormData) {
+  async function processTranscription(
+    formData: FormData,
+    source: "manual" | "audio" = "audio"
+  ) {
     setStatus("processing");
     setError(null);
 
@@ -63,15 +66,55 @@ export function StepVoice({
         body: formData,
       });
 
-      const data = await response.json();
+      let data: {
+        error?: string;
+        transcript?: string;
+        scopeOfWork?: string;
+        materials?: unknown[];
+      };
+
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error(
+          `[StepVoice] Failed to parse /api/transcribe response (${source}):`,
+          parseError
+        );
+        throw new Error("Invalid response from server.");
+      }
 
       if (!response.ok) {
+        console.error(`[StepVoice] /api/transcribe failed (${source}):`, {
+          status: response.status,
+          data,
+        });
         throw new Error(data.error || "Failed to process");
       }
 
-      setLocalTranscript(data.transcript);
-      onProcessed(data.transcript, data.scopeOfWork, data.materials);
+      const nextTranscript =
+        typeof data.transcript === "string" ? data.transcript : "";
+      const scopeOfWork =
+        typeof data.scopeOfWork === "string" ? data.scopeOfWork : "";
+      const extractedMaterials = Array.isArray(data.materials)
+        ? data.materials
+        : [];
+
+      if (!nextTranscript) {
+        console.error(
+          `[StepVoice] /api/transcribe returned empty transcript (${source}):`,
+          data
+        );
+        throw new Error("No transcript returned from processing.");
+      }
+
+      setLocalTranscript(nextTranscript);
+      onProcessed(nextTranscript, scopeOfWork, extractedMaterials);
+
+      if (source === "manual") {
+        setManualMode(false);
+      }
     } catch (err) {
+      console.error(`[StepVoice] Transcribe error (${source}):`, err);
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setStatus("idle");
@@ -88,7 +131,7 @@ export function StepVoice({
     if (!manualText.trim()) return;
     const formData = new FormData();
     formData.append("text", manualText.trim());
-    await processTranscription(formData);
+    await processTranscription(formData, "manual");
   }
 
   async function startRecording() {
@@ -154,8 +197,11 @@ export function StepVoice({
       setManualText={setManualText}
       error={error}
       status={status}
+      processed={processed}
+      localTranscript={localTranscript}
       onBack={() => setManualMode(false)}
       onSubmit={processManualText}
+      onContinue={onContinue}
     />
   ) : (
     <RecordingControls
@@ -361,21 +407,31 @@ function ManualEntry({
   setManualText,
   error,
   status,
+  processed,
+  localTranscript,
   onBack,
   onSubmit,
+  onContinue,
 }: {
   manualText: string;
   setManualText: (v: string) => void;
   error: string | null;
   status: RecordingStatus;
+  processed: boolean;
+  localTranscript: string;
   onBack: () => void;
   onSubmit: () => void;
+  onContinue: () => void;
 }) {
   return (
     <div className="w-full max-w-md text-center">
-      <h2 className="text-xl font-semibold text-white">Type your quote</h2>
+      <h2 className="text-xl font-semibold text-white">
+        {processed ? "Quote captured" : "Type your quote"}
+      </h2>
       <p className="mt-2 text-base text-slate-400">
-        Describe materials, quantities, and scope of work.
+        {processed
+          ? "Review the transcript, then continue."
+          : "Describe materials, quantities, and scope of work."}
       </p>
 
       {error && (
@@ -384,27 +440,49 @@ function ManualEntry({
         </div>
       )}
 
-      <textarea
-        value={manualText}
-        onChange={(e) => setManualText(e.target.value)}
-        rows={6}
-        placeholder="e.g. Panel upgrade, 50 ft of 12/2 wire, 4 hours labour..."
-        className={`${touchTextarea} mt-6 text-left`}
-      />
+      {!processed && (
+        <>
+          <textarea
+            value={manualText}
+            onChange={(e) => setManualText(e.target.value)}
+            rows={6}
+            placeholder="e.g. Panel upgrade, 50 ft of 12/2 wire, 4 hours labour..."
+            className={`${touchTextarea} mt-6 text-left`}
+          />
 
-      <div className="mt-6 flex flex-col gap-3">
-        <button type="button" onClick={onBack} className={`${touchBtnSecondary} w-full`}>
-          Back to voice
-        </button>
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={!manualText.trim() || status === "processing"}
-          className={`${touchBtnPrimary} w-full`}
-        >
-          {status === "processing" ? "Processing with AI..." : "Process with AI"}
-        </button>
-      </div>
+          <div className="mt-6 flex flex-col gap-3">
+            <button type="button" onClick={onBack} className={`${touchBtnSecondary} w-full`}>
+              Back to voice
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!manualText.trim() || status === "processing"}
+              className={`${touchBtnPrimary} w-full`}
+            >
+              {status === "processing" ? "Processing with AI..." : "Process with AI"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {processed && (
+        <div className="mt-6 w-full animate-fade-in text-left">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+            Transcript
+          </p>
+          <div className="max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-navy/50 p-4 text-base leading-relaxed text-slate-300">
+            {localTranscript}
+          </div>
+          <button
+            type="button"
+            onClick={onContinue}
+            className={`${touchBtnPrimary} mt-6 w-full`}
+          >
+            Continue to Materials
+          </button>
+        </div>
+      )}
     </div>
   );
 }
