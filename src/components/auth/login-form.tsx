@@ -3,12 +3,24 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  AppleIcon,
+  AuthToast,
+  EyeIcon,
+  GoogleIcon,
+  authInputClassName,
+  authPrimaryButtonClassName,
+  authSocialButtonClassName,
+  useComingSoonToast,
+} from "@/components/auth/auth-ui";
 import { createClient } from "@/lib/supabase";
 
 export function LoginForm() {
   const router = useRouter();
+  const { toast, showComingSoon, dismissToast } = useComingSoonToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -34,17 +46,25 @@ export function LoginForm() {
   }
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-8 shadow-xl">
-      <div className="mb-6 text-center">
-        <h1 className="text-2xl font-bold text-white">Welcome back</h1>
+    <>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-white">
+          Welcome back
+        </h1>
         <p className="mt-2 text-sm text-slate-400">
-          Sign in to your EmaX account
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/signup"
+            className="font-semibold text-accent hover:text-blue-400"
+          >
+            Sign up
+          </Link>
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
@@ -63,7 +83,7 @@ export function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             autoComplete="email"
             required
-            className="mt-1 block w-full rounded-lg border border-white/10 bg-navy px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            className={authInputClassName}
             placeholder="you@example.com"
           />
         </div>
@@ -75,36 +95,65 @@ export function LoginForm() {
           >
             Password
           </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-            className="mt-1 block w-full rounded-lg border border-white/10 bg-navy px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            placeholder="••••••••"
-          />
+          <div className="relative">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              className={`${authInputClassName} pr-11`}
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((current) => !current)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 transition hover:text-white"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              <EyeIcon open={showPassword} />
+            </button>
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
+          className={authPrimaryButtonClassName}
         >
-          {loading ? "Signing in..." : "Sign In"}
+          {loading ? "Logging in..." : "Log in"}
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-slate-400">
-        Don&apos;t have an account?{" "}
-        <Link
-          href="/signup"
-          className="font-semibold text-accent hover:text-blue-400"
+      <div className="my-6 flex items-center gap-4">
+        <div className="h-px flex-1 bg-white/10" />
+        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          or
+        </span>
+        <div className="h-px flex-1 bg-white/10" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => showComingSoon("Google")}
+          className={authSocialButtonClassName}
         >
-          Sign up
-        </Link>
-      </p>
-    </div>
+          <GoogleIcon />
+          Google
+        </button>
+        <button
+          type="button"
+          onClick={() => showComingSoon("Apple")}
+          className={authSocialButtonClassName}
+        >
+          <AppleIcon />
+          Apple
+        </button>
+      </div>
+
+      <AuthToast message={toast} onDismiss={dismissToast} />
+    </>
   );
 }
