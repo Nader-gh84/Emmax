@@ -10,6 +10,7 @@ import {
   saveQuoteDraftWithPdf,
   sendQuoteEmailAndPersist,
   type QuoteActionState,
+  type QuoteSendRecipient,
 } from "@/lib/quote-actions";
 import {
   quoteToWizardState,
@@ -163,8 +164,20 @@ export function NewQuoteWizard({ draftId }: NewQuoteWizardProps) {
     return result;
   }
 
-  async function handleMaterialsSendQuote() {
-    const result = await sendQuoteEmailAndPersist(getQuoteActionState());
+  async function handleMaterialsSendQuote(recipient?: QuoteSendRecipient) {
+    const state = recipient
+      ? { ...getQuoteActionState(), ...recipient }
+      : getQuoteActionState();
+
+    if (recipient) {
+      setCustomerMode(recipient.customerMode);
+      setSelectedCustomerId(recipient.selectedCustomerId);
+      setCustomerName(recipient.customerName);
+      setCustomerEmail(recipient.customerEmail);
+      setCustomerPhone(recipient.customerPhone);
+    }
+
+    const result = await sendQuoteEmailAndPersist(state);
     setQuoteId(result.quoteId);
   }
 

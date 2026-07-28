@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MaterialsPreviewModal } from "@/components/quotes/materials-preview-modal";
+import { MaterialsSendQuoteModal } from "@/components/quotes/materials-send-quote-modal";
 import { PostDownloadSheet } from "@/components/quotes/post-download-sheet";
 import {
   MaterialItem,
@@ -15,7 +16,7 @@ import {
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
-import type { QuoteActionState } from "@/lib/quote-actions";
+import type { QuoteActionState, QuoteSendRecipient } from "@/lib/quote-actions";
 import {
   downloadPdfBlob,
   fetchQuotePdfBlob,
@@ -38,7 +39,7 @@ interface StepMaterialsProps {
     value: string
   ) => void;
   onSaveDraftWithPdf: () => Promise<{ quoteId: string }>;
-  onSendQuote: () => Promise<void>;
+  onSendQuote: (recipient?: QuoteSendRecipient) => Promise<void>;
 }
 
 export function StepMaterials({
@@ -63,6 +64,7 @@ export function StepMaterials({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showSendQuoteModal, setShowSendQuoteModal] = useState(false);
   const [showPostDownloadSheet, setShowPostDownloadSheet] = useState(false);
 
   const { subtotal, tax, grandTotal } = calculateQuoteTotals(
@@ -156,6 +158,14 @@ export function StepMaterials({
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function handleSendFromModal(recipient: QuoteSendRecipient) {
+    await onSendQuote(recipient);
+    setFeedback({
+      message: `Quote sent to ${recipient.customerEmail}!`,
+      type: "success",
+    });
   }
 
   function handleSendViaEmail() {
@@ -336,11 +346,28 @@ export function StepMaterials({
         <button
           type="button"
           onClick={() => setShowPreviewModal(true)}
-          className={`${touchBtnPrimary} w-full`}
+          className={`${touchBtnSecondary} w-full`}
         >
           Preview Quote
         </button>
+        <button
+          type="button"
+          onClick={() => setShowSendQuoteModal(true)}
+          className={`${touchBtnPrimary} w-full sm:col-span-2`}
+        >
+          Send Quote
+        </button>
       </div>
+
+      {showSendQuoteModal && (
+        <MaterialsSendQuoteModal
+          initialCustomerName={quoteState.customerName}
+          initialCustomerEmail={quoteState.customerEmail}
+          initialCustomerPhone={quoteState.customerPhone}
+          onSend={handleSendFromModal}
+          onClose={() => setShowSendQuoteModal(false)}
+        />
+      )}
 
       {showPreviewModal && (
         <MaterialsPreviewModal

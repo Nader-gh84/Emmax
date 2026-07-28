@@ -25,6 +25,15 @@ export interface QuoteActionState {
   validityDays: number;
 }
 
+export type QuoteSendRecipient = Pick<
+  QuoteActionState,
+  | "customerMode"
+  | "selectedCustomerId"
+  | "customerName"
+  | "customerEmail"
+  | "customerPhone"
+>;
+
 export function toWizardState(state: QuoteActionState): QuoteWizardState {
   return { ...state };
 }
