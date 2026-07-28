@@ -206,6 +206,32 @@ export async function sendQuoteEmailAndPersist(
     throw new Error("You must be logged in to send quotes.");
   }
 
+  const sentAt = new Date().toISOString();
+  const { customerId, nextState } = await resolveCustomerForSend(
+    state,
+    user.id,
+    sentAt
+  );
+
+  const quoteId = await upsertQuoteRecord(
+    nextState,
+    user.id,
+    "sent",
+    customerId,
+    null,
+    sentAt
+  );
+
+  const { data: quoteRecord, error: tokenError } = await supabase
+    .from("quotes")
+    .select("confirmation_token")
+    .eq("id", quoteId)
+    .single();
+
+  if (tokenError || !quoteRecord?.confirmation_token) {
+    throw new Error("Failed to prepare quote confirmation link.");
+  }
+
   const response = await fetch("/api/send-quote", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -216,6 +242,7 @@ export async function sendQuoteEmailAndPersist(
       notes: state.notes,
       validityDays: state.validityDays,
       taxRate: state.taxRate,
+      confirmationToken: quoteRecord.confirmation_token,
       materials: state.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
           item,
@@ -233,22 +260,6 @@ export async function sendQuoteEmailAndPersist(
   if (!response.ok) {
     throw new Error(data.error || "Failed to send quote");
   }
-
-  const sentAt = new Date().toISOString();
-  const { customerId, nextState } = await resolveCustomerForSend(
-    state,
-    user.id,
-    sentAt
-  );
-
-  const quoteId = await upsertQuoteRecord(
-    nextState,
-    user.id,
-    "sent",
-    customerId,
-    null,
-    sentAt
-  );
 
   try {
     const pdfBlob = await fetchQuotePdfBlob({

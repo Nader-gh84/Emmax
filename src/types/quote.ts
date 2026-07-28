@@ -72,7 +72,7 @@ export function formatTimer(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export type QuoteStatus = "draft" | "sent";
+export type QuoteStatus = "draft" | "sent" | "accepted";
 
 export interface StoredMaterial {
   item: string;
@@ -103,6 +103,8 @@ export interface Quote {
   updated_at: string;
   sent_at: string | null;
   pdf_url: string | null;
+  confirmation_token: string;
+  confirmed_at: string | null;
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {

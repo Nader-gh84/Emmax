@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/auth/sign-out-button";
 import { dashboardNavItems } from "@/components/dashboard/nav-items";
 import { BuildVersionIndicator } from "@/components/layout/build-version-indicator";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
 
 interface DashboardSidebarProps {
@@ -93,6 +94,8 @@ export function DashboardSidebar({ email, fullName }: DashboardSidebarProps) {
               <p className="truncate text-xs text-slate-500">View profile</p>
             </div>
           </Link>
+
+          <NotificationBell />
 
           <SignOutButton
             iconOnly

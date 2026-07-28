@@ -20,6 +20,7 @@ export interface QuoteEmailData {
   validityDays: number;
   taxRate: number;
   materials: QuoteEmailItem[];
+  acceptUrl?: string;
 }
 
 export function buildQuoteEmailHtml(data: QuoteEmailData): string {
@@ -117,6 +118,28 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
                 </tr>
               </table>
 
+              ${
+                data.acceptUrl
+                  ? `
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(data.acceptUrl)}" style="display:inline-block;background-color:#3B82F6;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:16px 32px;border-radius:10px;">
+                      Accept This Quote
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="padding-top:12px;">
+                    <p style="margin:0;font-size:13px;color:#64748b;line-height:1.5;">
+                      Click above to confirm and accept this quote online.
+                    </p>
+                  </td>
+                </tr>
+              </table>`
+                  : ""
+              }
+
               <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">
                 If you have any questions, simply reply to this email. We look forward to working with you.
               </p>
@@ -149,4 +172,60 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+export function buildQuoteAcceptedEmailHtml({
+  customerName,
+  projectName,
+  grandTotal,
+  dashboardUrl,
+}: {
+  customerName: string;
+  projectName: string;
+  grandTotal: string;
+  dashboardUrl: string;
+}): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quote Accepted</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
+          <tr>
+            <td style="background-color:#0F172A;padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;font-size:24px;font-weight:bold;color:#ffffff;">Quote Accepted</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px;">
+              <p style="margin:0 0 16px;font-size:16px;color:#475569;line-height:1.6;">
+                Great news — <strong style="color:#0f172a;">${escapeHtml(customerName)}</strong> accepted your quote${projectName ? ` for <strong style="color:#0f172a;">${escapeHtml(projectName)}</strong>` : ""}.
+              </p>
+              <p style="margin:0 0 24px;font-size:16px;color:#475569;line-height:1.6;">
+                Total: <strong style="color:#3B82F6;">${escapeHtml(grandTotal)}</strong>
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background-color:#3B82F6;color:#ffffff;font-size:16px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:10px;">
+                      View in Dashboard
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }

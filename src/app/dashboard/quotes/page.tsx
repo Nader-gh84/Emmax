@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { QuotePreviewBody } from "@/components/quotes/step-preview";
 import { touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
@@ -22,6 +23,14 @@ function getQuoteCustomerLabel(quote: Quote): string {
 }
 
 function StatusBadge({ status }: { status: Quote["status"] }) {
+  if (status === "accepted") {
+    return (
+      <span className="inline-flex rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-emerald-400">
+        Accepted
+      </span>
+    );
+  }
+
   if (status === "sent") {
     return (
       <span className="inline-flex rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-green-400">
@@ -56,7 +65,9 @@ function SentQuotePreviewModal({
               {getQuoteTitle(quote)}
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Sent {quote.sent_at ? formatQuoteDate(quote.sent_at) : "—"}
+              {quote.status === "accepted"
+                ? `Accepted ${quote.confirmed_at ? formatQuoteDate(quote.confirmed_at) : "—"}`
+                : `Sent ${quote.sent_at ? formatQuoteDate(quote.sent_at) : "—"}`}
             </p>
           </div>
           <StatusBadge status={quote.status} />
@@ -99,7 +110,11 @@ function QuoteRow({
   quote: Quote;
   onOpenSent: (quote: Quote) => void;
 }) {
-  const displayDate = quote.sent_at ?? quote.updated_at ?? quote.created_at;
+  const displayDate =
+    quote.confirmed_at ??
+    quote.sent_at ??
+    quote.updated_at ??
+    quote.created_at;
   const content = (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -146,8 +161,24 @@ function QuoteRow({
 }
 
 export default function QuotesPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex flex-1 flex-col items-center justify-center p-6 lg:p-8">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-accent" />
+          <p className="mt-4 text-base text-slate-400">Loading quotes...</p>
+        </main>
+      }
+    >
+      <QuotesPageContent />
+    </Suspense>
+  );
+}
+
+function QuotesPageContent() {
   // Drafts saved from the Materials step (status='draft') appear in this list
-  // alongside sent quotes. Consider adding a filter/tab to highlight drafts.
+  // alongside sent and accepted quotes. Consider adding a filter/tab to highlight drafts.
+  const searchParams = useSearchParams();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,6 +211,16 @@ export default function QuotesPage() {
     init();
   }, [loadQuotes]);
 
+  useEffect(() => {
+    const quoteId = searchParams.get("quote");
+    if (!quoteId || quotes.length === 0) return;
+
+    const matchedQuote = quotes.find((quote) => quote.id === quoteId);
+    if (matchedQuote && matchedQuote.status !== "draft") {
+      setPreviewQuote(matchedQuote);
+    }
+  }, [quotes, searchParams]);
+
   if (isLoading) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center p-6 lg:p-8">
@@ -195,7 +236,7 @@ export default function QuotesPage() {
         <div>
           <h1 className="text-2xl font-bold text-white">Quotes</h1>
           <p className="mt-2 text-base text-slate-400">
-            Review drafts and sent quotes.
+            Review drafts, sent, and accepted quotes.
           </p>
         </div>
 

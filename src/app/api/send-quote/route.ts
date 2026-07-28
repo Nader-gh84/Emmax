@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { buildQuoteAcceptUrl } from "@/lib/quote-confirmation";
 import {
   QuoteEmailData,
   buildQuoteEmailHtml,
@@ -16,7 +17,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as QuoteEmailData;
+    const body = (await request.json()) as QuoteEmailData & {
+      confirmationToken?: string;
+    };
 
     if (!body.customerName?.trim()) {
       return NextResponse.json(
@@ -43,10 +46,14 @@ export async function POST(request: Request) {
     const fromEmail =
       process.env.RESEND_FROM_EMAIL ?? "EmaX <onboarding@resend.dev>";
     const projectLabel = body.projectName?.trim() || "Your Project";
+    const acceptUrl = body.confirmationToken
+      ? buildQuoteAcceptUrl(body.confirmationToken)
+      : undefined;
     const html = buildQuoteEmailHtml({
       ...body,
       validityDays: body.validityDays ?? 30,
       taxRate: body.taxRate ?? 13,
+      acceptUrl,
     });
 
     const { data, error } = await resend.emails.send({
