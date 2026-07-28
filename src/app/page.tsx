@@ -177,7 +177,7 @@ function HeroDashboardMockup() {
     <div className="relative mx-auto w-full max-w-xl">
       <div className="relative overflow-hidden rounded-2xl shadow-2xl shadow-accent/20 ring-1 ring-white/10">
         <Image
-          src="/images/hero-assistant.png"
+          src="/images/hero-assistant-v2.png"
           alt="Ema, your AI quote assistant"
           width={640}
           height={640}

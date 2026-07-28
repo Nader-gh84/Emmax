@@ -12,32 +12,29 @@ const nextConfig = {
     minimumCacheTTL: 0,
   },
   async headers() {
+    const noStoreHeaders = [
+      { key: "Cache-Control", value: "no-store, must-revalidate" },
+      // Vercel edge ignores plain Cache-Control: no-store for CDN TTL
+      // unless these CDN-specific headers are also set.
+      { key: "CDN-Cache-Control", value: "no-store" },
+      { key: "Vercel-CDN-Cache-Control", value: "no-store" },
+    ];
+
     return [
       // Explicit rule for public/images/* (direct asset requests)
       {
         source: "/images/:path*",
-        headers: [
-          { key: "Cache-Control", value: "no-store, must-revalidate" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-        ],
+        headers: noStoreHeaders,
       },
-      // Next.js <Image> serves through /_next/image — was previously
-      // excluded from no-store, which left logo/hero stuck on CDN.
+      // Next.js <Image> serves through /_next/image
       {
         source: "/_next/image",
-        headers: [
-          { key: "Cache-Control", value: "no-store, must-revalidate" },
-          { key: "CDN-Cache-Control", value: "no-store" },
-          { key: "Vercel-CDN-Cache-Control", value: "no-store" },
-        ],
+        headers: noStoreHeaders,
       },
       // HTML documents and other non-hashed routes
       {
-        source: "/((?!_next/static|_next/image|favicon.ico|images/).*)",
-        headers: [
-          { key: "Cache-Control", value: "no-store, must-revalidate" },
-        ],
+        source: "/((?!_next/static|favicon.ico).*)",
+        headers: noStoreHeaders,
       },
     ];
   },

@@ -6,7 +6,7 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen bg-navy text-white">
       <aside className="relative hidden w-1/2 overflow-hidden lg:flex">
         <Image
-          src="/images/hero-assistant.png"
+          src="/images/hero-assistant-v2.png"
           alt=""
           fill
           priority
@@ -19,7 +19,7 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
         <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
           <Link href="/" className="inline-flex w-fit">
             <Image
-              src="/images/logo.png"
+              src="/images/logo-v2.png"
               alt="EmaX"
               width={140}
               height={42}
@@ -53,7 +53,7 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
         <div className="mb-8 flex justify-center lg:hidden">
           <Link href="/">
             <Image
-              src="/images/logo.png"
+              src="/images/logo-v2.png"
               alt="EmaX"
               width={120}
               height={36}

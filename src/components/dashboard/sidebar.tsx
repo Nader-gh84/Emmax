@@ -25,7 +25,7 @@ export function DashboardSidebar({ email, fullName }: DashboardSidebarProps) {
       <div className="flex h-16 items-center border-b border-white/10 px-6">
         <Link href="/" className="flex shrink-0 flex-col items-start gap-0.5">
           <Image
-            src="/images/logo.png"
+            src="/images/logo-v2.png"
             alt="EmaX"
             width={120}
             height={36}
