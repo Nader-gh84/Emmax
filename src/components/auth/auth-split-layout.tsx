@@ -4,22 +4,24 @@ import Link from "next/link";
 export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-navy text-white">
-      <aside className="relative hidden w-1/2 overflow-hidden lg:flex">
+      <aside className="relative hidden min-h-screen w-1/2 overflow-hidden lg:block">
+        {/* No `priority` here: this panel is display:none below lg, and
+            Next.js priority would preload an image that is never used
+            (console warning on mobile / narrow viewports). */}
         <Image
-          src="/images/hero-assistant.png"
-          alt=""
+          src="/images/hero-assistant-v3.png"
+          alt="Ema AI assistant at work"
           fill
-          priority
           sizes="50vw"
-          className="object-cover object-center"
+          className="object-cover object-top"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/75 to-navy/35" />
-        <div className="absolute inset-0 bg-gradient-to-r from-navy/50 via-transparent to-navy/20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-navy via-navy/55 to-navy/15" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy/35 via-transparent to-navy/10" />
 
-        <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
+        <div className="relative z-10 flex h-full min-h-screen w-full flex-col justify-between p-10 xl:p-14">
           <Link href="/" className="inline-flex w-fit">
             <Image
-              src="/images/logo.png"
+              src="/images/logo-v2.png"
               alt="EmaX"
               width={140}
               height={42}
@@ -41,9 +43,9 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
               className="mt-10 flex items-center gap-2"
               aria-hidden="true"
             >
-              <span className="h-2 w-2 rounded-full bg-accent" />
-              <span className="h-2 w-2 rounded-full bg-white/30" />
-              <span className="h-2 w-2 rounded-full bg-white/30" />
+              <span className="h-1 w-6 rounded-full bg-white/30" />
+              <span className="h-1 w-6 rounded-full bg-white/30" />
+              <span className="h-1 w-8 rounded-full bg-accent" />
             </div>
           </div>
         </div>
@@ -53,7 +55,7 @@ export function AuthSplitLayout({ children }: { children: React.ReactNode }) {
         <div className="mb-8 flex justify-center lg:hidden">
           <Link href="/">
             <Image
-              src="/images/logo.png"
+              src="/images/logo-v2.png"
               alt="EmaX"
               width={120}
               height={36}
