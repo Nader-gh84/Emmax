@@ -4,17 +4,25 @@ import {
   buildQuoteInsertPayload,
   buildQuoteRecordPayload,
   type CustomerSelectionMode,
+  type PriceDisplayMode,
   type QuoteWizardState,
 } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
 import { throwSupabaseError } from "@/lib/supabase/errors";
-import type { MaterialItem } from "@/types/quote";
+import type { DiscountMode, LabourItem, MaterialItem } from "@/types/quote";
 
 export interface QuoteActionState {
   quoteId: string | null;
+  quoteNumber: string | null;
   transcript: string;
   materials: MaterialItem[];
+  labourItems: LabourItem[];
   taxRate: number;
+  gstRate: number;
+  pstRate: number;
+  discountMode: DiscountMode;
+  discountAmount: number;
+  discountPercent: number;
   customerMode: CustomerSelectionMode;
   selectedCustomerId: string | null;
   customerName: string;
@@ -23,6 +31,8 @@ export interface QuoteActionState {
   projectName: string;
   notes: string;
   validityDays: number;
+  validUntil: string | null;
+  priceDisplayMode: PriceDisplayMode;
 }
 
 export type QuoteSendRecipient = Pick<
@@ -124,7 +134,7 @@ async function upsertQuoteRecord(
     pdfUrl?: string | null;
     includePdfUrl?: boolean;
   } = {}
-): Promise<string> {
+): Promise<{ quoteId: string; quoteNumber: string | null }> {
   const supabase = createClient();
   const opts = options ?? {};
   const wizardState = { ...toWizardState(state), selectedCustomerId: customerId };
@@ -143,7 +153,7 @@ async function upsertQuoteRecord(
       .update(payload)
       .eq("id", state.quoteId)
       .eq("user_id", userId)
-      .select("id")
+      .select("id, quote_number")
       .single();
 
     if (error) {
@@ -158,7 +168,10 @@ async function upsertQuoteRecord(
       throw new Error("Failed to update quote: row not found or access denied.");
     }
 
-    return state.quoteId;
+    return {
+      quoteId: state.quoteId,
+      quoteNumber: data.quote_number ?? state.quoteNumber,
+    };
   }
 
   const payload = buildQuoteInsertPayload(
@@ -175,7 +188,7 @@ async function upsertQuoteRecord(
   const { data, error } = await supabase
     .from("quotes")
     .insert(payload)
-    .select("id")
+    .select("id, quote_number")
     .single();
 
   if (error) {
@@ -189,7 +202,10 @@ async function upsertQuoteRecord(
     throw new Error("Failed to save quote: insert returned no row.");
   }
 
-  return data.id;
+  return {
+    quoteId: data.id,
+    quoteNumber: data.quote_number ?? null,
+  };
 }
 
 async function ensureConfirmationToken(
@@ -243,9 +259,32 @@ async function ensureConfirmationToken(
   return updated.confirmation_token;
 }
 
+function buildPdfInput(state: QuoteActionState, allowDraftPlaceholders: boolean) {
+  return {
+    materials: state.materials,
+    labourItems: state.labourItems,
+    taxRate: state.gstRate + state.pstRate,
+    gstRate: state.gstRate,
+    pstRate: state.pstRate,
+    discountMode: state.discountMode,
+    discountAmount: state.discountAmount,
+    discountPercent: state.discountPercent,
+    customerName: state.customerName,
+    customerEmail: state.customerEmail,
+    customerPhone: state.customerPhone,
+    projectName: state.projectName,
+    notes: state.notes,
+    validityDays: state.validityDays,
+    validUntil: state.validUntil,
+    priceDisplayMode: state.priceDisplayMode,
+    quoteNumber: state.quoteNumber,
+    allowDraftPlaceholders,
+  };
+}
+
 export async function saveQuoteDraftWithPdf(
   state: QuoteActionState
-): Promise<{ quoteId: string; pdfUrl: string }> {
+): Promise<{ quoteId: string; quoteNumber: string | null; pdfUrl: string }> {
   const supabase = createClient();
   const {
     data: { user },
@@ -255,40 +294,69 @@ export async function saveQuoteDraftWithPdf(
     throw new Error("You must be logged in to save quotes.");
   }
 
-  const quoteId = await upsertQuoteRecord(
+  if (state.materials.length === 0 && state.labourItems.length === 0) {
+    throw new Error("Add at least one material or labour item before saving.");
+  }
+
+  const { quoteId, quoteNumber } = await upsertQuoteRecord(
     state,
     user.id,
     "draft",
     state.selectedCustomerId
   );
 
-  const pdfBlob = await fetchQuotePdfBlob({
-    materials: state.materials,
-    taxRate: state.taxRate,
-    projectName: state.projectName,
-    notes: state.notes,
-    validityDays: state.validityDays,
-    allowDraftPlaceholders: true,
-  });
+  const nextState = { ...state, quoteId, quoteNumber };
+
+  const pdfBlob = await fetchQuotePdfBlob(
+    buildPdfInput(nextState, true)
+  );
 
   const pdfUrl = await uploadQuotePdf(user.id, quoteId, pdfBlob);
 
   await upsertQuoteRecord(
-    { ...state, quoteId },
+    nextState,
     user.id,
     "draft",
     state.selectedCustomerId,
     { pdfUrl, includePdfUrl: true }
   );
 
-  return { quoteId, pdfUrl };
+  return { quoteId, quoteNumber, pdfUrl };
+}
+
+export async function saveQuoteDraft(
+  state: QuoteActionState
+): Promise<{ quoteId: string; quoteNumber: string | null }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("You must be logged in to save quotes.");
+  }
+
+  if (state.materials.length === 0 && state.labourItems.length === 0) {
+    throw new Error("Add at least one material or labour item before saving.");
+  }
+
+  return upsertQuoteRecord(
+    state,
+    user.id,
+    "draft",
+    state.selectedCustomerId
+  );
 }
 
 export async function sendQuoteEmailAndPersist(
   state: QuoteActionState
-): Promise<{ quoteId: string }> {
+): Promise<{ quoteId: string; quoteNumber: string | null }> {
   if (!state.customerName.trim() || !state.customerEmail.trim()) {
     throw new Error("Customer name and email are required to send a quote.");
+  }
+
+  if (state.materials.length === 0 && state.labourItems.length === 0) {
+    throw new Error("Add at least one material or labour item before sending.");
   }
 
   const supabase = createClient();
@@ -307,7 +375,7 @@ export async function sendQuoteEmailAndPersist(
     sentAt
   );
 
-  const quoteId = await upsertQuoteRecord(
+  const { quoteId, quoteNumber } = await upsertQuoteRecord(
     nextState,
     user.id,
     "sent",
@@ -327,7 +395,15 @@ export async function sendQuoteEmailAndPersist(
       projectName: state.projectName,
       notes: state.notes,
       validityDays: state.validityDays,
-      taxRate: state.taxRate,
+      validUntil: state.validUntil,
+      taxRate: state.gstRate + state.pstRate,
+      gstRate: state.gstRate,
+      pstRate: state.pstRate,
+      discountMode: state.discountMode,
+      discountAmount: state.discountAmount,
+      discountPercent: state.discountPercent,
+      priceDisplayMode: state.priceDisplayMode,
+      quoteNumber,
       confirmationToken,
       materials: state.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
@@ -338,6 +414,11 @@ export async function sendQuoteEmailAndPersist(
           unitPrice,
         })
       ),
+      labourItems: state.labourItems.map(({ description, hours, rate }) => ({
+        description,
+        hours,
+        rate,
+      })),
     }),
   });
 
@@ -348,19 +429,12 @@ export async function sendQuoteEmailAndPersist(
   }
 
   try {
-    const pdfBlob = await fetchQuotePdfBlob({
-      materials: state.materials,
-      taxRate: state.taxRate,
-      customerName: state.customerName,
-      customerEmail: state.customerEmail,
-      customerPhone: state.customerPhone,
-      projectName: state.projectName,
-      notes: state.notes,
-      validityDays: state.validityDays,
-    });
+    const pdfBlob = await fetchQuotePdfBlob(
+      buildPdfInput({ ...nextState, quoteId, quoteNumber }, false)
+    );
     const pdfUrl = await uploadQuotePdf(user.id, quoteId, pdfBlob);
     await upsertQuoteRecord(
-      { ...nextState, quoteId },
+      { ...nextState, quoteId, quoteNumber },
       user.id,
       "sent",
       customerId,
@@ -370,5 +444,5 @@ export async function sendQuoteEmailAndPersist(
     // PDF upload is best-effort after send succeeds.
   }
 
-  return { quoteId };
+  return { quoteId, quoteNumber };
 }

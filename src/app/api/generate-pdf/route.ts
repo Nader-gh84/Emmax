@@ -9,9 +9,12 @@ export async function POST(request: Request) {
       allowDraftPlaceholders?: boolean;
     };
 
-    if (!body.materials?.length) {
+    const materials = body.materials ?? [];
+    const labourItems = body.labourItems ?? [];
+
+    if (materials.length === 0 && labourItems.length === 0) {
       return NextResponse.json(
-        { error: "At least one line item is required" },
+        { error: "At least one material or labour line item is required" },
         { status: 400 }
       );
     }
@@ -43,8 +46,17 @@ export async function POST(request: Request) {
       projectName: body.projectName ?? "",
       notes: body.notes,
       validityDays: body.validityDays ?? 30,
-      taxRate: body.taxRate ?? 13,
-      materials: body.materials,
+      validUntil: body.validUntil ?? null,
+      taxRate: body.taxRate ?? (body.gstRate ?? 5) + (body.pstRate ?? 7),
+      gstRate: body.gstRate ?? 5,
+      pstRate: body.pstRate ?? 7,
+      discountMode: body.discountMode ?? "amount",
+      discountAmount: body.discountAmount ?? 0,
+      discountPercent: body.discountPercent ?? 0,
+      priceDisplayMode: body.priceDisplayMode ?? "detailed",
+      quoteNumber: body.quoteNumber ?? null,
+      materials,
+      labourItems,
     };
 
     const buffer = await generateQuotePdfBuffer({

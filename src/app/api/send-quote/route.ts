@@ -25,8 +25,17 @@ function pickQuoteEmailPayload(body: SendQuoteRequestBody): QuoteEmailData & {
     projectName: body.projectName?.trim() ?? "",
     notes: body.notes?.trim() || undefined,
     validityDays: body.validityDays ?? 30,
-    taxRate: body.taxRate ?? 13,
-    materials: body.materials,
+    validUntil: body.validUntil ?? null,
+    taxRate: body.taxRate ?? (body.gstRate ?? 5) + (body.pstRate ?? 7),
+    gstRate: body.gstRate ?? 5,
+    pstRate: body.pstRate ?? 7,
+    discountMode: body.discountMode ?? "amount",
+    discountAmount: body.discountAmount ?? 0,
+    discountPercent: body.discountPercent ?? 0,
+    priceDisplayMode: body.priceDisplayMode ?? "detailed",
+    quoteNumber: body.quoteNumber ?? null,
+    materials: body.materials ?? [],
+    labourItems: body.labourItems ?? [],
     customerPhone: body.customerPhone?.trim() || undefined,
   };
 }
@@ -59,7 +68,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!payload.materials?.length) {
+    if (
+      (!payload.materials || payload.materials.length === 0) &&
+      (!payload.labourItems || payload.labourItems.length === 0)
+    ) {
       return NextResponse.json(
         { error: "At least one line item is required" },
         { status: 400 }

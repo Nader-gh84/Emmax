@@ -1,14 +1,24 @@
-import type { MaterialItem } from "@/types/quote";
+import type { DiscountMode, LabourItem, MaterialItem } from "@/types/quote";
+import type { PriceDisplayMode } from "@/lib/quotes";
 
 export interface QuotePdfInput {
   materials: MaterialItem[];
+  labourItems?: LabourItem[];
   taxRate: number;
+  gstRate?: number;
+  pstRate?: number;
+  discountMode?: DiscountMode;
+  discountAmount?: number;
+  discountPercent?: number;
   customerName?: string;
   customerEmail?: string;
   customerPhone?: string;
   projectName?: string;
   notes?: string;
   validityDays?: number;
+  validUntil?: string | null;
+  priceDisplayMode?: PriceDisplayMode;
+  quoteNumber?: string | null;
   allowDraftPlaceholders?: boolean;
 }
 
@@ -19,6 +29,14 @@ function serializeMaterials(materials: MaterialItem[]) {
     quantity,
     unit,
     unitPrice,
+  }));
+}
+
+function serializeLabour(labourItems: LabourItem[] = []) {
+  return labourItems.map(({ description, hours, rate }) => ({
+    description,
+    hours,
+    rate,
   }));
 }
 
@@ -33,15 +51,30 @@ export async function fetchQuotePdfBlob(input: QuotePdfInput): Promise<Blob> {
       projectName: input.projectName ?? "",
       notes: input.notes ?? "",
       validityDays: input.validityDays ?? 30,
+      validUntil: input.validUntil ?? null,
       taxRate: input.taxRate,
+      gstRate: input.gstRate,
+      pstRate: input.pstRate,
+      discountMode: input.discountMode ?? "amount",
+      discountAmount: input.discountAmount ?? 0,
+      discountPercent: input.discountPercent ?? 0,
+      priceDisplayMode: input.priceDisplayMode ?? "detailed",
+      quoteNumber: input.quoteNumber ?? null,
       materials: serializeMaterials(input.materials),
+      labourItems: serializeLabour(input.labourItems),
       allowDraftPlaceholders: input.allowDraftPlaceholders ?? false,
     }),
   });
 
   if (!response.ok) {
-    const data = await response.json();
-    throw new Error(data.error || "Failed to generate PDF");
+    let message = "Failed to generate PDF";
+    try {
+      const data = await response.json();
+      message = data.error || message;
+    } catch {
+      // Non-JSON error body
+    }
+    throw new Error(message);
   }
 
   return response.blob();
@@ -88,4 +121,34 @@ export function openMailtoQuote(customerEmail: string, projectName: string) {
     "Please find your quote attached or request a PDF copy."
   );
   window.location.href = `mailto:${customerEmail.trim()}?subject=${subject}&body=${body}`;
+}
+
+export function buildSupplierMaterialsEmail(input: {
+  supplierName: string;
+  supplierEmail: string;
+  projectName?: string;
+  materials: MaterialItem[];
+}) {
+  const lines = input.materials.map((item) => {
+    const brand = item.brand?.trim() ? ` (${item.brand})` : "";
+    return `- ${item.quantity} ${item.unit} ${item.item}${brand}`;
+  });
+
+  const subject = encodeURIComponent(
+    `Material list${input.projectName?.trim() ? ` — ${input.projectName.trim()}` : ""}`
+  );
+  const body = encodeURIComponent(
+    [
+      `Hi ${input.supplierName},`,
+      "",
+      "Please quote / supply the following materials:",
+      "",
+      ...(lines.length > 0 ? lines : ["(No materials listed)"]),
+      "",
+      "Thanks,",
+      "Sent via EmaX",
+    ].join("\n")
+  );
+
+  return `mailto:${input.supplierEmail.trim()}?subject=${subject}&body=${body}`;
 }
