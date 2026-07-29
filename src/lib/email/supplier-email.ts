@@ -62,10 +62,12 @@ export function buildSupplierRequestEmailHtml(input: {
   materials: SupplierMaterialLine[];
   projectName?: string;
   companyName?: string;
+  acknowledgeUrl?: string;
 }): string {
   const projectLabel = input.projectName?.trim() || "";
   const companyLabel = input.companyName?.trim() || "EmaX";
   const messageHtml = escapeHtml(input.messageBody).replace(/\n/g, "<br />");
+  const ackSection = buildAcknowledgeSection(input.acknowledgeUrl);
 
   const rows =
     input.materials.length > 0
@@ -113,12 +115,44 @@ export function buildSupplierRequestEmailHtml(input: {
             </thead>
             <tbody>${rows}</tbody>
           </table>
+          ${ackSection}
           <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;">Sent via EmaX · Pricing not included — please reply with your quote.</p>
         </div>
       </div>
     </div>
   </body>
 </html>`;
+}
+
+function buildAcknowledgeSection(acknowledgeUrl?: string): string {
+  const url = acknowledgeUrl?.trim() ?? "";
+  if (!url || (!url.startsWith("https://") && !url.startsWith("http://"))) {
+    return "";
+  }
+
+  if (url.startsWith("blob:") || url.startsWith("data:")) {
+    return "";
+  }
+
+  const safeUrl = escapeHtml(url);
+
+  return `
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:28px;margin-bottom:8px;">
+            <tr>
+              <td align="center">
+                <a href="${safeUrl}" style="display:inline-block;background-color:#3B82F6;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 28px;border-radius:10px;">
+                  I received this — pricing coming soon
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-top:12px;">
+                <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;word-break:break-all;">
+                  Or open this link: ${safeUrl}
+                </p>
+              </td>
+            </tr>
+          </table>`;
 }
 
 function escapeHtml(value: string): string {
