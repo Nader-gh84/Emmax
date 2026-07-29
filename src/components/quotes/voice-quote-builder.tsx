@@ -15,12 +15,38 @@ import {
   IconSparkle,
 } from "@/components/dashboard/workspace-icons";
 import {
+  CustomerSelectModal,
+  NotesEditModal,
+  ProjectEditModal,
+  SendQuoteModal,
+  SupplierSelectModal,
+  ValidUntilModal,
+} from "@/components/quotes/voice-quote-action-modals";
+import {
   touchBtnPrimary,
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import {
+  saveQuoteDraft,
+  sendQuoteEmailAndPersist,
+  type QuoteActionState,
+} from "@/lib/quote-actions";
 import { mapExtractionToLineItems } from "@/lib/quote-extraction";
+import {
+  buildSupplierMaterialsEmail,
+  downloadPdfBlob,
+  fetchQuotePdfBlob,
+} from "@/lib/quote-pdf-client";
+import {
+  defaultValidUntil,
+  formatValidUntilLabel,
+  type CustomerSelectionMode,
+  type PriceDisplayMode,
+} from "@/lib/quotes";
+import { getCustomerDisplayName, type Customer } from "@/types/customer";
+import type { Supplier } from "@/types/supplier";
 import {
   DiscountMode,
   LabourItem,
@@ -42,6 +68,15 @@ type PipelinePhase =
   | "error";
 
 type AddItemKind = "material" | "labour";
+type ActiveModal =
+  | null
+  | "customer"
+  | "project"
+  | "validUntil"
+  | "sendContact"
+  | "sendNew"
+  | "supplier"
+  | "notes";
 
 const ACTIONS = [
   { id: "download", label: "Download PDF", icon: IconDocument },
@@ -51,6 +86,8 @@ const ACTIONS = [
   { id: "new-customer", label: "Send to New Customer", icon: IconUserPlus },
   { id: "supplier", label: "Send to Supplier", icon: IconSuppliers },
 ] as const;
+
+type ActionId = (typeof ACTIONS)[number]["id"];
 
 const DEFAULT_GST_RATE = 5;
 const DEFAULT_PST_RATE = 7;
@@ -151,6 +188,7 @@ export function VoiceQuoteBuilder() {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -159,15 +197,35 @@ export function VoiceQuoteBuilder() {
   const [labourItems, setLabourItems] = useState<LabourItem[]>([]);
   const [phase, setPhase] = useState<PipelinePhase>("idle");
   const [pipelineError, setPipelineError] = useState<string | null>(null);
-  const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
-  const [priceMode, setPriceMode] = useState<"detailed" | "merged">("detailed");
-  const [mobileAction, setMobileAction] = useState("");
+  const [actionFeedback, setActionFeedback] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const [isActionBusy, setIsActionBusy] = useState(false);
+  const [priceMode, setPriceMode] = useState<PriceDisplayMode>("detailed");
+  const [mobileAction, setMobileAction] = useState<ActionId | "">("");
   const [discountMode, setDiscountMode] = useState<DiscountMode>("amount");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
   const [pstRate, setPstRate] = useState(DEFAULT_PST_RATE);
   const [calcFlash, setCalcFlash] = useState(false);
+  const [quoteId, setQuoteId] = useState<string | null>(null);
+  const [quoteNumber, setQuoteNumber] = useState<string | null>(null);
+  const [quoteStatus, setQuoteStatus] = useState<"draft" | "sent">("draft");
+  const [customerMode, setCustomerMode] =
+    useState<CustomerSelectionMode>("existing");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(
+    null
+  );
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerSecondary, setCustomerSecondary] = useState("");
+  const [projectName, setProjectName] = useState("");
+  const [validUntil, setValidUntil] = useState<string | null>(
+    defaultValidUntil(30)
+  );
 
   const processTranscript = useCallback(
     async (nextTranscript: string, append: boolean) => {
@@ -401,12 +459,253 @@ export function VoiceQuoteBuilder() {
     window.setTimeout(() => setCalcFlash(false), 600);
   }
 
+  function showFeedback(
+    type: "success" | "error" | "info",
+    message: string
+  ) {
+    setActionFeedback({ type, message });
+  }
+
+  function buildActionState(): QuoteActionState {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let validityDays = 30;
+    if (validUntil) {
+      const target = new Date(`${validUntil}T00:00:00`);
+      if (!Number.isNaN(target.getTime())) {
+        validityDays = Math.max(
+          0,
+          Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+        );
+      }
+    }
+
+    return {
+      quoteId,
+      quoteNumber,
+      transcript,
+      materials,
+      labourItems,
+      taxRate: gstRate + pstRate,
+      gstRate,
+      pstRate,
+      discountMode,
+      discountAmount,
+      discountPercent,
+      customerMode,
+      selectedCustomerId,
+      customerName,
+      customerEmail,
+      customerPhone,
+      projectName,
+      notes,
+      validityDays,
+      validUntil,
+      priceDisplayMode: priceMode,
+    };
+  }
+
+  function requireLineItems(): boolean {
+    if (materials.length === 0 && labourItems.length === 0) {
+      showFeedback(
+        "error",
+        "Add at least one material or labour item first."
+      );
+      return false;
+    }
+    return true;
+  }
+
+  async function handleDownloadPdf() {
+    if (!requireLineItems()) return;
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      const state = buildActionState();
+      const blob = await fetchQuotePdfBlob({
+        materials: state.materials,
+        labourItems: state.labourItems,
+        taxRate: state.taxRate,
+        gstRate: state.gstRate,
+        pstRate: state.pstRate,
+        discountMode: state.discountMode,
+        discountAmount: state.discountAmount,
+        discountPercent: state.discountPercent,
+        customerName: state.customerName,
+        customerEmail: state.customerEmail,
+        customerPhone: state.customerPhone,
+        projectName: state.projectName,
+        notes: state.notes,
+        validityDays: state.validityDays,
+        validUntil: state.validUntil,
+        priceDisplayMode: state.priceDisplayMode,
+        quoteNumber: state.quoteNumber,
+        allowDraftPlaceholders: true,
+      });
+      downloadPdfBlob(
+        blob,
+        `${state.quoteNumber || "quote-draft"}.pdf`
+      );
+      showFeedback("success", "PDF downloaded.");
+    } catch (error) {
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "Failed to generate PDF"
+      );
+    } finally {
+      setIsActionBusy(false);
+    }
+  }
+
+  async function handleSaveDraft() {
+    if (!requireLineItems()) return;
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await saveQuoteDraft(buildActionState());
+      setQuoteId(result.quoteId);
+      setQuoteNumber(result.quoteNumber);
+      showFeedback(
+        "success",
+        result.quoteNumber
+          ? `Saved as draft ${result.quoteNumber}.`
+          : "Saved to Drafts."
+      );
+    } catch (error) {
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "Failed to save draft"
+      );
+    } finally {
+      setIsActionBusy(false);
+    }
+  }
+
+  function handleEditAction() {
+    setIsEditingItems(true);
+    setIsEditingTranscript(true);
+    showFeedback(
+      "info",
+      "Editing enabled — update the transcript or item rows, then tap Done."
+    );
+  }
+
+  async function handleSendQuote() {
+    if (!requireLineItems()) return;
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await sendQuoteEmailAndPersist(buildActionState());
+      setQuoteId(result.quoteId);
+      setQuoteNumber(result.quoteNumber);
+      setActiveModal(null);
+      setQuoteStatus("sent");
+      showFeedback(
+        "success",
+        `Quote sent to ${customerEmail.trim()}.`
+      );
+    } catch (error) {
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "Failed to send quote"
+      );
+    } finally {
+      setIsActionBusy(false);
+    }
+  }
+
+  function handleSupplierShare(supplier: Supplier) {
+    if (materials.length === 0) {
+      showFeedback(
+        "error",
+        "Add at least one material before sharing with a supplier."
+      );
+      return;
+    }
+
+    if (!supplier.email?.trim()) {
+      showFeedback(
+        "error",
+        `${supplier.supplier_name} has no email on file. Add one on the Suppliers page.`
+      );
+      return;
+    }
+
+    const href = buildSupplierMaterialsEmail({
+      supplierName: supplier.supplier_name,
+      supplierEmail: supplier.email,
+      projectName,
+      materials,
+    });
+    window.location.href = href;
+    setActiveModal(null);
+    showFeedback(
+      "success",
+      `Opened email draft for ${supplier.supplier_name}.`
+    );
+  }
+
+  function handleSelectCustomer(customer: Customer) {
+    setCustomerMode("existing");
+    setSelectedCustomerId(customer.id);
+    setCustomerName(getCustomerDisplayName(customer));
+    setCustomerEmail(customer.email ?? "");
+    setCustomerPhone(customer.phone ?? "");
+    setCustomerSecondary(customer.notes?.trim() || customer.email || "");
+    setActiveModal(null);
+  }
+
+  function handleCustomerFieldChange(
+    field: "customerName" | "customerEmail" | "customerPhone",
+    value: string
+  ) {
+    if (field === "customerName") setCustomerName(value);
+    if (field === "customerEmail") setCustomerEmail(value);
+    if (field === "customerPhone") setCustomerPhone(value);
+  }
+
+  async function runAction(actionId: ActionId) {
+    if (isActionBusy) return;
+
+    switch (actionId) {
+      case "download":
+        await handleDownloadPdf();
+        break;
+      case "draft":
+        await handleSaveDraft();
+        break;
+      case "edit":
+        handleEditAction();
+        break;
+      case "contact":
+        setCustomerMode("existing");
+        setActiveModal("sendContact");
+        break;
+      case "new-customer":
+        setCustomerMode("new");
+        setSelectedCustomerId(null);
+        setActiveModal("sendNew");
+        break;
+      case "supplier":
+        setActiveModal("supplier");
+        break;
+      default:
+        break;
+    }
+  }
+
   function handleSmartAdd() {
-    setCatalogNotice(
+    showFeedback(
+      "info",
       "Smart Add from Catalog isn’t available yet — no catalog lookup exists in the app. Add items manually for now."
     );
-    window.setTimeout(() => setCatalogNotice(null), 5000);
   }
+
+  const customerDisplay =
+    customerName.trim() || "No customer selected";
+  const customerDisplaySecondary = customerSecondary.trim();
+  const projectDisplay = projectName.trim() || "No project set";
+  const validUntilDisplay = formatValidUntilLabel(validUntil);
 
   const statusCard = (() => {
     if (phase === "transcribing") {
@@ -478,9 +777,17 @@ export function VoiceQuoteBuilder() {
           </button>
         </header>
 
-        {(recorderError || catalogNotice) && (
-          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            {recorderError || catalogNotice}
+        {(recorderError || actionFeedback) && (
+          <div
+            className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+              actionFeedback?.type === "error" || recorderError
+                ? "border-red-500/30 bg-red-500/10 text-red-200"
+                : actionFeedback?.type === "success"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            }`}
+          >
+            {recorderError || actionFeedback?.message}
           </div>
         )}
 
@@ -1079,7 +1386,9 @@ export function VoiceQuoteBuilder() {
                   <button
                     key={action.id}
                     type="button"
-                    className={`${touchBtnSecondary} flex-col gap-1.5 px-2 py-3 text-xs`}
+                    disabled={isActionBusy}
+                    onClick={() => void runAction(action.id)}
+                    className={`${touchBtnSecondary} flex-col gap-1.5 px-2 py-3 text-xs disabled:opacity-50`}
                   >
                     <Icon className="h-4 w-4 text-cyan-400" />
                     {action.label}
@@ -1091,7 +1400,9 @@ export function VoiceQuoteBuilder() {
             <section className="flex gap-2 md:hidden">
               <select
                 value={mobileAction}
-                onChange={(event) => setMobileAction(event.target.value)}
+                onChange={(event) =>
+                  setMobileAction(event.target.value as ActionId | "")
+                }
                 className="min-h-[44px] flex-1 rounded-xl border border-white/20 bg-white/5 px-3 text-sm text-white outline-none focus:border-accent"
               >
                 <option value="" className="bg-navy">
@@ -1105,10 +1416,14 @@ export function VoiceQuoteBuilder() {
               </select>
               <button
                 type="button"
-                disabled={!mobileAction}
+                disabled={!mobileAction || isActionBusy}
+                onClick={() => {
+                  if (!mobileAction) return;
+                  void runAction(mobileAction);
+                }}
                 className={`${touchBtnPrimary} px-5 disabled:opacity-40`}
               >
-                Send
+                {isActionBusy ? "…" : "Send"}
               </button>
             </section>
 
@@ -1170,10 +1485,16 @@ export function VoiceQuoteBuilder() {
               </h2>
               <div className="mt-2 flex flex-wrap gap-2">
                 <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
-                  Q-2026-0001
+                  {quoteNumber || "Q-····-····"}
                 </span>
-                <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 ring-1 ring-emerald-500/30">
-                  Draft
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
+                    quoteStatus === "sent"
+                      ? "bg-blue-500/15 text-blue-300 ring-blue-500/30"
+                      : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+                  }`}
+                >
+                  {quoteStatus === "sent" ? "Sent" : "Draft"}
                 </span>
               </div>
             </div>
@@ -1189,9 +1510,24 @@ export function VoiceQuoteBuilder() {
 
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
             {[
-              { label: "Customer", value: "Sarah Mitchell · Apex Build" },
-              { label: "Project", value: "Kitchen Reno — Phase 2" },
-              { label: "Valid Until", value: "Aug 28, 2026" },
+              {
+                label: "Customer",
+                value: customerDisplay,
+                secondary: customerDisplaySecondary,
+                onChange: () => setActiveModal("customer"),
+              },
+              {
+                label: "Project",
+                value: projectDisplay,
+                secondary: "",
+                onChange: () => setActiveModal("project"),
+              },
+              {
+                label: "Valid Until",
+                value: validUntilDisplay,
+                secondary: "",
+                onChange: () => setActiveModal("validUntil"),
+              },
             ].map((field) => (
               <div key={field.label}>
                 <div className="flex items-center justify-between gap-2">
@@ -1200,12 +1536,16 @@ export function VoiceQuoteBuilder() {
                   </p>
                   <button
                     type="button"
+                    onClick={field.onChange}
                     className="text-xs font-semibold text-accent hover:text-blue-400"
                   >
                     Change
                   </button>
                 </div>
                 <p className="mt-1 text-sm text-white">{field.value}</p>
+                {field.secondary ? (
+                  <p className="mt-0.5 text-xs text-slate-400">{field.secondary}</p>
+                ) : null}
               </div>
             ))}
 
@@ -1273,6 +1613,7 @@ export function VoiceQuoteBuilder() {
                 <p className="text-sm font-semibold text-white">Notes</p>
                 <button
                   type="button"
+                  onClick={() => setActiveModal("notes")}
                   className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
                   aria-label="Edit notes"
                 >
@@ -1350,6 +1691,71 @@ export function VoiceQuoteBuilder() {
         <AddItemModal
           onClose={() => setShowAddItem(false)}
           onAdd={handleAddItem}
+        />
+      )}
+
+      {activeModal === "customer" && (
+        <CustomerSelectModal
+          selectedCustomerId={selectedCustomerId}
+          onClose={() => setActiveModal(null)}
+          onSelect={handleSelectCustomer}
+        />
+      )}
+
+      {activeModal === "project" && (
+        <ProjectEditModal
+          projectName={projectName}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setProjectName(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {activeModal === "validUntil" && (
+        <ValidUntilModal
+          validUntil={validUntil}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setValidUntil(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {activeModal === "notes" && (
+        <NotesEditModal
+          notes={notes}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setNotes(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {(activeModal === "sendContact" || activeModal === "sendNew") && (
+        <SendQuoteModal
+          mode={activeModal === "sendContact" ? "contact" : "new"}
+          customerMode={customerMode}
+          selectedCustomerId={selectedCustomerId}
+          customerName={customerName}
+          customerEmail={customerEmail}
+          customerPhone={customerPhone}
+          isSending={isActionBusy}
+          onClose={() => setActiveModal(null)}
+          onModeChange={setCustomerMode}
+          onSelectCustomer={setSelectedCustomerId}
+          onChange={handleCustomerFieldChange}
+          onSend={handleSendQuote}
+        />
+      )}
+
+      {activeModal === "supplier" && (
+        <SupplierSelectModal
+          onClose={() => setActiveModal(null)}
+          onSelect={handleSupplierShare}
         />
       )}
     </div>

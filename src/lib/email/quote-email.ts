@@ -1,8 +1,11 @@
 import {
-  calculateQuoteTotals,
+  calculateVoiceQuoteTotals,
   formatCurrency,
+  labourLineTotal,
   materialLineTotal,
+  type DiscountMode,
 } from "@/types/quote";
+import type { PriceDisplayMode } from "@/lib/quotes";
 
 export interface QuoteEmailItem {
   item: string;
@@ -12,27 +15,118 @@ export interface QuoteEmailItem {
   unitPrice: number;
 }
 
+export interface QuoteEmailLabourItem {
+  description: string;
+  hours: number;
+  rate: number;
+}
+
 export interface QuoteEmailData {
   customerName: string;
   customerEmail: string;
   projectName: string;
   notes?: string;
   validityDays: number;
+  validUntil?: string | null;
   taxRate: number;
+  gstRate?: number;
+  pstRate?: number;
+  discountMode?: DiscountMode;
+  discountAmount?: number;
+  discountPercent?: number;
+  priceDisplayMode?: PriceDisplayMode;
+  quoteNumber?: string | null;
   materials: QuoteEmailItem[];
+  labourItems?: QuoteEmailLabourItem[];
   acceptUrl?: string;
 }
 
-export function buildQuoteEmailHtml(data: QuoteEmailData): string {
-  const { subtotal, tax, grandTotal } = calculateQuoteTotals(
-    data.materials.map((m, i) => ({
-      id: String(i),
-      ...m,
-    })),
-    data.taxRate
-  );
+function toMaterialItems(data: QuoteEmailData) {
+  return data.materials.map((item, index) => ({
+    id: `m-${index}`,
+    ...item,
+  }));
+}
 
-  const materialRows = data.materials
+function toLabourItems(data: QuoteEmailData) {
+  return (data.labourItems ?? []).map((item, index) => ({
+    id: `l-${index}`,
+    ...item,
+  }));
+}
+
+function computeTotals(data: QuoteEmailData) {
+  const gstRate = data.gstRate ?? data.taxRate ?? 0;
+  const pstRate = data.pstRate ?? 0;
+  return calculateVoiceQuoteTotals({
+    materials: toMaterialItems(data),
+    labourItems: toLabourItems(data),
+    gstRate,
+    pstRate,
+    discountMode: data.discountMode ?? "amount",
+    discountAmount: data.discountAmount ?? 0,
+    discountPercent: data.discountPercent ?? 0,
+  });
+}
+
+function buildDisplayRows(data: QuoteEmailData) {
+  const mode = data.priceDisplayMode ?? "detailed";
+  const materials = toMaterialItems(data);
+  const labour = toLabourItems(data);
+
+  if (mode === "merged" && materials.length > 0) {
+    const materialsTotal = materials.reduce(
+      (sum, item) => sum + materialLineTotal(item),
+      0
+    );
+    return {
+      materialRows: [
+        {
+          item: "Materials (combined)",
+          brand: "—",
+          quantity: 1,
+          unit: "lot",
+          unitPrice: materialsTotal,
+          total: materialsTotal,
+        },
+      ],
+      labourRows: labour.map((item) => ({
+        item: item.description,
+        brand: "Labour",
+        quantity: item.hours,
+        unit: "hour",
+        unitPrice: item.rate,
+        total: labourLineTotal(item),
+      })),
+    };
+  }
+
+  return {
+    materialRows: materials.map((item) => ({
+      item: item.item,
+      brand: item.brand || "—",
+      quantity: item.quantity,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      total: materialLineTotal(item),
+    })),
+    labourRows: labour.map((item) => ({
+      item: item.description,
+      brand: "Labour",
+      quantity: item.hours,
+      unit: "hour",
+      unitPrice: item.rate,
+      total: labourLineTotal(item),
+    })),
+  };
+}
+
+export function buildQuoteEmailHtml(data: QuoteEmailData): string {
+  const totals = computeTotals(data);
+  const { materialRows, labourRows } = buildDisplayRows(data);
+  const rows = [...materialRows, ...labourRows];
+
+  const materialTableRows = rows
     .map(
       (item) => `
       <tr>
@@ -40,10 +134,13 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${escapeHtml(item.brand)}</td>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${item.quantity}</td>
         <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#475569;text-align:center;">${escapeHtml(item.unit)}</td>
-        <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#0f172a;text-align:right;">${formatCurrency(materialLineTotal({ id: "", ...item }))}</td>
+        <td style="padding:12px;border-bottom:1px solid #e2e8f0;color:#0f172a;text-align:right;">${formatCurrency(item.total)}</td>
       </tr>`
     )
     .join("");
+
+  const gstRate = data.gstRate ?? data.taxRate ?? 0;
+  const pstRate = data.pstRate ?? 0;
 
   return `
 <!DOCTYPE html>
@@ -58,17 +155,15 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.05);">
-          <!-- Header -->
           <tr>
             <td style="background-color:#0F172A;padding:32px 40px;text-align:center;">
               <h1 style="margin:0;font-size:28px;font-weight:bold;color:#ffffff;">
                 Ema<span style="color:#3B82F6;">X</span>
               </h1>
-              <p style="margin:8px 0 0;font-size:14px;color:#94a3b8;">Professional Quote</p>
+              <p style="margin:8px 0 0;font-size:14px;color:#94a3b8;">Professional Quote${data.quoteNumber ? ` · ${escapeHtml(data.quoteNumber)}` : ""}</p>
             </td>
           </tr>
 
-          <!-- Body -->
           <tr>
             <td style="padding:40px;">
               <p style="margin:0 0 8px;font-size:16px;color:#475569;">Hello ${escapeHtml(data.customerName)},</p>
@@ -86,7 +181,6 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
                   : ""
               }
 
-              <!-- Materials Table -->
               <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
                 <thead>
                   <tr style="background-color:#f8fafc;">
@@ -98,42 +192,49 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
                   </tr>
                 </thead>
                 <tbody>
-                  ${materialRows}
+                  ${materialTableRows}
                 </tbody>
               </table>
 
-              <!-- Totals -->
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
                 <tr>
-                  <td style="padding:8px 0;color:#64748b;font-size:14px;">Subtotal</td>
-                  <td style="padding:8px 0;color:#0f172a;font-size:14px;text-align:right;">${formatCurrency(subtotal)}</td>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">Materials</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">${formatCurrency(totals.materialsTotal)}</td>
                 </tr>
                 <tr>
-                  <td style="padding:8px 0;color:#64748b;font-size:14px;">Tax (${data.taxRate}%)</td>
-                  <td style="padding:8px 0;color:#0f172a;font-size:14px;text-align:right;">${formatCurrency(tax)}</td>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">Labour</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">${formatCurrency(totals.labourTotal)}</td>
                 </tr>
                 <tr>
-                  <td style="padding:12px 0 0;border-top:2px solid #0F172A;color:#0f172a;font-size:18px;font-weight:bold;">Grand Total</td>
-                  <td style="padding:12px 0 0;border-top:2px solid #0F172A;color:#3B82F6;font-size:18px;font-weight:bold;text-align:right;">${formatCurrency(grandTotal)}</td>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">Subtotal</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">${formatCurrency(totals.subtotal)}</td>
+                </tr>
+                ${
+                  totals.discountApplied > 0
+                    ? `<tr>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">Discount</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">-${formatCurrency(totals.discountApplied)}</td>
+                </tr>`
+                    : ""
+                }
+                <tr>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">GST (${gstRate}%)</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">${formatCurrency(totals.gst)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;font-size:14px;color:#64748b;">PST (${pstRate}%)</td>
+                  <td style="padding:4px 0;font-size:14px;color:#0f172a;text-align:right;">${formatCurrency(totals.pst)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 0 0;font-size:18px;font-weight:700;color:#0f172a;border-top:2px solid #e2e8f0;">Grand Total</td>
+                  <td style="padding:12px 0 0;font-size:18px;font-weight:700;color:#3B82F6;text-align:right;border-top:2px solid #e2e8f0;">${formatCurrency(totals.grandTotal)}</td>
                 </tr>
               </table>
 
               ${buildAcceptQuoteSection(data.acceptUrl ?? "")}
 
-              <p style="margin:0;font-size:14px;color:#64748b;line-height:1.6;">
-                If you have any questions, simply reply to this email. We look forward to working with you.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background-color:#f8fafc;padding:24px 40px;text-align:center;border-top:1px solid #e2e8f0;">
-              <p style="margin:0;font-size:13px;color:#64748b;">
-                This quote is valid for <strong style="color:#0f172a;">${data.validityDays} days</strong> from the date of issue.
-              </p>
-              <p style="margin:12px 0 0;font-size:12px;color:#94a3b8;">
-                Sent via EmaX — AI-powered quotes for Canadian tradespeople
+              <p style="margin:24px 0 0;font-size:13px;color:#94a3b8;line-height:1.5;">
+                This quote is valid for ${data.validityDays} days${data.validUntil ? ` (until ${escapeHtml(data.validUntil)})` : ""}.
               </p>
             </td>
           </tr>
@@ -145,8 +246,8 @@ export function buildQuoteEmailHtml(data: QuoteEmailData): string {
 </html>`;
 }
 
-function escapeHtml(text: string): string {
-  return text
+function escapeHtml(value: string): string {
+  return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")

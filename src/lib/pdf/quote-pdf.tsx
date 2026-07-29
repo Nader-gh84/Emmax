@@ -1,3 +1,4 @@
+import React from "react";
 import {
   Document,
   Page,
@@ -6,8 +7,9 @@ import {
   View,
 } from "@react-pdf/renderer";
 import {
-  calculateQuoteTotals,
+  calculateVoiceQuoteTotals,
   formatCurrency,
+  labourLineTotal,
   materialLineTotal,
 } from "@/types/quote";
 import type { QuoteEmailData } from "@/lib/email/quote-email";
@@ -19,7 +21,6 @@ export interface QuotePdfData extends QuoteEmailData {
 const navy = "#0F172A";
 const accent = "#3B82F6";
 const slate400 = "#94a3b8";
-const slate300 = "#cbd5e1";
 const white = "#ffffff";
 
 const styles = StyleSheet.create({
@@ -158,11 +159,75 @@ const styles = StyleSheet.create({
   },
 });
 
+function buildRows(data: QuotePdfData) {
+  const materials = data.materials.map((item, index) => ({
+    id: `m-${index}`,
+    ...item,
+  }));
+  const labour = (data.labourItems ?? []).map((item, index) => ({
+    id: `l-${index}`,
+    ...item,
+  }));
+  const mode = data.priceDisplayMode ?? "detailed";
+
+  const materialRows =
+    mode === "merged" && materials.length > 0
+      ? [
+          {
+            item: "Materials (combined)",
+            brand: "—",
+            quantity: 1,
+            unit: "lot",
+            unitPrice: materials.reduce(
+              (sum, item) => sum + materialLineTotal(item),
+              0
+            ),
+            total: materials.reduce(
+              (sum, item) => sum + materialLineTotal(item),
+              0
+            ),
+          },
+        ]
+      : materials.map((item) => ({
+          item: item.item,
+          brand: item.brand || "—",
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          total: materialLineTotal(item),
+        }));
+
+  const labourRows = labour.map((item) => ({
+    item: item.description,
+    brand: "Labour",
+    quantity: item.hours,
+    unit: "hour",
+    unitPrice: item.rate,
+    total: labourLineTotal(item),
+  }));
+
+  return [...materialRows, ...labourRows];
+}
+
 export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
-  const { subtotal, tax, grandTotal } = calculateQuoteTotals(
-    data.materials.map((m, i) => ({ id: String(i), ...m })),
-    data.taxRate
-  );
+  const gstRate = data.gstRate ?? data.taxRate ?? 0;
+  const pstRate = data.pstRate ?? 0;
+  const totals = calculateVoiceQuoteTotals({
+    materials: data.materials.map((item, index) => ({
+      id: `m-${index}`,
+      ...item,
+    })),
+    labourItems: (data.labourItems ?? []).map((item, index) => ({
+      id: `l-${index}`,
+      ...item,
+    })),
+    gstRate,
+    pstRate,
+    discountMode: data.discountMode ?? "amount",
+    discountAmount: data.discountAmount ?? 0,
+    discountPercent: data.discountPercent ?? 0,
+  });
+  const rows = buildRows(data);
 
   return (
     <Document>
@@ -171,7 +236,10 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
           <Text style={styles.headerTitle}>
             Ema<Text style={styles.headerAccent}>X</Text> Quote
           </Text>
-          <Text style={styles.headerSubtitle}>Professional Quote</Text>
+          <Text style={styles.headerSubtitle}>
+            Professional Quote
+            {data.quoteNumber ? ` · ${data.quoteNumber}` : ""}
+          </Text>
         </View>
 
         <View style={{ flexDirection: "row", marginBottom: 16 }}>
@@ -211,7 +279,7 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
           <Text style={[styles.th, styles.colTotal]}>Total</Text>
         </View>
 
-        {data.materials.map((item, index) => (
+        {rows.map((item, index) => (
           <View key={index} style={styles.tableRow}>
             <Text style={[styles.td, styles.colItem]}>{item.item}</Text>
             <Text style={[styles.td, styles.colBrand]}>{item.brand}</Text>
@@ -221,24 +289,50 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
               {formatCurrency(item.unitPrice)}
             </Text>
             <Text style={[styles.td, styles.colTotal]}>
-              {formatCurrency(materialLineTotal({ id: "", ...item }))}
+              {formatCurrency(item.total)}
             </Text>
           </View>
         ))}
 
         <View style={styles.totalsBox}>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Subtotal</Text>
-            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
+            <Text style={styles.totalLabel}>Materials</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(totals.materialsTotal)}
+            </Text>
           </View>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tax ({data.taxRate}%)</Text>
-            <Text style={styles.totalValue}>{formatCurrency(tax)}</Text>
+            <Text style={styles.totalLabel}>Labour</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(totals.labourTotal)}
+            </Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Subtotal</Text>
+            <Text style={styles.totalValue}>
+              {formatCurrency(totals.subtotal)}
+            </Text>
+          </View>
+          {totals.discountApplied > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Discount</Text>
+              <Text style={styles.totalValue}>
+                -{formatCurrency(totals.discountApplied)}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>GST ({gstRate}%)</Text>
+            <Text style={styles.totalValue}>{formatCurrency(totals.gst)}</Text>
+          </View>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>PST ({pstRate}%)</Text>
+            <Text style={styles.totalValue}>{formatCurrency(totals.pst)}</Text>
           </View>
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalLabel}>Grand Total</Text>
             <Text style={styles.grandTotalValue}>
-              {formatCurrency(grandTotal)}
+              {formatCurrency(totals.grandTotal)}
             </Text>
           </View>
         </View>
@@ -246,8 +340,9 @@ export function QuotePdfDocument({ data }: { data: QuotePdfData }) {
         <View style={styles.footer}>
           <Text style={styles.footerText}>
             This quote is valid for{" "}
-            <Text style={styles.footerBold}>{data.validityDays} days</Text> from
-            the date of issue.
+            <Text style={styles.footerBold}>{data.validityDays} days</Text>
+            {data.validUntil ? ` (until ${data.validUntil})` : ""} from the date
+            of issue.
           </Text>
           <Text style={[styles.footerText, { marginTop: 6 }]}>
             Sent via EmaX — AI-powered quotes for Canadian tradespeople
