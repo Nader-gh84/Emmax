@@ -20,7 +20,7 @@ import {
   NotesEditModal,
   ProjectEditModal,
   SendQuoteModal,
-  SupplierSelectModal,
+  SendToSupplierModal,
   ValidUntilModal,
 } from "@/components/quotes/voice-quote-action-modals";
 import {
@@ -31,12 +31,12 @@ import {
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import {
   saveQuoteDraft,
+  sendMaterialsToSupplier,
   sendQuoteEmailAndPersist,
   type QuoteActionState,
 } from "@/lib/quote-actions";
 import { mapExtractionToLineItems } from "@/lib/quote-extraction";
 import {
-  buildSupplierMaterialsEmail,
   downloadPdfBlob,
   fetchQuotePdfBlob,
 } from "@/lib/quote-pdf-client";
@@ -749,36 +749,42 @@ export function VoiceQuoteBuilder() {
     }
   }
 
-  function handleSupplierShare(supplier: Supplier) {
+  async function handleSendToSupplier(payload: {
+    supplier: Supplier;
+    supplierEmail: string;
+    messageBody: string;
+  }) {
     if (materials.length === 0) {
       showFeedback(
         "error",
-        "Add at least one material before sharing with a supplier."
+        "Add at least one material before sending to a supplier."
       );
       return;
     }
 
-    if (!supplier.email?.trim()) {
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await sendMaterialsToSupplier(buildActionState(), {
+        supplierName: payload.supplier.supplier_name,
+        supplierEmail: payload.supplierEmail,
+        messageBody: payload.messageBody,
+      });
+      setQuoteId(result.quoteId);
+      setQuoteNumber(result.quoteNumber);
+      setActiveModal(null);
+      showFeedback(
+        "success",
+        `Materials list sent to ${payload.supplier.supplier_name}. Awaiting pricing.`
+      );
+    } catch (error) {
       showFeedback(
         "error",
-        `${supplier.supplier_name} has no email on file. Add one on the Suppliers page.`
+        error instanceof Error ? error.message : "Failed to send to supplier"
       );
-      return;
+    } finally {
+      setIsActionBusy(false);
     }
-
-    // Always share the full detailed materials list — merge mode is customer-facing only.
-    const href = buildSupplierMaterialsEmail({
-      supplierName: supplier.supplier_name,
-      supplierEmail: supplier.email,
-      projectName,
-      materials,
-    });
-    window.location.href = href;
-    setActiveModal(null);
-    showFeedback(
-      "success",
-      `Opened email draft for ${supplier.supplier_name} with full material details.`
-    );
   }
 
   function handleSelectCustomer(customer: Customer) {
@@ -823,6 +829,13 @@ export function VoiceQuoteBuilder() {
         setActiveModal("sendNew");
         break;
       case "supplier":
+        if (materials.length === 0) {
+          showFeedback(
+            "error",
+            "Add at least one material before sending to a supplier."
+          );
+          break;
+        }
         setActiveModal("supplier");
         break;
       default:
@@ -1938,9 +1951,16 @@ export function VoiceQuoteBuilder() {
       )}
 
       {activeModal === "supplier" && (
-        <SupplierSelectModal
+        <SendToSupplierModal
+          materials={materials.map(({ item, brand, quantity, unit }) => ({
+            item,
+            brand,
+            quantity,
+            unit,
+          }))}
+          isSending={isActionBusy}
           onClose={() => setActiveModal(null)}
-          onSelect={handleSupplierShare}
+          onSend={handleSendToSupplier}
         />
       )}
     </div>

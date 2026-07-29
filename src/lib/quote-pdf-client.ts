@@ -122,33 +122,3 @@ export function openMailtoQuote(customerEmail: string, projectName: string) {
   );
   window.location.href = `mailto:${customerEmail.trim()}?subject=${subject}&body=${body}`;
 }
-
-export function buildSupplierMaterialsEmail(input: {
-  supplierName: string;
-  supplierEmail: string;
-  projectName?: string;
-  materials: MaterialItem[];
-}) {
-  const lines = input.materials.map((item) => {
-    const brand = item.brand?.trim() ? ` (${item.brand})` : "";
-    return `- ${item.quantity} ${item.unit} ${item.item}${brand}`;
-  });
-
-  const subject = encodeURIComponent(
-    `Material list${input.projectName?.trim() ? ` — ${input.projectName.trim()}` : ""}`
-  );
-  const body = encodeURIComponent(
-    [
-      `Hi ${input.supplierName},`,
-      "",
-      "Please quote / supply the following materials:",
-      "",
-      ...(lines.length > 0 ? lines : ["(No materials listed)"]),
-      "",
-      "Thanks,",
-      "Sent via EmaX",
-    ].join("\n")
-  );
-
-  return `mailto:${input.supplierEmail.trim()}?subject=${subject}&body=${body}`;
-}

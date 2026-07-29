@@ -8,6 +8,7 @@ import {
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
+import { buildDefaultSupplierMessage } from "@/lib/email/supplier-email";
 import type { CustomerSelectionMode } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
 import { getCustomerDisplayName, type Customer } from "@/types/customer";
@@ -18,16 +19,22 @@ function ModalShell({
   description,
   onClose,
   children,
+  wide,
 }: {
   title: string;
   description?: string;
   onClose: () => void;
   children: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
       <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-navy p-6 shadow-xl">
+      <div
+        className={`relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-2xl border border-white/10 bg-navy p-6 shadow-xl ${
+          wide ? "max-w-xl" : "max-w-lg"
+        }`}
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold text-white">{title}</h2>
@@ -297,26 +304,64 @@ export function SendQuoteModal({
   );
 }
 
-export function SupplierSelectModal({
+export function SendToSupplierModal({
+  materials,
+  isSending,
   onClose,
-  onSelect,
+  onSend,
 }: {
+  materials: Array<{
+    item: string;
+    brand: string;
+    quantity: number;
+    unit: string;
+  }>;
+  isSending: boolean;
   onClose: () => void;
-  onSelect: (supplier: Supplier) => void;
+  onSend: (payload: {
+    supplier: Supplier;
+    supplierEmail: string;
+    messageBody: string;
+  }) => void | Promise<void>;
 }) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [value, setValue] = useState("");
+  const [supplierEmail, setSupplierEmail] = useState("");
+  const [messageBody, setMessageBody] = useState("");
+  const [profileReady, setProfileReady] = useState(false);
 
   useEffect(() => {
     async function load() {
       setIsLoading(true);
       const supabase = createClient();
-      const { data } = await supabase
-        .from("suppliers")
-        .select("*")
-        .order("supplier_name", { ascending: true });
-      setSuppliers((data as Supplier[]) ?? []);
+      const [{ data: supplierRows }, profileResult, authResult] =
+        await Promise.all([
+          supabase
+            .from("suppliers")
+            .select("*")
+            .order("supplier_name", { ascending: true }),
+          supabase
+            .from("business_profiles")
+            .select("company_name, full_name")
+            .maybeSingle(),
+          supabase.auth.getUser(),
+        ]);
+
+      setSuppliers((supplierRows as Supplier[]) ?? []);
+
+      const profile = profileResult.data;
+      const user = authResult.data.user;
+      const companyName = profile?.company_name?.trim() || "";
+      const metaName =
+        typeof user?.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : "";
+      const ownerName =
+        profile?.full_name?.trim() || metaName.trim() || "";
+
+      setMessageBody(buildDefaultSupplierMessage(companyName, ownerName));
+      setProfileReady(true);
       setIsLoading(false);
     }
     void load();
@@ -336,49 +381,144 @@ export function SupplierSelectModal({
 
   const selected = suppliers.find((supplier) => supplier.id === value) ?? null;
 
+  function handleSelectSupplier(nextId: string) {
+    setValue(nextId);
+    const next = suppliers.find((supplier) => supplier.id === nextId) ?? null;
+    setSupplierEmail(next?.email?.trim() || "");
+  }
+
+  const canSend =
+    Boolean(selected) &&
+    supplierEmail.trim().length > 0 &&
+    messageBody.trim().length > 0 &&
+    materials.length > 0 &&
+    !isSending;
+
   return (
     <ModalShell
       title="Send to Supplier"
-      description="Share the materials list (quantities needed) with a supplier."
+      description="Request pricing for materials only — no labour or prices are included."
       onClose={onClose}
+      wide
     >
-      {isLoading ? (
+      {isLoading || !profileReady ? (
         <p className="text-sm text-slate-400">Loading suppliers…</p>
       ) : suppliers.length === 0 ? (
         <p className="text-sm text-slate-400">
           No suppliers yet. Add suppliers from the Suppliers page first.
         </p>
       ) : (
-        <SearchableSelect
-          id="voice-quote-supplier-select"
-          options={options}
-          value={value}
-          onChange={setValue}
-          placeholder="Search suppliers…"
-          emptyQueryMaxResults={suppliers.length}
-        />
+        <>
+          <label
+            htmlFor="voice-quote-supplier-select"
+            className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400"
+          >
+            Supplier
+          </label>
+          <SearchableSelect
+            id="voice-quote-supplier-select"
+            options={options}
+            value={value}
+            onChange={handleSelectSupplier}
+            placeholder="Search suppliers…"
+            emptyQueryMaxResults={suppliers.length}
+          />
+
+          <label
+            htmlFor="voice-quote-supplier-email"
+            className="mb-2 mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-400"
+          >
+            Supplier email
+          </label>
+          <input
+            id="voice-quote-supplier-email"
+            type="email"
+            value={supplierEmail}
+            onChange={(event) => setSupplierEmail(event.target.value)}
+            placeholder="orders@supplier.com"
+            className={touchInput}
+            disabled={!selected}
+          />
+
+          <label
+            htmlFor="voice-quote-supplier-message"
+            className="mb-2 mt-4 block text-xs font-semibold uppercase tracking-wide text-slate-400"
+          >
+            Message
+          </label>
+          <textarea
+            id="voice-quote-supplier-message"
+            value={messageBody}
+            onChange={(event) => setMessageBody(event.target.value)}
+            rows={7}
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-accent"
+          />
+
+          <div className="mt-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Materials to send ({materials.length})
+            </p>
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03]">
+              <table className="w-full text-left text-sm">
+                <thead className="sticky top-0 bg-navy text-xs uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 font-semibold">Description</th>
+                    <th className="px-3 py-2 font-semibold">Brand</th>
+                    <th className="px-3 py-2 text-right font-semibold">Qty</th>
+                    <th className="px-3 py-2 font-semibold">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.map((material, index) => (
+                    <tr
+                      key={`${material.item}-${index}`}
+                      className="border-t border-white/5 text-slate-300"
+                    >
+                      <td className="px-3 py-2 text-white">
+                        {material.item || "Material"}
+                      </td>
+                      <td className="px-3 py-2">
+                        {material.brand?.trim() || "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {material.quantity}
+                      </td>
+                      <td className="px-3 py-2">{material.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              Labour and unit prices are never included in supplier requests.
+            </p>
+          </div>
+        </>
       )}
 
-      {selected ? (
-        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
-          <p className="font-medium text-white">{selected.supplier_name}</p>
-          <p className="mt-1 break-all text-slate-400">
-            {selected.email || "No email — we’ll open a blank mail draft"}
-          </p>
-        </div>
-      ) : null}
-
       <div className="mt-6 flex gap-3">
-        <button type="button" onClick={onClose} className={`${touchBtnSecondary} flex-1`}>
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isSending}
+          className={`${touchBtnSecondary} flex-1`}
+        >
           Cancel
         </button>
         <button
           type="button"
-          disabled={!selected}
-          onClick={() => selected && onSelect(selected)}
+          disabled={!canSend || !selected}
+          onClick={() => {
+            if (!selected) return;
+            void onSend({
+              supplier: selected,
+              supplierEmail: supplierEmail.trim(),
+              messageBody: messageBody.trim(),
+            });
+          }}
           className={`${touchBtnPrimary} flex-1`}
         >
-          Share materials
+          {isSending ? "Sending…" : "Send to supplier"}
         </button>
       </div>
     </ModalShell>
