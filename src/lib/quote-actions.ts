@@ -10,6 +10,7 @@ import {
 import { createClient } from "@/lib/supabase";
 import { throwSupabaseError } from "@/lib/supabase/errors";
 import type { DiscountMode, LabourItem, MaterialItem } from "@/types/quote";
+import { calculateVoiceQuoteTotals } from "@/types/quote";
 
 export interface QuoteActionState {
   quoteId: string | null;
@@ -340,12 +341,58 @@ export async function saveQuoteDraft(
     throw new Error("Add at least one material or labour item before saving.");
   }
 
-  return upsertQuoteRecord(
+  const result = await upsertQuoteRecord(
     state,
     user.id,
     "draft",
     state.selectedCustomerId
   );
+
+  const totals = calculateVoiceQuoteTotals({
+    materials: state.materials,
+    labourItems: state.labourItems,
+    gstRate: state.gstRate,
+    pstRate: state.pstRate,
+    discountMode: state.discountMode,
+    discountAmount: state.discountAmount,
+    discountPercent: state.discountPercent,
+  });
+
+  const label =
+    state.projectName.trim() ||
+    result.quoteNumber ||
+    "Untitled quote";
+
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "draft_quote",
+        quoteId: result.quoteId,
+        message: `Draft saved: ${label}`,
+        metadata: {
+          quote_number: result.quoteNumber,
+          customer_name: state.customerName.trim() || null,
+          grand_total: totals.grandTotal,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      console.error("[saveQuoteDraft] Failed to create draft_quote notification:", {
+        status: response.status,
+        data,
+        quoteId: result.quoteId,
+      });
+    }
+  } catch (error) {
+    // Draft save succeeded — notification is best-effort.
+    console.error("[saveQuoteDraft] Notification request failed:", error);
+  }
+
+  return result;
 }
 
 export async function sendQuoteEmailAndPersist(

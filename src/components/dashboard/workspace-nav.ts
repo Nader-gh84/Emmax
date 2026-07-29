@@ -2,6 +2,7 @@ import {
   IconCalendar,
   IconEmployee,
   IconHome,
+  IconInbox,
   IconInvoice,
   IconSettings,
   IconSuppliers,
@@ -13,6 +14,11 @@ export const workspaceNavItems = [
     label: "Dashboard",
     href: "/dashboard",
     icon: IconHome,
+  },
+  {
+    label: "Inbox",
+    href: "/dashboard/inbox",
+    icon: IconInbox,
   },
   {
     label: "Customer",
