@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { QuotePreviewBody } from "@/components/quotes/step-preview";
+import { QuotePreviewBody } from "@/components/quotes/quote-preview-body";
 import { touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
 import {
@@ -141,7 +141,7 @@ function QuoteRow({
   if (quote.status === "draft") {
     return (
       <Link
-        href={`/dashboard/new-quote?id=${quote.id}`}
+        href={`/dashboard/voice-quote-builder?id=${quote.id}`}
         className="block rounded-xl border border-white/10 bg-white/5 p-5 transition hover:border-accent/40 hover:bg-white/[0.07]"
       >
         {content}
@@ -252,7 +252,7 @@ function QuotesPageContent() {
               No quotes yet. Create your first quote to get started.
             </p>
             <Link
-              href="/dashboard/new-quote"
+              href="/dashboard/voice-quote-builder"
               className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-6 text-base font-medium text-white transition hover:bg-accent/90"
             >
               New Quote

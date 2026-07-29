@@ -18,7 +18,7 @@ export const dashboardNavItems = [
   {
     label: "New Quote",
     shortLabel: "Quote",
-    href: "/dashboard/new-quote",
+    href: "/dashboard/voice-quote-builder",
     icon: IconMicrophone,
     highlight: true,
   },
