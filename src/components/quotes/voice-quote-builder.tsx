@@ -462,7 +462,47 @@ export function VoiceQuoteBuilder() {
     [materials, labourItems]
   );
 
+  const materialsTotalPrice = useMemo(
+    () => materials.reduce((sum, item) => sum + materialLineTotal(item), 0),
+    [materials]
+  );
+
+  const isMaterialsMerged = priceMode === "merged" && materials.length > 0;
+
+  type DisplayRow =
+    | { kind: "merged_materials"; total: number }
+    | TableRow;
+
+  const displayRows: DisplayRow[] = useMemo(() => {
+    if (isMaterialsMerged) {
+      return [
+        { kind: "merged_materials" as const, total: materialsTotalPrice },
+        ...labourItems.map((item) => ({ kind: "labour" as const, item })),
+      ];
+    }
+
+    return tableRows;
+  }, [isMaterialsMerged, materialsTotalPrice, labourItems, tableRows]);
+
   const itemCount = tableRows.length;
+
+  function toggleMaterialsMerge() {
+    if (priceMode === "merged") {
+      setPriceMode("detailed");
+      return;
+    }
+
+    if (materials.length === 0) {
+      showFeedback(
+        "info",
+        "Add at least one material before merging."
+      );
+      return;
+    }
+
+    setIsEditingItems(false);
+    setPriceMode("merged");
+  }
 
   async function handleMicClick() {
     if (phase === "transcribing" || phase === "extracting") return;
@@ -726,6 +766,7 @@ export function VoiceQuoteBuilder() {
       return;
     }
 
+    // Always share the full detailed materials list — merge mode is customer-facing only.
     const href = buildSupplierMaterialsEmail({
       supplierName: supplier.supplier_name,
       supplierEmail: supplier.email,
@@ -736,7 +777,7 @@ export function VoiceQuoteBuilder() {
     setActiveModal(null);
     showFeedback(
       "success",
-      `Opened email draft for ${supplier.supplier_name}.`
+      `Opened email draft for ${supplier.supplier_name} with full material details.`
     );
   }
 
@@ -1083,12 +1124,19 @@ export function VoiceQuoteBuilder() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPriceMode("merged")}
-                    className={`${touchBtnSecondary} gap-2 px-3 py-2 text-xs`}
-                    title="Combine materials into a single line on the customer-facing quote"
+                    onClick={toggleMaterialsMerge}
+                    disabled={materials.length === 0 && priceMode !== "merged"}
+                    className={`${touchBtnSecondary} gap-2 px-3 py-2 text-xs disabled:opacity-40`}
+                    title={
+                      priceMode === "merged"
+                        ? "Restore individual material line items"
+                        : "Combine materials into a single line on the customer-facing quote"
+                    }
                   >
                     <IconMerge className="h-3.5 w-3.5" />
-                    Merge Materials
+                    {priceMode === "merged"
+                      ? "Unmerge Materials"
+                      : "Merge Materials"}
                     <IconInfo className="h-3.5 w-3.5 text-slate-500" />
                   </button>
                 </div>
@@ -1109,7 +1157,7 @@ export function VoiceQuoteBuilder() {
                     </tr>
                   </thead>
                   <tbody>
-                    {tableRows.length === 0 ? (
+                    {displayRows.length === 0 ? (
                       <tr>
                         <td
                           colSpan={8}
@@ -1119,7 +1167,41 @@ export function VoiceQuoteBuilder() {
                         </td>
                       </tr>
                     ) : (
-                      tableRows.map((row, index) => {
+                      displayRows.map((row, index) => {
+                        if (row.kind === "merged_materials") {
+                          return (
+                            <tr
+                              key="merged-materials"
+                              className="border-b border-white/5"
+                            >
+                              <td className="py-3 pr-2 text-slate-500">
+                                {index + 1}
+                              </td>
+                              <td className="py-3 pr-2 font-medium text-white">
+                                Materials
+                                <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                                  {materials.length} items combined — Unmerge to
+                                  edit details
+                                </span>
+                              </td>
+                              <td className="py-3 pr-2 text-slate-300">—</td>
+                              <td className="py-3 pr-2 text-slate-300">1</td>
+                              <td className="py-3 pr-2 text-slate-300">lot</td>
+                              <td className="py-3 pr-2 text-slate-300">
+                                {formatCurrency(row.total)}
+                              </td>
+                              <td className="py-3 pr-2 font-medium text-white">
+                                {formatCurrency(row.total)}
+                              </td>
+                              <td className="py-3">
+                                <span className="px-1.5 text-xs text-slate-600">
+                                  —
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        }
+
                         if (row.kind === "material") {
                           const item = row.item;
                           return (
