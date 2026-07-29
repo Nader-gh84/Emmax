@@ -8,6 +8,7 @@ import {
 import { createAdminClient, isAdminClientConfigured } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { logSupabaseError } from "@/lib/supabase/errors";
+import { buildSupplierAckUrlFromRequest } from "@/lib/supplier-ack";
 
 interface SendSupplierRequestBody {
   supplierName?: string;
@@ -93,32 +94,70 @@ export async function POST(request: Request) {
       );
     }
 
-    if (quoteId) {
-      const { data: quote, error: quoteError } = await supabase
-        .from("quotes")
-        .select("id")
-        .eq("id", quoteId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (quoteError) {
-        logSupabaseError("POST /api/send-supplier.quoteLookup", quoteError, {
-          quoteId,
-          userId: user.id,
-        });
-        return NextResponse.json(
-          { error: "Failed to verify quote" },
-          { status: 500 }
-        );
-      }
-
-      if (!quote) {
-        return NextResponse.json(
-          { error: "Quote not found or access denied" },
-          { status: 404 }
-        );
-      }
+    if (!quoteId) {
+      return NextResponse.json(
+        { error: "Quote must be saved before sending to a supplier" },
+        { status: 400 }
+      );
     }
+
+    const { data: quote, error: quoteError } = await supabase
+      .from("quotes")
+      .select("id")
+      .eq("id", quoteId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (quoteError) {
+      logSupabaseError("POST /api/send-supplier.quoteLookup", quoteError, {
+        quoteId,
+        userId: user.id,
+      });
+      return NextResponse.json(
+        { error: "Failed to verify quote" },
+        { status: 500 }
+      );
+    }
+
+    if (!quote) {
+      return NextResponse.json(
+        { error: "Quote not found or access denied" },
+        { status: 404 }
+      );
+    }
+
+    // Mint a fresh acknowledgment token for this send (clears any prior ack).
+    const supplierAckToken = crypto.randomUUID();
+    const { error: tokenError } = await supabase
+      .from("quotes")
+      .update({
+        supplier_ack_token: supplierAckToken,
+        supplier_acknowledged_at: null,
+        supplier_ack_supplier_name: supplierName,
+        supplier_ack_supplier_email: supplierEmail,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quoteId)
+      .eq("user_id", user.id);
+
+    if (tokenError) {
+      logSupabaseError("POST /api/send-supplier.ackToken", tokenError, {
+        quoteId,
+        userId: user.id,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Failed to prepare supplier acknowledgment link. Run migration 015_supplier_acknowledgment.sql if you have not already.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const acknowledgeUrl = buildSupplierAckUrlFromRequest(
+      supplierAckToken,
+      request
+    );
 
     const { data: profile } = await supabase
       .from("business_profiles")
@@ -126,19 +165,15 @@ export async function POST(request: Request) {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const companyName =
-      profile?.company_name?.trim() ||
-      "EmaX";
-    const replyTo =
-      profile?.email?.trim() ||
-      user.email ||
-      undefined;
+    const companyName = profile?.company_name?.trim() || "EmaX";
+    const replyTo = profile?.email?.trim() || user.email || undefined;
 
     const html = buildSupplierRequestEmailHtml({
       messageBody,
       materials,
       projectName,
       companyName,
+      acknowledgeUrl,
     });
 
     const resend = new Resend(apiKey);
@@ -152,7 +187,7 @@ export async function POST(request: Request) {
       ...(replyTo ? { replyTo } : {}),
       subject: `Material pricing request — ${projectLabel}`,
       html,
-      text: buildPlainTextEmail(messageBody, materials),
+      text: buildPlainTextEmail(messageBody, materials, acknowledgeUrl),
     });
 
     if (error) {
@@ -181,6 +216,7 @@ export async function POST(request: Request) {
       success: true,
       id: data?.id,
       notificationId,
+      acknowledgeUrl,
     });
   } catch (error) {
     console.error("Send supplier error:", error);
@@ -198,7 +234,8 @@ export async function POST(request: Request) {
 
 function buildPlainTextEmail(
   messageBody: string,
-  materials: SupplierMaterialLine[]
+  materials: SupplierMaterialLine[],
+  acknowledgeUrl?: string
 ): string {
   const lines = materials.map((material) => {
     const brand = material.brand?.trim() ? ` (${material.brand.trim()})` : "";
@@ -211,6 +248,13 @@ function buildPlainTextEmail(
     "Materials list:",
     ...lines,
     "",
+    ...(acknowledgeUrl
+      ? [
+          "I received this — pricing coming soon:",
+          acknowledgeUrl,
+          "",
+        ]
+      : []),
     "Sent via EmaX",
   ].join("\n");
 }

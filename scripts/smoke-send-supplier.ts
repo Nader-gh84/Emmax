@@ -101,6 +101,18 @@ if (!plain.includes("PEX Tubing") || !plain.includes("Ball Valve")) {
   throw new Error("Plain materials list incomplete");
 }
 
+const withAck = buildSupplierRequestEmailHtml({
+  messageBody: message,
+  materials: lines,
+  projectName: "Bath Reno",
+  companyName: "North Peak Plumbing",
+  acknowledgeUrl: "https://example.com/supplier-ack/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+});
+
+if (!withAck.includes("I received this — pricing coming soon")) {
+  throw new Error("Supplier email should include acknowledgment CTA when URL provided");
+}
+
 console.log("smoke-send-supplier: OK", {
   itemCount: lines.length,
   messagePreview: message.split("\n")[2],
