@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { DashboardBottomNav } from "@/components/dashboard/bottom-nav";
-import { DashboardMobileHeader } from "@/components/dashboard/mobile-header";
+import { DashboardTopHeader } from "@/components/dashboard/mobile-header";
 import { WorkspaceSidebar } from "@/components/dashboard/workspace-sidebar";
 import { createClient } from "@/lib/supabase/server";
 
@@ -22,7 +22,7 @@ export default async function DashboardLayout({
     <div className="flex min-h-screen bg-navy text-white">
       <WorkspaceSidebar />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <DashboardMobileHeader />
+        <DashboardTopHeader />
         <div className="flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-20 lg:pb-0">
           {children}
         </div>

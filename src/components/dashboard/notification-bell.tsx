@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
   formatNotificationTime,
+  getNotificationHref,
 } from "@/types/notification";
 
 export function NotificationBell() {
@@ -127,9 +128,16 @@ export function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full right-0 z-50 mb-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl md:bottom-auto md:top-full md:mb-0 md:mt-2">
-          <div className="border-b border-white/10 px-4 py-3">
+        <div className="absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <p className="text-sm font-semibold text-white">Notifications</p>
+            <Link
+              href="/dashboard/inbox"
+              onClick={() => setIsOpen(false)}
+              className="text-xs font-semibold text-accent hover:text-blue-400"
+            >
+              Open Inbox
+            </Link>
           </div>
 
           <div className="max-h-80 overflow-y-auto">
@@ -139,6 +147,7 @@ export function NotificationBell() {
               </p>
             ) : (
               notifications.map((notification) => {
+                const href = getNotificationHref(notification);
                 const content = (
                   <>
                     <p
@@ -154,11 +163,11 @@ export function NotificationBell() {
                   </>
                 );
 
-                if (notification.quote_id) {
+                if (href) {
                   return (
                     <Link
                       key={notification.id}
-                      href={`/dashboard/quotes?quote=${notification.quote_id}`}
+                      href={href}
                       onClick={() => handleOpenNotification(notification)}
                       className="block border-b border-white/5 px-4 py-3 transition hover:bg-white/5"
                     >

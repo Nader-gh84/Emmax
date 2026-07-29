@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   IconDocument,
   IconEmployee,
@@ -42,15 +43,18 @@ import {
 import {
   defaultValidUntil,
   formatValidUntilLabel,
+  quoteToWizardState,
   type CustomerSelectionMode,
   type PriceDisplayMode,
 } from "@/lib/quotes";
+import { createClient } from "@/lib/supabase";
 import { getCustomerDisplayName, type Customer } from "@/types/customer";
 import type { Supplier } from "@/types/supplier";
 import {
   DiscountMode,
   LabourItem,
   MaterialItem,
+  Quote,
   calculateVoiceQuoteTotals,
   createLabourItem,
   createMaterialItem,
@@ -185,12 +189,16 @@ type TableRow =
   | { kind: "labour"; item: LabourItem };
 
 export function VoiceQuoteBuilder() {
+  const searchParams = useSearchParams();
+  const quoteParam = searchParams.get("quote");
+
   const [showSidebar, setShowSidebar] = useState(true);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [isEditingItems, setIsEditingItems] = useState(false);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(Boolean(quoteParam));
   const [transcript, setTranscript] = useState("");
   const [notes, setNotes] = useState("");
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
@@ -226,6 +234,93 @@ export function VoiceQuoteBuilder() {
   const [validUntil, setValidUntil] = useState<string | null>(
     defaultValidUntil(30)
   );
+
+  useEffect(() => {
+    if (!quoteParam) {
+      setIsLoadingQuote(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadQuote() {
+      setIsLoadingQuote(true);
+      setActionFeedback(null);
+
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("quotes")
+          .select("*")
+          .eq("id", quoteParam)
+          .single();
+
+        if (cancelled) return;
+
+        if (error || !data) {
+          setActionFeedback({
+            type: "error",
+            message: "Couldn't load that draft. Starting a fresh pre-invoice.",
+          });
+          setIsLoadingQuote(false);
+          return;
+        }
+
+        const wizard = quoteToWizardState(data as Quote);
+        setQuoteId(wizard.quoteId);
+        setQuoteNumber(wizard.quoteNumber);
+        setQuoteStatus(
+          data.status === "sent" || data.status === "accepted" ? "sent" : "draft"
+        );
+        setTranscript(wizard.transcript);
+        setNotes(wizard.notes);
+        setMaterials(wizard.materials);
+        setLabourItems(wizard.labourItems);
+        setGstRate(wizard.gstRate);
+        setPstRate(wizard.pstRate);
+        setDiscountMode(wizard.discountMode);
+        setDiscountAmount(wizard.discountAmount);
+        setDiscountPercent(wizard.discountPercent);
+        setCustomerMode(wizard.customerMode);
+        setSelectedCustomerId(wizard.selectedCustomerId);
+        setCustomerName(wizard.customerName);
+        setCustomerEmail(wizard.customerEmail);
+        setCustomerPhone(wizard.customerPhone);
+        setCustomerSecondary(wizard.customerEmail || "");
+        setProjectName(wizard.projectName);
+        setValidUntil(wizard.validUntil ?? defaultValidUntil(30));
+        setPriceMode(wizard.priceDisplayMode);
+        setPhase(
+          wizard.materials.length > 0 || wizard.labourItems.length > 0
+            ? "ready"
+            : wizard.transcript
+              ? "ready"
+              : "idle"
+        );
+        setActionFeedback({
+          type: "info",
+          message: wizard.quoteNumber
+            ? `Loaded draft ${wizard.quoteNumber}. Continue editing or send.`
+            : "Loaded draft. Continue editing or send.",
+        });
+      } catch {
+        if (!cancelled) {
+          setActionFeedback({
+            type: "error",
+            message: "Couldn't load that draft. Starting a fresh pre-invoice.",
+          });
+        }
+      } finally {
+        if (!cancelled) setIsLoadingQuote(false);
+      }
+    }
+
+    void loadQuote();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [quoteParam]);
 
   const processTranscript = useCallback(
     async (nextTranscript: string, append: boolean) => {
@@ -751,7 +846,15 @@ export function VoiceQuoteBuilder() {
   })();
 
   return (
-    <div className="flex min-h-full min-w-0 flex-1">
+    <div className="relative flex min-h-full min-w-0 flex-1">
+      {isLoadingQuote && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/70 backdrop-blur-sm">
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0B1220] px-4 py-3 text-sm text-slate-300">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+            Loading draft…
+          </div>
+        </div>
+      )}
       <div className="min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { VoiceQuoteBuilder } from "@/components/quotes/voice-quote-builder";
 
 export const metadata: Metadata = {
@@ -6,5 +7,15 @@ export const metadata: Metadata = {
 };
 
 export default function VoiceQuoteBuilderPage() {
-  return <VoiceQuoteBuilder />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-full flex-1 items-center justify-center text-sm text-slate-400">
+          Loading Voice Quote Builder…
+        </div>
+      }
+    >
+      <VoiceQuoteBuilder />
+    </Suspense>
+  );
 }
