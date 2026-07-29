@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SuppliersEmptyState } from "@/components/dashboard/suppliers-empty-state";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -423,6 +424,37 @@ export default function SuppliersPage() {
     );
   }
 
+  // Step 1: empty state only — no stats row / table when there are zero suppliers.
+  if (suppliers.length === 0) {
+    return (
+      <main className="flex min-h-full flex-1 flex-col">
+        {error && (
+          <div className="mx-auto mt-6 w-full max-w-lg rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mx-auto mt-6 w-full max-w-lg rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
+            {success}
+          </div>
+        )}
+
+        <SuppliersEmptyState onAddSupplier={openAddForm} />
+
+        {showForm && (
+          <SupplierFormModal
+            title="Add Supplier"
+            initialForm={EMPTY_SUPPLIER_FORM}
+            isSaving={isSaving}
+            onClose={closeForm}
+            onSubmit={handleSave}
+          />
+        )}
+      </main>
+    );
+  }
+
+  // Temporary list until Step 2 (table redesign).
   return (
     <main className="flex-1 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-5xl">
@@ -454,43 +486,23 @@ export default function SuppliersPage() {
           </div>
         )}
 
-        {suppliers.length === 0 ? (
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-            <p className="text-base text-slate-400">
-              No suppliers yet. Add your first supplier to get started.
-            </p>
-            <p className="mt-2 text-sm text-slate-500">
-              Add at least 3 suppliers to get the most out of ordering.
-            </p>
-            <button
-              type="button"
-              onClick={openAddForm}
-              className={`${touchBtnPrimary} mt-6`}
-            >
-              + Add Supplier
-            </button>
-          </div>
-        ) : (
-          <>
-            {suppliers.length < 3 && (
-              <p className="mt-6 rounded-xl border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-slate-300">
-                Add at least 3 suppliers to get the most out of ordering.
-              </p>
-            )}
-
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {suppliers.map((supplier) => (
-                <SupplierCard
-                  key={supplier.id}
-                  supplier={supplier}
-                  isDeleting={deletingId === supplier.id}
-                  onEdit={() => openEditForm(supplier)}
-                  onDelete={() => handleDelete(supplier)}
-                />
-              ))}
-            </div>
-          </>
+        {suppliers.length < 3 && (
+          <p className="mt-6 rounded-xl border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-slate-300">
+            Add at least 3 suppliers to get the most out of ordering.
+          </p>
         )}
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {suppliers.map((supplier) => (
+            <SupplierCard
+              key={supplier.id}
+              supplier={supplier}
+              isDeleting={deletingId === supplier.id}
+              onEdit={() => openEditForm(supplier)}
+              onDelete={() => handleDelete(supplier)}
+            />
+          ))}
+        </div>
       </div>
 
       {showForm && (
