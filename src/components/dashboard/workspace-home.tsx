@@ -67,7 +67,7 @@ const DETAIL_ROWS = [
     },
     {
       title: "Pre Invoice",
-      href: "/dashboard/quotes",
+      href: "/dashboard/voice-quote-builder",
       icon: IconInvoice,
       stats: [
         { label: "Draft", value: "11" },
