@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { NotificationBell } from "@/components/dashboard/notification-bell";
+import { UserMenu } from "@/components/dashboard/user-menu";
 
 export function DashboardTopHeader() {
   return (
@@ -15,6 +16,10 @@ export function DashboardTopHeader() {
         +
       </Link>
       <NotificationBell />
+      {/* Sidebar is hidden below lg — keep account access on mobile/tablet. */}
+      <div className="lg:hidden">
+        <UserMenu variant="compact" menuAlign="right" />
+      </div>
     </div>
   );
 }
