@@ -7,9 +7,12 @@ import { IconMicrophone } from "@/components/dashboard/icons";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { IconWaveform } from "@/components/dashboard/workspace-icons";
 import { workspaceNavItems } from "@/components/dashboard/workspace-nav";
+import { UnreadCountBadge } from "@/components/dashboard/unread-count-badge";
+import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 
 export function WorkspaceSidebar() {
   const pathname = usePathname();
+  const { unreadCount } = useUnreadNotifications(20);
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-[#0B1220] lg:flex">
@@ -35,6 +38,8 @@ export function WorkspaceSidebar() {
             pathname === item.href ||
             (item.href !== "/dashboard" && pathname.startsWith(item.href));
           const Icon = item.icon;
+          const showInboxBadge =
+            item.href === "/dashboard/inbox" && unreadCount > 0;
 
           return (
             <Link
@@ -51,7 +56,8 @@ export function WorkspaceSidebar() {
                   isActive ? "text-accent" : "text-slate-500"
                 }`}
               />
-              {item.label}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {showInboxBadge ? <UnreadCountBadge count={unreadCount} /> : null}
             </Link>
           );
         })}

@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { IconBell } from "@/components/dashboard/icons";
+import { UnreadCountBadge } from "@/components/dashboard/unread-count-badge";
+import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
@@ -11,72 +13,14 @@ import {
 } from "@/types/notification";
 
 export function NotificationBell() {
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const {
+    notifications,
+    unreadCount,
+    setNotifications,
+    setUnreadCount,
+  } = useUnreadNotifications(20);
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const loadNotifications = useCallback(async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const { data } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    const items = (data as AppNotification[]) ?? [];
-    setNotifications(items);
-    setUnreadCount(items.filter((item) => !item.read).length);
-  }, []);
-
-  useEffect(() => {
-    loadNotifications();
-
-    const supabase = createClient();
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-
-    async function setupRealtime() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) return;
-
-      channel = supabase
-        .channel(`notifications-${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            loadNotifications();
-          }
-        )
-        .subscribe();
-    }
-
-    setupRealtime();
-
-    const pollInterval = window.setInterval(loadNotifications, 30000);
-
-    return () => {
-      window.clearInterval(pollInterval);
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [loadNotifications]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -120,11 +64,10 @@ export function NotificationBell() {
         aria-label="Notifications"
       >
         <IconBell className="h-5 w-5" />
-        {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-            {unreadCount > 9 ? "9+" : unreadCount}
-          </span>
-        )}
+        <UnreadCountBadge
+          count={unreadCount}
+          className="absolute -right-1 -top-1"
+        />
       </button>
 
       {isOpen && (
