@@ -11,6 +11,9 @@ export interface NotificationMetadata {
   quote_number?: string | null;
   customer_name?: string | null;
   grand_total?: number | null;
+  supplier_name?: string | null;
+  supplier_email?: string | null;
+  item_count?: number | null;
   [key: string]: unknown;
 }
 
@@ -33,6 +36,10 @@ export function getNotificationHref(notification: AppNotification): string | nul
   if (!notification.quote_id) return null;
 
   if (notification.type === "draft_quote") {
+    return `/dashboard/voice-quote-builder?quote=${notification.quote_id}`;
+  }
+
+  if (notification.type === "supplier_price") {
     return `/dashboard/voice-quote-builder?quote=${notification.quote_id}`;
   }
 

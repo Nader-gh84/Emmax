@@ -493,3 +493,78 @@ export async function sendQuoteEmailAndPersist(
 
   return { quoteId, quoteNumber };
 }
+
+export async function sendMaterialsToSupplier(
+  state: QuoteActionState,
+  input: {
+    supplierName: string;
+    supplierEmail: string;
+    messageBody: string;
+  }
+): Promise<{ quoteId: string; quoteNumber: string | null }> {
+  if (state.materials.length === 0) {
+    throw new Error("Add at least one material before sending to a supplier.");
+  }
+
+  if (!input.supplierEmail.trim()) {
+    throw new Error("Supplier email is required.");
+  }
+
+  if (!input.messageBody.trim()) {
+    throw new Error("Message body is required.");
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new Error("You must be logged in to send to a supplier.");
+  }
+
+  // Persist quote so supplier_price notifications can link back to it.
+  // Do not change an already-sent quote's status.
+  let quoteId = state.quoteId;
+  let quoteNumber = state.quoteNumber;
+
+  if (!quoteId) {
+    const saved = await upsertQuoteRecord(
+      state,
+      user.id,
+      "draft",
+      state.selectedCustomerId
+    );
+    quoteId = saved.quoteId;
+    quoteNumber = saved.quoteNumber;
+  }
+
+  // Always send the full detailed materials list — never labour, never prices.
+  const response = await fetch("/api/send-supplier", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      supplierName: input.supplierName.trim(),
+      supplierEmail: input.supplierEmail.trim(),
+      messageBody: input.messageBody.trim(),
+      projectName: state.projectName,
+      quoteId,
+      materials: state.materials.map(({ item, brand, quantity, unit }) => ({
+        item,
+        brand,
+        quantity,
+        unit,
+      })),
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      (data as { error?: string }).error || "Failed to send supplier email"
+    );
+  }
+
+  return { quoteId, quoteNumber };
+}
