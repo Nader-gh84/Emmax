@@ -31,6 +31,14 @@ function StatusBadge({ status }: { status: Quote["status"] }) {
     );
   }
 
+  if (status === "declined") {
+    return (
+      <span className="inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-red-300">
+        Declined
+      </span>
+    );
+  }
+
   if (status === "sent") {
     return (
       <span className="inline-flex rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-1 text-xs font-medium uppercase tracking-wide text-green-400">
@@ -67,7 +75,9 @@ function SentQuotePreviewModal({
             <p className="mt-1 text-sm text-slate-400">
               {quote.status === "accepted"
                 ? `Accepted ${quote.confirmed_at ? formatQuoteDate(quote.confirmed_at) : "—"}`
-                : `Sent ${quote.sent_at ? formatQuoteDate(quote.sent_at) : "—"}`}
+                : quote.status === "declined"
+                  ? `Declined ${quote.declined_at ? formatQuoteDate(quote.declined_at) : "—"}`
+                  : `Sent ${quote.sent_at ? formatQuoteDate(quote.sent_at) : "—"}`}
             </p>
           </div>
           <StatusBadge status={quote.status} />

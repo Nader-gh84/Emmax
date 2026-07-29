@@ -8,6 +8,7 @@ import {
   IconDocumentDraft,
   IconInbox,
   IconTruck,
+  IconXCircle,
 } from "@/components/dashboard/icons";
 import { touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
@@ -26,6 +27,8 @@ function NotificationTypeIcon({ type }: { type: string }) {
       return <IconDocumentDraft className={className} />;
     case "quote_accepted":
       return <IconCheckCircle className={className} />;
+    case "quote_declined":
+      return <IconXCircle className={className} />;
     case "supplier_price":
       return <IconTruck className={className} />;
     case "employee_clock":
@@ -41,6 +44,8 @@ function typeAccent(type: string) {
       return "bg-amber-500/15 text-amber-300 ring-amber-500/30";
     case "quote_accepted":
       return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
+    case "quote_declined":
+      return "bg-red-500/15 text-red-300 ring-red-500/30";
     case "supplier_price":
       return "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30";
     case "employee_clock":

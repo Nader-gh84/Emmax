@@ -258,3 +258,86 @@ export async function confirmQuoteByConfirmationToken(
 
   return (data ?? {}) as ConfirmQuoteRpcResult;
 }
+
+export interface DeclineQuoteRpcResult {
+  success: boolean;
+  alreadyDeclined?: boolean;
+  declinedAt?: string | null;
+  quoteId?: string;
+  customerName?: string;
+  projectName?: string;
+  declineReason?: string | null;
+  error?: string;
+}
+
+/**
+ * RPC-only decline. No admin fallback that can succeed without a notification.
+ * Status update + quote_declined notification are atomic inside the SQL function.
+ */
+export async function declineQuoteByConfirmationToken(
+  token: string,
+  reason?: string | null
+): Promise<DeclineQuoteRpcResult> {
+  const normalizedToken = token.trim();
+
+  if (!isUuid(normalizedToken)) {
+    return { success: false, error: "invalid_token" };
+  }
+
+  const supabase = createAnonClient();
+  const { data, error } = await supabase.rpc(
+    "decline_quote_by_confirmation_token",
+    {
+      p_token: normalizedToken,
+      p_reason: reason?.trim() || null,
+    }
+  );
+
+  if (error) {
+    logSupabaseError("declineQuoteByConfirmationToken.rpc", error, {
+      token: normalizedToken,
+    });
+
+    if (
+      error.code === "42883" ||
+      error.message.includes("decline_quote_by_confirmation_token")
+    ) {
+      throw new Error(
+        "Quote decline is not configured. Run migration 016_quote_decline.sql."
+      );
+    }
+
+    throw new Error(
+      `Failed to decline quote. | ${error.message} | code=${error.code ?? "unknown"}`
+    );
+  }
+
+  const result = (data ?? {}) as {
+    success?: boolean;
+    already_declined?: boolean;
+    declined_at?: string | null;
+    quote_id?: string;
+    customer_name?: string | null;
+    project_name?: string | null;
+    decline_reason?: string | null;
+    error?: string;
+  };
+
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+
+  if (!result.success) {
+    return { success: false, error: "decline_failed" };
+  }
+
+  return {
+    success: true,
+    alreadyDeclined: Boolean(result.already_declined),
+    declinedAt: result.declined_at ?? null,
+    quoteId: result.quote_id,
+    customerName: result.customer_name ?? undefined,
+    projectName: result.project_name ?? undefined,
+    declineReason: result.decline_reason ?? null,
+  };
+}
