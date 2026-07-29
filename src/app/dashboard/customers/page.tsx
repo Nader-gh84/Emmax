@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { CustomersEmptyState } from "@/components/dashboard/customers-empty-state";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -496,6 +497,39 @@ export default function CustomersPage() {
     );
   }
 
+  // Step 1: empty state only — no stats row / table when there are zero customers.
+  if (customers.length === 0) {
+    return (
+      <main className="flex min-h-full flex-1 flex-col">
+        {error && (
+          <div className="mx-auto mt-6 w-full max-w-lg rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mx-auto mt-6 w-full max-w-lg rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
+            {success}
+          </div>
+        )}
+
+        <CustomersEmptyState onAddCustomer={openAddForm} />
+
+        {showForm && (
+          <CustomerFormModal
+            title="Add Customer"
+            initialForm={formData}
+            isSaving={isSaving}
+            isImporting={isImporting}
+            onClose={closeForm}
+            onSubmit={handleSave}
+            onImportContact={handleImportContact}
+          />
+        )}
+      </main>
+    );
+  }
+
+  // Temporary list until Step 2 (table redesign).
   return (
     <main className="flex-1 p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-5xl">
@@ -527,32 +561,17 @@ export default function CustomersPage() {
           </div>
         )}
 
-        {customers.length === 0 ? (
-          <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-            <p className="text-base text-slate-400">
-              No customers yet. Add your first customer to get started.
-            </p>
-            <button
-              type="button"
-              onClick={openAddForm}
-              className={`${touchBtnPrimary} mt-6`}
-            >
-              + Add Customer
-            </button>
-          </div>
-        ) : (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {customers.map((customer) => (
-              <CustomerCard
-                key={customer.id}
-                customer={customer}
-                isDeleting={deletingId === customer.id}
-                onEdit={() => openEditForm(customer)}
-                onDelete={() => handleDelete(customer)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {customers.map((customer) => (
+            <CustomerCard
+              key={customer.id}
+              customer={customer}
+              isDeleting={deletingId === customer.id}
+              onEdit={() => openEditForm(customer)}
+              onDelete={() => handleDelete(customer)}
+            />
+          ))}
+        </div>
       </div>
 
       {showForm && (
