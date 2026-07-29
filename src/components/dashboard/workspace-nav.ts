@@ -26,7 +26,7 @@ export const workspaceNavItems = [
   },
   {
     label: "Pre Invoice",
-    href: "/dashboard/quotes",
+    href: "/dashboard/voice-quote-builder",
     icon: IconInvoice,
   },
   {
