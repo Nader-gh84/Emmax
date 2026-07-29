@@ -1,6 +1,7 @@
 export const NOTIFICATION_TYPES = [
   "draft_quote",
   "quote_accepted",
+  "quote_declined",
   "supplier_price",
   "employee_clock",
 ] as const;
@@ -14,6 +15,8 @@ export interface NotificationMetadata {
   supplier_name?: string | null;
   supplier_email?: string | null;
   item_count?: number | null;
+  project_name?: string | null;
+  decline_reason?: string | null;
   [key: string]: unknown;
 }
 
@@ -44,6 +47,10 @@ export function getNotificationHref(notification: AppNotification): string | nul
   }
 
   if (notification.type === "quote_accepted") {
+    return `/dashboard/quotes?quote=${notification.quote_id}`;
+  }
+
+  if (notification.type === "quote_declined") {
     return `/dashboard/quotes?quote=${notification.quote_id}`;
   }
 

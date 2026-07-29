@@ -144,7 +144,7 @@ export function formatTimer(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export type QuoteStatus = "draft" | "sent" | "accepted";
+export type QuoteStatus = "draft" | "sent" | "accepted" | "declined";
 
 export interface StoredMaterial {
   item: string;
@@ -191,6 +191,8 @@ export interface Quote {
   pdf_url: string | null;
   confirmation_token: string;
   confirmed_at: string | null;
+  declined_at?: string | null;
+  decline_reason?: string | null;
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
