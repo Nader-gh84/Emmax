@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { IconMicrophone } from "@/components/dashboard/icons";
+import { UserMenu } from "@/components/dashboard/user-menu";
 import { IconWaveform } from "@/components/dashboard/workspace-icons";
 import { workspaceNavItems } from "@/components/dashboard/workspace-nav";
 
@@ -56,7 +57,7 @@ export function WorkspaceSidebar() {
         })}
       </nav>
 
-      <div className="p-3">
+      <div className="space-y-3 p-3">
         <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] p-4">
           <div className="flex items-start gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-accent to-cyan-400 text-sm font-bold text-white shadow-lg shadow-accent/30">
@@ -85,6 +86,10 @@ export function WorkspaceSidebar() {
               </span>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] px-1.5 py-1">
+          <UserMenu variant="sidebar" menuAlign="left" />
         </div>
       </div>
     </aside>
