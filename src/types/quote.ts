@@ -9,9 +9,17 @@ export interface MaterialItem {
   unitPrice: number;
 }
 
+export interface LabourItem {
+  id: string;
+  description: string;
+  hours: number;
+  rate: number;
+}
+
 export interface TranscribeResponse {
   transcript: string;
   materials: Omit<MaterialItem, "id">[];
+  labourItems: Omit<LabourItem, "id">[];
   scopeOfWork: string;
 }
 
@@ -41,8 +49,23 @@ export function createMaterialItem(
   };
 }
 
+export function createLabourItem(
+  partial: Partial<LabourItem> = {}
+): LabourItem {
+  return {
+    id: generateId(),
+    description: partial.description ?? "",
+    hours: partial.hours ?? 1,
+    rate: partial.rate ?? 0,
+  };
+}
+
 export function materialLineTotal(item: MaterialItem): number {
   return item.quantity * item.unitPrice;
+}
+
+export function labourLineTotal(item: LabourItem): number {
+  return item.hours * item.rate;
 }
 
 export function calculateQuoteTotals(
@@ -57,6 +80,55 @@ export function calculateQuoteTotals(
   const grandTotal = subtotal + tax;
 
   return { subtotal, tax, grandTotal };
+}
+
+export type DiscountMode = "amount" | "percent";
+
+export function calculateVoiceQuoteTotals({
+  materials,
+  labourItems,
+  gstRate,
+  pstRate,
+  discountMode,
+  discountAmount,
+  discountPercent,
+}: {
+  materials: MaterialItem[];
+  labourItems: LabourItem[];
+  gstRate: number;
+  pstRate: number;
+  discountMode: DiscountMode;
+  discountAmount: number;
+  discountPercent: number;
+}) {
+  const materialsTotal = materials.reduce(
+    (sum, item) => sum + materialLineTotal(item),
+    0
+  );
+  const labourTotal = labourItems.reduce(
+    (sum, item) => sum + labourLineTotal(item),
+    0
+  );
+  const subtotal = materialsTotal + labourTotal;
+  const discountApplied =
+    discountMode === "percent"
+      ? subtotal * (sanitizeNumeric(discountPercent) / 100)
+      : sanitizeNumeric(discountAmount);
+  const taxable = Math.max(subtotal - discountApplied, 0);
+  const gst = taxable * (sanitizeNumeric(gstRate) / 100);
+  const pst = taxable * (sanitizeNumeric(pstRate) / 100);
+  const grandTotal = taxable + gst + pst;
+
+  return {
+    materialsTotal,
+    labourTotal,
+    subtotal,
+    discountApplied,
+    taxable,
+    gst,
+    pst,
+    grandTotal,
+  };
 }
 
 export function formatCurrency(amount: number): string {
@@ -82,6 +154,12 @@ export interface StoredMaterial {
   unitPrice: number;
 }
 
+export interface StoredLabourItem {
+  description: string;
+  hours: number;
+  rate: number;
+}
+
 export interface Quote {
   id: string;
   user_id: string;
@@ -92,7 +170,15 @@ export interface Quote {
   project_name: string | null;
   notes: string | null;
   materials: StoredMaterial[];
+  labour_items?: StoredLabourItem[];
   tax_rate: number;
+  gst_rate?: number;
+  pst_rate?: number;
+  discount_amount?: number;
+  discount_percent?: number;
+  quote_number?: string | null;
+  valid_until?: string | null;
+  price_display_mode?: "detailed" | "merged";
   validity_days: number;
   subtotal: number;
   tax: number;
@@ -114,6 +200,14 @@ export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
     quantity: sanitizeNumeric(quantity),
     unit,
     unitPrice: sanitizeNumeric(unitPrice),
+  }));
+}
+
+export function labourToStored(labourItems: LabourItem[]): StoredLabourItem[] {
+  return labourItems.map(({ description, hours, rate }) => ({
+    description,
+    hours: sanitizeNumeric(hours),
+    rate: sanitizeNumeric(rate),
   }));
 }
 
