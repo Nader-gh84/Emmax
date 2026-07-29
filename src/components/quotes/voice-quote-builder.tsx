@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   IconDocument,
   IconEmployee,
@@ -14,71 +14,34 @@ import {
   IconSend,
   IconSparkle,
 } from "@/components/dashboard/workspace-icons";
-import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
-import { formatCurrency } from "@/types/quote";
+import {
+  touchBtnPrimary,
+  touchBtnSecondary,
+  touchInput,
+} from "@/components/quotes/ui";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { mapExtractionToLineItems } from "@/lib/quote-extraction";
+import {
+  DiscountMode,
+  LabourItem,
+  MaterialItem,
+  calculateVoiceQuoteTotals,
+  createLabourItem,
+  createMaterialItem,
+  formatCurrency,
+  formatTimer,
+  labourLineTotal,
+  materialLineTotal,
+} from "@/types/quote";
 
-type LineKind = "material" | "labour";
+type PipelinePhase =
+  | "idle"
+  | "transcribing"
+  | "extracting"
+  | "ready"
+  | "error";
 
-interface MockLineItem {
-  id: string;
-  kind: LineKind;
-  description: string;
-  brand: string;
-  qty: number;
-  unit: string;
-  unitPrice: number;
-}
-
-const MOCK_ITEMS: MockLineItem[] = [
-  {
-    id: "1",
-    kind: "material",
-    description: '14/2 NMD90 Wire',
-    brand: "Nexans",
-    qty: 250,
-    unit: "ft",
-    unitPrice: 0.85,
-  },
-  {
-    id: "2",
-    kind: "material",
-    description: "20A Dual USB Outlet",
-    brand: "Leviton",
-    qty: 8,
-    unit: "each",
-    unitPrice: 42.5,
-  },
-  {
-    id: "3",
-    kind: "material",
-    description: "LED Pot Light 4in",
-    brand: "Liteline",
-    qty: 12,
-    unit: "each",
-    unitPrice: 28,
-  },
-  {
-    id: "4",
-    kind: "labour",
-    description: "Labour – Installation",
-    brand: "",
-    qty: 6,
-    unit: "hour",
-    unitPrice: 95,
-  },
-  {
-    id: "5",
-    kind: "labour",
-    description: "Labour – Rough-in",
-    brand: "",
-    qty: 3,
-    unit: "hour",
-    unitPrice: 85,
-  },
-];
-
-const MOCK_TRANSCRIPT =
-  "Need 250 feet of 14/2 Nexans, eight Leviton 20 amp USB outlets, twelve Liteline pot lights, six hours installation labour and three hours rough-in.";
+type AddItemKind = "material" | "labour";
 
 const ACTIONS = [
   { id: "download", label: "Download PDF", icon: IconDocument },
@@ -88,6 +51,9 @@ const ACTIONS = [
   { id: "new-customer", label: "Send to New Customer", icon: IconUserPlus },
   { id: "supplier", label: "Send to Supplier", icon: IconSuppliers },
 ] as const;
+
+const DEFAULT_GST_RATE = 5;
+const DEFAULT_PST_RATE = 7;
 
 function IconPencil({ className }: { className?: string }) {
   return (
@@ -177,50 +143,317 @@ function IconCatalog({ className }: { className?: string }) {
   );
 }
 
-function lineTotal(item: MockLineItem) {
-  return item.qty * item.unitPrice;
-}
+type TableRow =
+  | { kind: "material"; item: MaterialItem }
+  | { kind: "labour"; item: LabourItem };
 
 export function VoiceQuoteBuilder() {
-  const [isRecording, setIsRecording] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const [showAddItem, setShowAddItem] = useState(false);
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
-  const [transcript, setTranscript] = useState(MOCK_TRANSCRIPT);
+  const [isEditingItems, setIsEditingItems] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [notes, setNotes] = useState("");
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [labourItems, setLabourItems] = useState<LabourItem[]>([]);
+  const [phase, setPhase] = useState<PipelinePhase>("idle");
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
+  const [catalogNotice, setCatalogNotice] = useState<string | null>(null);
   const [priceMode, setPriceMode] = useState<"detailed" | "merged">("detailed");
   const [mobileAction, setMobileAction] = useState("");
-  const [discountMode, setDiscountMode] = useState<"amount" | "percent">("amount");
+  const [discountMode, setDiscountMode] = useState<DiscountMode>("amount");
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [gstRate, setGstRate] = useState(DEFAULT_GST_RATE);
+  const [pstRate, setPstRate] = useState(DEFAULT_PST_RATE);
+  const [calcFlash, setCalcFlash] = useState(false);
 
-  const gstRate = 5;
-  const pstRate = 7;
-  const discountAmount = 50;
+  const processTranscript = useCallback(
+    async (nextTranscript: string, append: boolean) => {
+      setPhase("extracting");
+      setPipelineError(null);
 
-  const materialsTotal = useMemo(
-    () =>
-      MOCK_ITEMS.filter((item) => item.kind === "material").reduce(
-        (sum, item) => sum + lineTotal(item),
-        0
-      ),
+      try {
+        const response = await fetch("/api/extract-quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transcript: nextTranscript }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              "Couldn't parse that, try again or add items manually"
+          );
+        }
+
+        const mapped = mapExtractionToLineItems(
+          data.materials ?? [],
+          data.labourItems ?? [],
+          data.scopeOfWork ?? ""
+        );
+
+        if (append) {
+          setMaterials((current) => [...current, ...mapped.materials]);
+          setLabourItems((current) => [...current, ...mapped.labourItems]);
+          setNotes((current) =>
+            [current, mapped.scopeOfWork].filter(Boolean).join("\n\n")
+          );
+        } else {
+          setMaterials(mapped.materials);
+          setLabourItems(mapped.labourItems);
+          setNotes(mapped.scopeOfWork);
+        }
+
+        setPhase("ready");
+      } catch (error) {
+        setPhase("error");
+        setPipelineError(
+          error instanceof Error
+            ? error.message
+            : "Couldn't parse that, try again or add items manually"
+        );
+      }
+    },
     []
   );
-  const labourTotal = useMemo(
-    () =>
-      MOCK_ITEMS.filter((item) => item.kind === "labour").reduce(
-        (sum, item) => sum + lineTotal(item),
-        0
-      ),
-    []
+
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      const append = Boolean(transcript.trim()) || materials.length > 0 || labourItems.length > 0;
+      setPhase("transcribing");
+      setPipelineError(null);
+      setIsEditingTranscript(false);
+
+      try {
+        const formData = new FormData();
+        formData.append("audio", blob, "recording.webm");
+        formData.append("extract", "false");
+
+        const response = await fetch("/api/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Transcription failed");
+        }
+
+        const nextChunk =
+          typeof data.transcript === "string" ? data.transcript.trim() : "";
+        if (!nextChunk) {
+          throw new Error("No transcript returned. Please try again.");
+        }
+
+        const combinedTranscript = append
+          ? [transcript.trim(), nextChunk].filter(Boolean).join(" ")
+          : nextChunk;
+
+        setTranscript(combinedTranscript);
+        await processTranscript(nextChunk, append);
+      } catch (error) {
+        setPhase("error");
+        setPipelineError(
+          error instanceof Error ? error.message : "Failed to process recording"
+        );
+      }
+    },
+    [labourItems.length, materials.length, processTranscript, transcript]
   );
-  const subtotal = materialsTotal + labourTotal;
-  const taxable = Math.max(subtotal - discountAmount, 0);
-  const gst = taxable * (gstRate / 100);
-  const pst = taxable * (pstRate / 100);
-  const grandTotal = taxable + gst + pst;
+
+  const {
+    status: recorderStatus,
+    error: recorderError,
+    seconds,
+    startRecording,
+    stopRecording,
+  } = useVoiceRecorder({
+    onRecordingComplete: handleRecordingComplete,
+    silenceDurationMs: 2000,
+  });
+
+  const isRecording = recorderStatus === "recording";
+  const isBusy =
+    isRecording || phase === "transcribing" || phase === "extracting";
+
+  const totals = useMemo(
+    () =>
+      calculateVoiceQuoteTotals({
+        materials,
+        labourItems,
+        gstRate,
+        pstRate,
+        discountMode,
+        discountAmount,
+        discountPercent,
+      }),
+    [
+      materials,
+      labourItems,
+      gstRate,
+      pstRate,
+      discountMode,
+      discountAmount,
+      discountPercent,
+    ]
+  );
+
+  const tableRows: TableRow[] = useMemo(
+    () => [
+      ...materials.map((item) => ({ kind: "material" as const, item })),
+      ...labourItems.map((item) => ({ kind: "labour" as const, item })),
+    ],
+    [materials, labourItems]
+  );
+
+  const itemCount = tableRows.length;
+
+  async function handleMicClick() {
+    if (phase === "transcribing" || phase === "extracting") return;
+    if (isRecording) {
+      await stopRecording();
+      return;
+    }
+    await startRecording();
+  }
+
+  function handleContinueSpeaking() {
+    if (isBusy) return;
+    void startRecording();
+  }
+
+  function updateMaterial(
+    id: string,
+    field: keyof MaterialItem,
+    value: string
+  ) {
+    setMaterials((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        if (field === "quantity" || field === "unitPrice") {
+          return { ...item, [field]: parseFloat(value) || 0 };
+        }
+        return { ...item, [field]: value };
+      })
+    );
+  }
+
+  function updateLabour(id: string, field: keyof LabourItem, value: string) {
+    setLabourItems((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        if (field === "hours" || field === "rate") {
+          return { ...item, [field]: parseFloat(value) || 0 };
+        }
+        return { ...item, [field]: value };
+      })
+    );
+  }
+
+  function deleteRow(row: TableRow) {
+    if (row.kind === "material") {
+      setMaterials((current) => current.filter((item) => item.id !== row.item.id));
+    } else {
+      setLabourItems((current) =>
+        current.filter((item) => item.id !== row.item.id)
+      );
+    }
+  }
+
+  function handleAddItem(payload: {
+    kind: AddItemKind;
+    description: string;
+    brand: string;
+    qty: number;
+    unit: string;
+    unitPrice: number;
+  }) {
+    if (payload.kind === "labour") {
+      setLabourItems((current) => [
+        ...current,
+        createLabourItem({
+          description: payload.description,
+          hours: payload.qty,
+          rate: payload.unitPrice,
+        }),
+      ]);
+    } else {
+      setMaterials((current) => [
+        ...current,
+        createMaterialItem({
+          item: payload.description,
+          brand: payload.brand,
+          quantity: payload.qty,
+          unit: payload.unit,
+          unitPrice: payload.unitPrice,
+        }),
+      ]);
+    }
+    setShowAddItem(false);
+    if (phase === "idle" || phase === "error") setPhase("ready");
+  }
+
+  function handleCalculate() {
+    setCalcFlash(true);
+    window.setTimeout(() => setCalcFlash(false), 600);
+  }
+
+  function handleSmartAdd() {
+    setCatalogNotice(
+      "Smart Add from Catalog isn’t available yet — no catalog lookup exists in the app. Add items manually for now."
+    );
+    window.setTimeout(() => setCatalogNotice(null), 5000);
+  }
+
+  const statusCard = (() => {
+    if (phase === "transcribing") {
+      return {
+        title: "Ema is listening to your recording",
+        detail: "Transcribing with Whisper…",
+        footer: null as string | null,
+        footerTone: "cyan" as const,
+      };
+    }
+    if (phase === "extracting") {
+      return {
+        title: "Ema is building your pre-invoice",
+        detail: "Extracting materials and labour with GPT-4o…",
+        footer: null,
+        footerTone: "cyan" as const,
+      };
+    }
+    if (phase === "error") {
+      return {
+        title: "Couldn’t finish extraction",
+        detail:
+          pipelineError ||
+          "Couldn't parse that, try again or add items manually",
+        footer: "Try recording again or add items manually",
+        footerTone: "red" as const,
+      };
+    }
+    if (phase === "ready") {
+      return {
+        title: "Ema has generated your pre-invoice",
+        detail: `${itemCount} item${itemCount === 1 ? "" : "s"} added`,
+        footer: "Pre-invoice generated successfully!",
+        footerTone: "emerald" as const,
+      };
+    }
+    return {
+      title: "Ready when you are",
+      detail: "Tap the mic and describe materials, quantities, and labour.",
+      footer: null,
+      footerTone: "cyan" as const,
+    };
+  })();
 
   return (
     <div className="flex min-h-full min-w-0 flex-1">
       <div className="min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-        {/* Header */}
         <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-3">
@@ -245,10 +478,14 @@ export function VoiceQuoteBuilder() {
           </button>
         </header>
 
+        {(recorderError || catalogNotice) && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            {recorderError || catalogNotice}
+          </div>
+        )}
+
         <div className="mt-6 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-          {/* Left column */}
           <div className="space-y-4">
-            {/* Step 1 */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white">
@@ -266,18 +503,29 @@ export function VoiceQuoteBuilder() {
               <div className="mt-6 flex flex-col items-center">
                 <button
                   type="button"
-                  onClick={() => setIsRecording((current) => !current)}
-                  className={`flex h-24 w-24 items-center justify-center rounded-full shadow-lg transition ${
+                  onClick={() => void handleMicClick()}
+                  disabled={phase === "transcribing" || phase === "extracting"}
+                  className={`flex h-24 w-24 items-center justify-center rounded-full shadow-lg transition disabled:opacity-50 ${
                     isRecording
                       ? "bg-red-500 shadow-red-500/30 ring-4 ring-red-500/20"
                       : "bg-accent shadow-accent/30 ring-4 ring-accent/20 hover:bg-blue-600"
                   }`}
                   aria-label={isRecording ? "Stop recording" : "Start recording"}
                 >
-                  <IconMicrophone className="h-10 w-10 text-white" />
+                  {phase === "transcribing" || phase === "extracting" ? (
+                    <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+                  ) : (
+                    <IconMicrophone className="h-10 w-10 text-white" />
+                  )}
                 </button>
                 <p className="mt-3 text-sm font-medium text-slate-300">
-                  {isRecording ? "Tap to stop" : "Tap to record"}
+                  {phase === "transcribing"
+                    ? "Transcribing…"
+                    : phase === "extracting"
+                      ? "Extracting…"
+                      : isRecording
+                        ? "Tap to stop"
+                        : "Tap to record"}
                 </p>
 
                 <div className="mt-5 flex h-12 w-full items-end justify-center gap-1 rounded-xl border border-white/10 bg-navy/50 px-3 py-2">
@@ -296,7 +544,7 @@ export function VoiceQuoteBuilder() {
                 </div>
 
                 <p className="mt-3 font-mono text-2xl font-bold text-white">
-                  {isRecording ? "00:18" : "00:00"}
+                  {formatTimer(isRecording ? seconds : 0)}
                 </p>
                 <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
@@ -307,7 +555,6 @@ export function VoiceQuoteBuilder() {
               </div>
             </section>
 
-            {/* Step 2 */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white">
@@ -320,52 +567,95 @@ export function VoiceQuoteBuilder() {
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-blue-400"
                 >
                   <IconPencil className="h-3.5 w-3.5" />
-                  Edit
+                  {isEditingTranscript ? "Done" : "Edit"}
                 </button>
               </div>
-              {isEditingTranscript ? (
+
+              {phase === "transcribing" && !transcript ? (
+                <div className="mt-4 flex items-center gap-3 text-sm text-slate-400">
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+                  Transcribing your recording…
+                </div>
+              ) : isEditingTranscript ? (
                 <textarea
                   value={transcript}
                   onChange={(event) => setTranscript(event.target.value)}
+                  placeholder="Your transcript will appear here…"
                   className="mt-4 min-h-[120px] w-full rounded-xl border border-white/10 bg-navy/40 px-3 py-2.5 text-sm text-slate-200 outline-none focus:border-accent"
                 />
               ) : (
                 <p className="mt-4 text-sm leading-relaxed text-slate-300">
-                  {transcript}
+                  {transcript ||
+                    "Tap the mic to start. Your transcript will show up here."}
                 </p>
+              )}
+
+              {isEditingTranscript && transcript.trim() && (
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => {
+                    setIsEditingTranscript(false);
+                    void processTranscript(transcript.trim(), false);
+                  }}
+                  className={`${touchBtnSecondary} mt-3 w-full text-xs`}
+                >
+                  Re-extract from transcript
+                </button>
               )}
             </section>
           </div>
 
-          {/* Main column */}
           <div className="min-w-0 space-y-4">
-            {/* Step 3 status */}
             <section className="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/15 via-white/[0.04] to-cyan-500/10 p-5">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-cyan-400 text-sm font-bold text-white shadow-lg shadow-accent/30">
-                  Ema
+                  {phase === "transcribing" || phase === "extracting" ? (
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  ) : (
+                    "Ema"
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base font-semibold text-white sm:text-lg">
-                    Ema has generated your pre-invoice
+                    {statusCard.title}
                   </h2>
-                  <p className="mt-1 text-sm text-slate-300">
-                    {MOCK_ITEMS.length} items added
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    You can edit items, merge materials or continue speaking.
-                  </p>
-                  <p className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-emerald-400">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20">
-                      <IconCheck className="h-3.5 w-3.5" />
-                    </span>
-                    Pre-invoice generated successfully!
-                  </p>
+                  <p className="mt-1 text-sm text-slate-300">{statusCard.detail}</p>
+                  {phase === "ready" && (
+                    <p className="mt-1 text-sm text-slate-400">
+                      You can edit items, merge materials or continue speaking.
+                    </p>
+                  )}
+                  {statusCard.footer && (
+                    <p
+                      className={`mt-3 inline-flex items-center gap-2 text-sm font-medium ${
+                        statusCard.footerTone === "emerald"
+                          ? "text-emerald-400"
+                          : statusCard.footerTone === "red"
+                            ? "text-red-400"
+                            : "text-cyan-400"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                          statusCard.footerTone === "emerald"
+                            ? "bg-emerald-500/20"
+                            : statusCard.footerTone === "red"
+                              ? "bg-red-500/20"
+                              : "bg-cyan-500/20"
+                        }`}
+                      >
+                        {statusCard.footerTone === "red" ? "!" : (
+                          <IconCheck className="h-3.5 w-3.5" />
+                        )}
+                      </span>
+                      {statusCard.footer}
+                    </p>
+                  )}
                 </div>
               </div>
             </section>
 
-            {/* Step 4 table */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold text-white">
@@ -375,13 +665,15 @@ export function VoiceQuoteBuilder() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
+                    onClick={() => setIsEditingItems((current) => !current)}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-blue-400"
                   >
                     <IconPencil className="h-3.5 w-3.5" />
-                    Edit Items
+                    {isEditingItems ? "Done Editing" : "Edit Items"}
                   </button>
                   <button
                     type="button"
+                    onClick={() => setPriceMode("merged")}
                     className={`${touchBtnSecondary} gap-2 px-3 py-2 text-xs`}
                     title="Combine materials into a single line on the customer-facing quote"
                   >
@@ -407,61 +699,244 @@ export function VoiceQuoteBuilder() {
                     </tr>
                   </thead>
                   <tbody>
-                    {MOCK_ITEMS.map((item, index) => (
-                      <tr key={item.id} className="border-b border-white/5">
-                        <td className="py-3 pr-2 text-slate-500">{index + 1}</td>
-                        <td className="py-3 pr-2 font-medium text-white">
-                          {item.description}
-                        </td>
-                        <td className="py-3 pr-2 text-slate-300">
-                          {item.kind === "labour" ? (
-                            <span className="inline-flex items-center gap-1.5 text-cyan-400">
-                              <IconEmployee className="h-4 w-4" />
-                              Labour
-                            </span>
-                          ) : (
-                            item.brand
-                          )}
-                        </td>
-                        <td className="py-3 pr-2 text-slate-300">{item.qty}</td>
-                        <td className="py-3 pr-2 text-slate-300">{item.unit}</td>
-                        <td className="py-3 pr-2 text-slate-300">
-                          {formatCurrency(item.unitPrice)}
-                        </td>
-                        <td className="py-3 pr-2 font-medium text-white">
-                          {formatCurrency(lineTotal(item))}
-                        </td>
-                        <td className="py-3">
-                          <button
-                            type="button"
-                            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-red-500/10 hover:text-red-400"
-                            aria-label={`Delete ${item.description}`}
-                          >
-                            <IconTrash className="h-4 w-4" />
-                          </button>
+                    {tableRows.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="py-8 text-center text-sm text-slate-500"
+                        >
+                          No items yet. Record a quote or add an item manually.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      tableRows.map((row, index) => {
+                        if (row.kind === "material") {
+                          const item = row.item;
+                          return (
+                            <tr key={item.id} className="border-b border-white/5">
+                              <td className="py-3 pr-2 text-slate-500">
+                                {index + 1}
+                              </td>
+                              <td className="py-3 pr-2 font-medium text-white">
+                                {isEditingItems ? (
+                                  <input
+                                    value={item.item}
+                                    onChange={(event) =>
+                                      updateMaterial(
+                                        item.id,
+                                        "item",
+                                        event.target.value
+                                      )
+                                    }
+                                    className={`${touchInput} min-h-[36px] px-2 py-1 text-sm`}
+                                  />
+                                ) : (
+                                  item.item
+                                )}
+                              </td>
+                              <td className="py-3 pr-2 text-slate-300">
+                                {isEditingItems ? (
+                                  <input
+                                    value={item.brand}
+                                    onChange={(event) =>
+                                      updateMaterial(
+                                        item.id,
+                                        "brand",
+                                        event.target.value
+                                      )
+                                    }
+                                    className={`${touchInput} min-h-[36px] px-2 py-1 text-sm`}
+                                  />
+                                ) : (
+                                  item.brand || "—"
+                                )}
+                              </td>
+                              <td className="py-3 pr-2 text-slate-300">
+                                {isEditingItems ? (
+                                  <input
+                                    type="number"
+                                    value={item.quantity}
+                                    onChange={(event) =>
+                                      updateMaterial(
+                                        item.id,
+                                        "quantity",
+                                        event.target.value
+                                      )
+                                    }
+                                    className={`${touchInput} min-h-[36px] w-20 px-2 py-1 text-sm`}
+                                  />
+                                ) : (
+                                  item.quantity
+                                )}
+                              </td>
+                              <td className="py-3 pr-2 text-slate-300">
+                                {isEditingItems ? (
+                                  <input
+                                    value={item.unit}
+                                    onChange={(event) =>
+                                      updateMaterial(
+                                        item.id,
+                                        "unit",
+                                        event.target.value
+                                      )
+                                    }
+                                    className={`${touchInput} min-h-[36px] w-20 px-2 py-1 text-sm`}
+                                  />
+                                ) : (
+                                  item.unit
+                                )}
+                              </td>
+                              <td className="py-3 pr-2 text-slate-300">
+                                {isEditingItems ? (
+                                  <input
+                                    type="number"
+                                    value={item.unitPrice}
+                                    onChange={(event) =>
+                                      updateMaterial(
+                                        item.id,
+                                        "unitPrice",
+                                        event.target.value
+                                      )
+                                    }
+                                    className={`${touchInput} min-h-[36px] w-24 px-2 py-1 text-sm`}
+                                  />
+                                ) : (
+                                  formatCurrency(item.unitPrice)
+                                )}
+                              </td>
+                              <td className="py-3 pr-2 font-medium text-white">
+                                {formatCurrency(materialLineTotal(item))}
+                              </td>
+                              <td className="py-3">
+                                <button
+                                  type="button"
+                                  onClick={() => deleteRow(row)}
+                                  className="rounded-lg p-1.5 text-slate-500 transition hover:bg-red-500/10 hover:text-red-400"
+                                  aria-label={`Delete ${item.item}`}
+                                >
+                                  <IconTrash className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        const item = row.item;
+                        return (
+                          <tr key={item.id} className="border-b border-white/5">
+                            <td className="py-3 pr-2 text-slate-500">
+                              {index + 1}
+                            </td>
+                            <td className="py-3 pr-2 font-medium text-white">
+                              {isEditingItems ? (
+                                <input
+                                  value={item.description}
+                                  onChange={(event) =>
+                                    updateLabour(
+                                      item.id,
+                                      "description",
+                                      event.target.value
+                                    )
+                                  }
+                                  className={`${touchInput} min-h-[36px] px-2 py-1 text-sm`}
+                                />
+                              ) : (
+                                item.description
+                              )}
+                            </td>
+                            <td className="py-3 pr-2 text-slate-300">
+                              <span className="inline-flex items-center gap-1.5 text-cyan-400">
+                                <IconEmployee className="h-4 w-4" />
+                                Labour
+                              </span>
+                            </td>
+                            <td className="py-3 pr-2 text-slate-300">
+                              {isEditingItems ? (
+                                <input
+                                  type="number"
+                                  value={item.hours}
+                                  onChange={(event) =>
+                                    updateLabour(
+                                      item.id,
+                                      "hours",
+                                      event.target.value
+                                    )
+                                  }
+                                  className={`${touchInput} min-h-[36px] w-20 px-2 py-1 text-sm`}
+                                />
+                              ) : (
+                                item.hours
+                              )}
+                            </td>
+                            <td className="py-3 pr-2 text-slate-300">hour</td>
+                            <td className="py-3 pr-2 text-slate-300">
+                              {isEditingItems ? (
+                                <input
+                                  type="number"
+                                  value={item.rate}
+                                  onChange={(event) =>
+                                    updateLabour(
+                                      item.id,
+                                      "rate",
+                                      event.target.value
+                                    )
+                                  }
+                                  className={`${touchInput} min-h-[36px] w-24 px-2 py-1 text-sm`}
+                                />
+                              ) : (
+                                formatCurrency(item.rate)
+                              )}
+                            </td>
+                            <td className="py-3 pr-2 font-medium text-white">
+                              {formatCurrency(labourLineTotal(item))}
+                            </td>
+                            <td className="py-3">
+                              <button
+                                type="button"
+                                onClick={() => deleteRow(row)}
+                                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-red-500/10 hover:text-red-400"
+                                aria-label={`Delete ${item.description}`}
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <button type="button" className={`${touchBtnSecondary} gap-2`}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddItem(true)}
+                  className={`${touchBtnSecondary} gap-2`}
+                >
                   + Add item manually
                 </button>
-                <button type="button" className={`${touchBtnSecondary} gap-2`}>
+                <button
+                  type="button"
+                  onClick={handleSmartAdd}
+                  className={`${touchBtnSecondary} gap-2`}
+                >
                   <IconCatalog className="h-4 w-4" />
                   Smart Add from Catalog
                 </button>
               </div>
             </section>
 
-            {/* Summary */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold text-white">Summary</h2>
-                <button type="button" className={`${touchBtnPrimary} px-4 py-2 text-sm`}>
+                <button
+                  type="button"
+                  onClick={handleCalculate}
+                  className={`${touchBtnPrimary} px-4 py-2 text-sm ${
+                    calcFlash ? "ring-2 ring-cyan-300" : ""
+                  }`}
+                >
                   Calculate
                 </button>
               </div>
@@ -470,15 +945,19 @@ export function VoiceQuoteBuilder() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-slate-400">
                     <span>Materials Total</span>
-                    <span className="text-white">{formatCurrency(materialsTotal)}</span>
+                    <span className="text-white">
+                      {formatCurrency(totals.materialsTotal)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-slate-400">
                     <span>Labour Total</span>
-                    <span className="text-white">{formatCurrency(labourTotal)}</span>
+                    <span className="text-white">
+                      {formatCurrency(totals.labourTotal)}
+                    </span>
                   </div>
                   <div className="flex justify-between border-t border-white/10 pt-2 font-semibold text-white">
                     <span>Subtotal</span>
-                    <span>{formatCurrency(subtotal)}</span>
+                    <span>{formatCurrency(totals.subtotal)}</span>
                   </div>
                 </div>
 
@@ -511,22 +990,73 @@ export function VoiceQuoteBuilder() {
                         </button>
                       </div>
                     </div>
-                    <div className="flex justify-between text-white">
-                      <span>{discountMode === "amount" ? "$ amount" : "% off"}</span>
+                    <div className="flex items-center justify-between gap-3 text-white">
                       <span>
-                        {discountMode === "amount"
-                          ? formatCurrency(discountAmount)
-                          : "4.2%"}
+                        {discountMode === "amount" ? "$ amount" : "% off"}
                       </span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={
+                          discountMode === "amount"
+                            ? discountAmount
+                            : discountPercent
+                        }
+                        onChange={(event) => {
+                          const value = parseFloat(event.target.value) || 0;
+                          if (discountMode === "amount") {
+                            setDiscountAmount(value);
+                          } else {
+                            setDiscountPercent(value);
+                          }
+                        }}
+                        className={`${touchInput} min-h-[36px] w-28 px-2 py-1 text-right text-sm`}
+                      />
                     </div>
+                    <p className="mt-1 text-right text-xs text-slate-500">
+                      Applied: {formatCurrency(totals.discountApplied)}
+                    </p>
                   </div>
                   <div className="flex justify-between text-slate-400">
-                    <span>GST ({gstRate}%)</span>
-                    <span className="text-white">{formatCurrency(gst)}</span>
+                    <span className="inline-flex items-center gap-2">
+                      GST
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={gstRate}
+                        onChange={(event) =>
+                          setGstRate(parseFloat(event.target.value) || 0)
+                        }
+                        className={`${touchInput} min-h-[28px] w-14 px-1.5 py-0.5 text-xs`}
+                        aria-label="GST rate"
+                      />
+                      %
+                    </span>
+                    <span className="text-white">
+                      {formatCurrency(totals.gst)}
+                    </span>
                   </div>
                   <div className="flex justify-between text-slate-400">
-                    <span>PST ({pstRate}%)</span>
-                    <span className="text-white">{formatCurrency(pst)}</span>
+                    <span className="inline-flex items-center gap-2">
+                      PST
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={pstRate}
+                        onChange={(event) =>
+                          setPstRate(parseFloat(event.target.value) || 0)
+                        }
+                        className={`${touchInput} min-h-[28px] w-14 px-1.5 py-0.5 text-xs`}
+                        aria-label="PST rate"
+                      />
+                      %
+                    </span>
+                    <span className="text-white">
+                      {formatCurrency(totals.pst)}
+                    </span>
                   </div>
                 </div>
 
@@ -535,14 +1065,13 @@ export function VoiceQuoteBuilder() {
                     Grand Total
                   </p>
                   <p className="mt-1 text-3xl font-bold text-accent">
-                    {formatCurrency(grandTotal)}
+                    {formatCurrency(totals.grandTotal)}
                   </p>
                   <p className="mt-1 text-xs font-semibold text-cyan-400">CAD</p>
                 </div>
               </div>
             </section>
 
-            {/* Desktop action bar */}
             <section className="hidden gap-2 md:grid md:grid-cols-3 lg:grid-cols-6">
               {ACTIONS.map((action) => {
                 const Icon = action.icon;
@@ -559,7 +1088,6 @@ export function VoiceQuoteBuilder() {
               })}
             </section>
 
-            {/* Mobile action bar */}
             <section className="flex gap-2 md:hidden">
               <select
                 value={mobileAction}
@@ -584,12 +1112,12 @@ export function VoiceQuoteBuilder() {
               </button>
             </section>
 
-            {/* Below action bar */}
             <section className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
-                onClick={() => setIsRecording(true)}
-                className="flex items-center gap-3 text-left transition hover:opacity-90"
+                onClick={handleContinueSpeaking}
+                disabled={isBusy}
+                className="flex items-center gap-3 text-left transition hover:opacity-90 disabled:opacity-50"
               >
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-accent/15 text-accent">
                   <IconMicrophone className="h-5 w-5" />
@@ -633,7 +1161,6 @@ export function VoiceQuoteBuilder() {
         </div>
       </div>
 
-      {/* Right sidebar */}
       {showSidebar && (
         <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#0B1220] xl:flex">
           <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
@@ -684,12 +1211,12 @@ export function VoiceQuoteBuilder() {
 
             <div className="space-y-2 border-t border-white/10 pt-4 text-sm">
               {[
-                ["Materials Total", formatCurrency(materialsTotal)],
-                ["Labour Total", formatCurrency(labourTotal)],
-                ["Subtotal", formatCurrency(subtotal)],
-                [`GST (${gstRate}%)`, formatCurrency(gst)],
-                [`PST (${pstRate}%)`, formatCurrency(pst)],
-                ["Discount", formatCurrency(discountAmount)],
+                ["Materials Total", formatCurrency(totals.materialsTotal)],
+                ["Labour Total", formatCurrency(totals.labourTotal)],
+                ["Subtotal", formatCurrency(totals.subtotal)],
+                [`GST (${gstRate}%)`, formatCurrency(totals.gst)],
+                [`PST (${pstRate}%)`, formatCurrency(totals.pst)],
+                ["Discount", formatCurrency(totals.discountApplied)],
               ].map(([label, value]) => (
                 <div key={label} className="flex justify-between gap-3 text-slate-400">
                   <span>{label}</span>
@@ -701,7 +1228,7 @@ export function VoiceQuoteBuilder() {
                   Grand Total
                 </p>
                 <p className="mt-1 text-2xl font-bold text-accent">
-                  {formatCurrency(grandTotal)}
+                  {formatCurrency(totals.grandTotal)}
                 </p>
                 <p className="text-xs font-semibold text-cyan-400">CAD</p>
               </div>
@@ -753,8 +1280,8 @@ export function VoiceQuoteBuilder() {
                 </button>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                Customer requested evening delivery window and matching outlet
-                finishes throughout the kitchen.
+                {notes ||
+                  "Scope notes from extraction will appear here after you record."}
               </p>
             </div>
 
@@ -783,7 +1310,6 @@ export function VoiceQuoteBuilder() {
         </aside>
       )}
 
-      {/* How it works modal */}
       {showHowItWorks && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div
@@ -819,6 +1345,137 @@ export function VoiceQuoteBuilder() {
           </div>
         </div>
       )}
+
+      {showAddItem && (
+        <AddItemModal
+          onClose={() => setShowAddItem(false)}
+          onAdd={handleAddItem}
+        />
+      )}
+    </div>
+  );
+}
+
+function AddItemModal({
+  onClose,
+  onAdd,
+}: {
+  onClose: () => void;
+  onAdd: (payload: {
+    kind: AddItemKind;
+    description: string;
+    brand: string;
+    qty: number;
+    unit: string;
+    unitPrice: number;
+  }) => void;
+}) {
+  const [kind, setKind] = useState<AddItemKind>("material");
+  const [description, setDescription] = useState("");
+  const [brand, setBrand] = useState("");
+  const [qty, setQty] = useState(1);
+  const [unit, setUnit] = useState("each");
+  const [unitPrice, setUnitPrice] = useState(0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-navy p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">Add item</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+            aria-label="Close"
+          >
+            <IconClose className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 flex rounded-lg border border-white/10 p-0.5 text-sm">
+          {(["material", "labour"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                setKind(option);
+                setUnit(option === "labour" ? "hour" : "each");
+              }}
+              className={`flex-1 rounded-md px-3 py-2 capitalize ${
+                kind === option ? "bg-accent text-white" : "text-slate-400"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <input
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder={kind === "labour" ? "Labour description" : "Item description"}
+            className={touchInput}
+          />
+          {kind === "material" && (
+            <input
+              value={brand}
+              onChange={(event) => setBrand(event.target.value)}
+              placeholder="Brand"
+              className={touchInput}
+            />
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="number"
+              value={qty}
+              onChange={(event) => setQty(parseFloat(event.target.value) || 0)}
+              placeholder={kind === "labour" ? "Hours" : "Qty"}
+              className={touchInput}
+            />
+            <input
+              value={unit}
+              onChange={(event) => setUnit(event.target.value)}
+              placeholder="Unit"
+              disabled={kind === "labour"}
+              className={touchInput}
+            />
+            <input
+              type="number"
+              value={unitPrice}
+              onChange={(event) =>
+                setUnitPrice(parseFloat(event.target.value) || 0)
+              }
+              placeholder={kind === "labour" ? "Rate" : "Unit price"}
+              className={touchInput}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <button type="button" onClick={onClose} className={`${touchBtnSecondary} flex-1`}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!description.trim()}
+            onClick={() =>
+              onAdd({
+                kind,
+                description: description.trim(),
+                brand: brand.trim(),
+                qty,
+                unit,
+                unitPrice,
+              })
+            }
+            className={`${touchBtnPrimary} flex-1`}
+          >
+            Add item
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

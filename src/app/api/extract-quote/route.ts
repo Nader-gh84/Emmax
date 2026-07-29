@@ -53,31 +53,6 @@ async function extractQuoteData(
   return JSON.parse(content) as GptExtraction;
 }
 
-async function transcribeAudio(audio: File, apiKey: string): Promise<string> {
-  const whisperForm = new FormData();
-  whisperForm.append("file", audio, audio.name || "recording.webm");
-  whisperForm.append("model", "whisper-1");
-
-  const whisperResponse = await fetch(
-    "https://api.openai.com/v1/audio/transcriptions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: whisperForm,
-    }
-  );
-
-  if (!whisperResponse.ok) {
-    const error = await whisperResponse.text();
-    throw new Error(`Transcription failed: ${error}`);
-  }
-
-  const whisperData = await whisperResponse.json();
-  return whisperData.text ?? "";
-}
-
 export async function POST(request: Request) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
@@ -92,38 +67,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const formData = await request.formData();
-    const audio = formData.get("audio") as File | null;
-    const manualText = formData.get("text") as string | null;
-    const extractFlag = formData.get("extract");
-    const shouldExtract =
-      extractFlag === null || extractFlag === "true" || extractFlag === "1";
-
-    let transcript = manualText?.trim() ?? "";
-
-    if (!transcript && audio && audio.size > 0) {
-      try {
-        transcript = await transcribeAudio(audio, apiKey);
-      } catch (error) {
-        return NextResponse.json(
-          {
-            error: "Transcription failed",
-            details: error instanceof Error ? error.message : String(error),
-          },
-          { status: 500 }
-        );
-      }
-    }
+    const body = (await request.json()) as { transcript?: string };
+    const transcript = body.transcript?.trim() ?? "";
 
     if (!transcript) {
       return NextResponse.json(
-        { error: "No audio or text provided" },
+        { error: "No transcript provided" },
         { status: 400 }
       );
-    }
-
-    if (!shouldExtract) {
-      return NextResponse.json({ transcript });
     }
 
     const extracted = await extractQuoteData(transcript, apiKey);
@@ -134,7 +85,6 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({
-      transcript,
       materials: mapped.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
           item,
@@ -152,11 +102,13 @@ export async function POST(request: Request) {
       scopeOfWork: mapped.scopeOfWork,
     });
   } catch (error) {
-    console.error("Transcribe error:", error);
+    console.error("Extract quote error:", error);
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Failed to process audio",
+          error instanceof Error
+            ? error.message
+            : "Couldn't parse that, try again or add items manually",
       },
       { status: 500 }
     );
