@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { CustomersEmptyState } from "@/components/dashboard/customers-empty-state";
 import {
@@ -265,7 +266,14 @@ function CustomerCard({
 
   return (
     <article className="rounded-xl border border-white/10 bg-white/5 p-5">
-      <h3 className="text-lg font-semibold text-white">{displayName}</h3>
+      <Link
+        href={`/dashboard/customers/${customer.id}`}
+        className="group block"
+      >
+        <h3 className="text-lg font-semibold text-white transition group-hover:text-accent">
+          {displayName}
+        </h3>
+      </Link>
 
       <dl className="mt-4 space-y-2">
         {customer.email && (
@@ -298,6 +306,12 @@ function CustomerCard({
       </dl>
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+        <Link
+          href={`/dashboard/customers/${customer.id}`}
+          className={`${touchBtnSecondary} w-full sm:w-auto`}
+        >
+          View
+        </Link>
         <button
           type="button"
           onClick={onEdit}
