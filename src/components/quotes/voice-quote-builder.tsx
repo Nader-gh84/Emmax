@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   IconDocument,
@@ -23,6 +23,7 @@ import {
   SendToSupplierModal,
   ValidUntilModal,
 } from "@/components/quotes/voice-quote-action-modals";
+import { UploadSupplierPricingModal } from "@/components/quotes/upload-supplier-pricing-modal";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -80,7 +81,8 @@ type ActiveModal =
   | "sendContact"
   | "sendNew"
   | "supplier"
-  | "notes";
+  | "notes"
+  | "uploadPricing";
 
 const ACTIONS = [
   { id: "download", label: "Download PDF", icon: IconDocument },
@@ -191,6 +193,7 @@ type TableRow =
 export function VoiceQuoteBuilder() {
   const searchParams = useSearchParams();
   const quoteParam = searchParams.get("quote");
+  const uploadPricingParam = searchParams.get("uploadPricing");
 
   const [showSidebar, setShowSidebar] = useState(true);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -234,6 +237,7 @@ export function VoiceQuoteBuilder() {
   const [validUntil, setValidUntil] = useState<string | null>(
     defaultValidUntil(30)
   );
+  const openedUploadPricingRef = useRef(false);
 
   useEffect(() => {
     if (!quoteParam) {
@@ -321,6 +325,15 @@ export function VoiceQuoteBuilder() {
       cancelled = true;
     };
   }, [quoteParam]);
+
+  useEffect(() => {
+    if (uploadPricingParam !== "1") return;
+    if (isLoadingQuote) return;
+    if (materials.length === 0) return;
+    if (openedUploadPricingRef.current) return;
+    openedUploadPricingRef.current = true;
+    setActiveModal("uploadPricing");
+  }, [uploadPricingParam, isLoadingQuote, materials.length]);
 
   const processTranscript = useCallback(
     async (nextTranscript: string, append: boolean) => {
@@ -502,6 +515,42 @@ export function VoiceQuoteBuilder() {
 
     setIsEditingItems(false);
     setPriceMode("merged");
+  }
+
+  function openUploadSupplierPricing() {
+    if (materials.length === 0) {
+      showFeedback(
+        "error",
+        "Add at least one material before uploading supplier pricing."
+      );
+      return;
+    }
+    setActiveModal("uploadPricing");
+  }
+
+  function handleApplySupplierPrices(
+    updates: { materialId: string; unitPrice: number }[]
+  ) {
+    if (updates.length === 0) return;
+
+    const priceById = new Map(
+      updates.map((update) => [update.materialId, update.unitPrice])
+    );
+
+    setMaterials((current) =>
+      current.map((item) => {
+        const nextPrice = priceById.get(item.id);
+        if (nextPrice == null) return item;
+        return { ...item, unitPrice: nextPrice };
+      })
+    );
+    setIsEditingItems(false);
+    setCalcFlash(true);
+    window.setTimeout(() => setCalcFlash(false), 700);
+    showFeedback(
+      "success",
+      `Applied ${updates.length} supplier price${updates.length === 1 ? "" : "s"}. Review totals, then save or send.`
+    );
   }
 
   async function handleMicClick() {
@@ -1151,6 +1200,16 @@ export function VoiceQuoteBuilder() {
                       ? "Unmerge Materials"
                       : "Merge Materials"}
                     <IconInfo className="h-3.5 w-3.5 text-slate-500" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openUploadSupplierPricing}
+                    disabled={materials.length === 0}
+                    className={`${touchBtnSecondary} gap-2 px-3 py-2 text-xs disabled:opacity-40`}
+                    title="Upload a supplier pricing reply (PDF, image, or text) for Ema to extract"
+                  >
+                    <IconSuppliers className="h-3.5 w-3.5" />
+                    Upload Supplier Pricing
                   </button>
                 </div>
               </div>
@@ -1961,6 +2020,15 @@ export function VoiceQuoteBuilder() {
           isSending={isActionBusy}
           onClose={() => setActiveModal(null)}
           onSend={handleSendToSupplier}
+        />
+      )}
+
+      {activeModal === "uploadPricing" && (
+        <UploadSupplierPricingModal
+          materials={materials}
+          quoteId={quoteId}
+          onClose={() => setActiveModal(null)}
+          onApply={handleApplySupplierPrices}
         />
       )}
     </div>

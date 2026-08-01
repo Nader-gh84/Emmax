@@ -43,7 +43,7 @@ export function getNotificationHref(notification: AppNotification): string | nul
   }
 
   if (notification.type === "supplier_price") {
-    return `/dashboard/voice-quote-builder?quote=${notification.quote_id}`;
+    return `/dashboard/voice-quote-builder?quote=${notification.quote_id}&uploadPricing=1`;
   }
 
   if (notification.type === "quote_accepted") {
