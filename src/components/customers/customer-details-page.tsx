@@ -27,6 +27,8 @@ import {
   type CustomerDetailsViewModel,
 } from "@/lib/customer-details-mock";
 import {
+  asProjectLabour,
+  asProjectMaterials,
   formatProjectDate,
   formatProjectMoney,
   projectStatusClass,
@@ -468,42 +470,12 @@ function TabPanel({
               project is created automatically.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
-                    <th className="pb-2 pr-3 font-medium">Project</th>
-                    <th className="pb-2 pr-3 font-medium">Address</th>
-                    <th className="pb-2 pr-3 font-medium">Status</th>
-                    <th className="pb-2 pr-3 font-medium">Start</th>
-                    <th className="pb-2 font-medium text-right">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map((project) => (
-                    <tr
-                      key={project.id}
-                      className="border-b border-white/5 text-slate-300"
-                    >
-                      <td className="py-3 pr-3 font-medium text-white">
-                        {project.project_name || "Untitled project"}
-                      </td>
-                      <td className="py-3 pr-3 text-slate-400">
-                        {addressPlaceholder || "Address TBD"}
-                      </td>
-                      <td className="py-3 pr-3">
-                        <ProjectStatusBadge status={project.status} />
-                      </td>
-                      <td className="py-3 pr-3">
-                        {formatProjectDate(project.start_date)}
-                      </td>
-                      <td className="py-3 text-right font-medium text-white">
-                        {formatProjectMoney(Number(project.value))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-4">
+              <ProjectList
+                projects={recent}
+                addressPlaceholder={addressPlaceholder}
+                dense
+              />
             </div>
           )}
         </section>
@@ -550,8 +522,6 @@ function ProjectsTab({
   projects: Project[];
   addressPlaceholder: string | null;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
   if (projects.length === 0) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
@@ -571,123 +541,214 @@ function ProjectsTab({
           Projects ({projects.length})
         </h2>
       </div>
-
-      <ul className="space-y-3">
-        {projects.map((project) => {
-          const expanded = expandedId === project.id;
-          const materials = project.materials ?? [];
-          const labour = project.labour_items ?? [];
-
-          return (
-            <li
-              key={project.id}
-              className="rounded-2xl border border-white/10 bg-white/[0.03]"
-            >
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedId((current) =>
-                    current === project.id ? null : project.id
-                  )
-                }
-                className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left transition hover:bg-white/[0.03] sm:px-5"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-base font-semibold text-white">
-                      {project.project_name || "Untitled project"}
-                    </p>
-                    <ProjectStatusBadge status={project.status} />
-                  </div>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {addressPlaceholder || "Address TBD"}
-                    <span className="mx-2 text-slate-600">·</span>
-                    Started {formatProjectDate(project.start_date)}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-base font-semibold text-white">
-                    {formatProjectMoney(Number(project.value))}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {expanded ? "Hide details" : "View details"}
-                  </p>
-                </div>
-              </button>
-
-              {expanded ? (
-                <div className="border-t border-white/10 px-4 py-4 sm:px-5">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Materials snapshot
-                      </p>
-                      {materials.length === 0 ? (
-                        <p className="mt-2 text-sm text-slate-500">
-                          No materials on the accepted quote.
-                        </p>
-                      ) : (
-                        <ul className="mt-2 space-y-1.5">
-                          {materials.map((item, index) => (
-                            <li
-                              key={`${item.item}-${index}`}
-                              className="text-sm text-slate-300"
-                            >
-                              {item.quantity} {item.unit}{" "}
-                              {item.item || "Material"}
-                              {item.brand ? ` (${item.brand})` : ""}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Labour snapshot
-                      </p>
-                      {labour.length === 0 ? (
-                        <p className="mt-2 text-sm text-slate-500">
-                          No labour on the accepted quote.
-                        </p>
-                      ) : (
-                        <ul className="mt-2 space-y-1.5">
-                          {labour.map((item, index) => (
-                            <li
-                              key={`${item.description}-${index}`}
-                              className="text-sm text-slate-300"
-                            >
-                              {item.hours}h {item.description || "Labour"}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4 text-sm">
-                    {project.quote_id ? (
-                      <Link
-                        href={`/dashboard/quotes?quote=${project.quote_id}`}
-                        className="font-semibold text-accent hover:text-blue-400"
-                      >
-                        Open linked quote
-                      </Link>
-                    ) : (
-                      <span className="text-slate-500">No linked quote</span>
-                    )}
-                    {project.end_date ? (
-                      <span className="text-slate-500">
-                        End {formatProjectDate(project.end_date)}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      <ProjectList
+        projects={projects}
+        addressPlaceholder={addressPlaceholder}
+      />
     </div>
+  );
+}
+
+function ProjectList({
+  projects,
+  addressPlaceholder,
+  dense = false,
+}: {
+  projects: Project[];
+  addressPlaceholder: string | null;
+  dense?: boolean;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <ul className={dense ? "space-y-2" : "space-y-3"}>
+      {projects.map((project) => {
+        const expanded = expandedId === project.id;
+        return (
+          <ProjectCard
+            key={project.id}
+            project={project}
+            addressPlaceholder={addressPlaceholder}
+            expanded={expanded}
+            dense={dense}
+            onToggle={() =>
+              setExpandedId((current) =>
+                current === project.id ? null : project.id
+              )
+            }
+          />
+        );
+      })}
+    </ul>
+  );
+}
+
+function ProjectCard({
+  project,
+  addressPlaceholder,
+  expanded,
+  dense,
+  onToggle,
+}: {
+  project: Project;
+  addressPlaceholder: string | null;
+  expanded: boolean;
+  dense?: boolean;
+  onToggle: () => void;
+}) {
+  const materials = asProjectMaterials(project.materials);
+  const labour = asProjectLabour(project.labour_items);
+  const name = project.project_name?.trim() || "Untitled project";
+
+  return (
+    <li className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className={`flex w-full items-start justify-between gap-3 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${
+          dense ? "px-3 py-3 sm:px-4" : "px-4 py-4 sm:px-5"
+        }`}
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p
+              className={`font-semibold text-white ${
+                dense ? "text-sm" : "text-base"
+              }`}
+            >
+              {name}
+            </p>
+            <ProjectStatusBadge status={project.status} />
+          </div>
+          <p className={`mt-1 text-slate-400 ${dense ? "text-xs" : "text-sm"}`}>
+            {addressPlaceholder || "Address TBD"}
+            <span className="mx-2 text-slate-600">·</span>
+            Started {formatProjectDate(project.start_date)}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p
+            className={`font-semibold text-white ${
+              dense ? "text-sm" : "text-base"
+            }`}
+          >
+            {formatProjectMoney(Number(project.value))}
+          </p>
+          <p className="mt-1 text-xs font-medium text-accent">
+            {expanded ? "Hide details" : "View details"}
+          </p>
+        </div>
+      </button>
+
+      {expanded ? (
+        <div className="border-t border-white/10 px-4 py-4 sm:px-5">
+          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Status
+              </dt>
+              <dd className="mt-1">
+                <ProjectStatusBadge status={project.status} />
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Value
+              </dt>
+              <dd className="mt-1 text-sm font-medium text-white">
+                {formatProjectMoney(Number(project.value))}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Start date
+              </dt>
+              <dd className="mt-1 text-sm text-slate-200">
+                {formatProjectDate(project.start_date)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                End date
+              </dt>
+              <dd className="mt-1 text-sm text-slate-200">
+                {formatProjectDate(project.end_date)}
+              </dd>
+            </div>
+          </dl>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Materials snapshot
+              </p>
+              {materials.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  No materials on the accepted quote.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {materials.map((item, index) => (
+                    <li
+                      key={`${item.item}-${index}`}
+                      className="text-sm text-slate-300"
+                    >
+                      {item.quantity} {item.unit} {item.item || "Material"}
+                      {item.brand ? ` (${item.brand})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Labour snapshot
+              </p>
+              {labour.length === 0 ? (
+                <p className="mt-2 text-sm text-slate-500">
+                  No labour on the accepted quote.
+                </p>
+              ) : (
+                <ul className="mt-2 space-y-1.5">
+                  {labour.map((item, index) => (
+                    <li
+                      key={`${item.description}-${index}`}
+                      className="text-sm text-slate-300"
+                    >
+                      {item.hours}h {item.description || "Labour"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4 text-sm">
+            {project.quote_id ? (
+              <Link
+                href={`/dashboard/quotes?quote=${project.quote_id}`}
+                className="font-semibold text-accent hover:text-blue-400"
+                onClick={(event) => event.stopPropagation()}
+              >
+                Open linked quote
+              </Link>
+            ) : (
+              <span className="text-slate-500">No linked quote</span>
+            )}
+            <span className="text-slate-600">·</span>
+            <span className="text-slate-500">
+              Quote ref:{" "}
+              <span className="font-mono text-slate-300">
+                {project.quote_id
+                  ? `${project.quote_id.slice(0, 8)}…`
+                  : "—"}
+              </span>
+            </span>
+          </div>
+        </div>
+      ) : null}
+    </li>
   );
 }
 
