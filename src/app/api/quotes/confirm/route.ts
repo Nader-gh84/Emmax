@@ -61,11 +61,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid confirmation link" }, { status: 400 });
     }
 
-    if (isAdminClientConfigured()) {
-      return confirmQuoteWithAdmin(token);
-    }
+    // Prefer RPC so accept + notification + project creation stay atomic.
+    try {
+      return await confirmQuoteWithRpc(token);
+    } catch (rpcError) {
+      const message =
+        rpcError instanceof Error ? rpcError.message : String(rpcError);
+      const rpcMissing =
+        message.includes("not configured") ||
+        message.includes("42883") ||
+        message.includes("confirm_quote_by_confirmation_token");
 
-    return confirmQuoteWithRpc(token);
+      if (rpcMissing && isAdminClientConfigured()) {
+        console.warn(
+          "[POST /api/quotes/confirm] RPC unavailable; falling back to admin path"
+        );
+        return confirmQuoteWithAdmin(token);
+      }
+
+      throw rpcError;
+    }
   } catch (error) {
     console.error("[POST /api/quotes/confirm] Failed to confirm quote:", error);
     return NextResponse.json(
@@ -183,8 +198,11 @@ async function confirmQuoteWithAdmin(token: string) {
   }
 
   const customerName = quote.customer_name?.trim() || "Your customer";
-  const projectName = quote.project_name?.trim() || "your project";
-  const message = `${customerName} accepted your quote for ${projectName}.`;
+  const projectName =
+    quote.project_name?.trim() || "Untitled project";
+  const message = `${customerName} accepted your quote for ${
+    quote.project_name?.trim() || "your project"
+  }.`;
 
   const { error: notificationError } = await admin.from("notifications").insert({
     user_id: quote.user_id,
@@ -198,6 +216,56 @@ async function confirmQuoteWithAdmin(token: string) {
       "POST /api/quotes/confirm.admin.notification",
       notificationError,
       { token, quoteId: quote.id }
+    );
+    await admin
+      .from("quotes")
+      .update({
+        status: "sent",
+        confirmed_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quote.id);
+    return NextResponse.json(
+      { error: "Failed to confirm quote" },
+      { status: 500 }
+    );
+  }
+
+  const { error: projectError } = await admin.from("projects").insert({
+    user_id: quote.user_id,
+    customer_id: quote.customer_id,
+    quote_id: quote.id,
+    project_name: projectName,
+    value: Number(quote.grand_total) || 0,
+    status: "active",
+    start_date: confirmedAt.slice(0, 10),
+    materials: quote.materials ?? [],
+    labour_items: quote.labour_items ?? [],
+  });
+
+  if (projectError) {
+    logSupabaseError("POST /api/quotes/confirm.admin.project", projectError, {
+      token,
+      quoteId: quote.id,
+    });
+    await admin.from("notifications").delete().eq("quote_id", quote.id).eq(
+      "type",
+      "quote_accepted"
+    );
+    await admin
+      .from("quotes")
+      .update({
+        status: "sent",
+        confirmed_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", quote.id);
+    return NextResponse.json(
+      {
+        error:
+          "Failed to create project from accepted quote. Run migration 018_projects_and_accept_create.sql.",
+      },
+      { status: 500 }
     );
   }
 

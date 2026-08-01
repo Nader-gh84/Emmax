@@ -16,32 +16,34 @@ import {
 } from "@/components/dashboard/workspace-icons";
 import { WorkspaceCustomersPanel } from "@/components/dashboard/workspace-customers-panel";
 
-const STAT_CARDS = [
-  {
-    label: "Customers",
-    value: "128",
-    trend: "+12%",
-    icon: IconUsers,
-  },
-  {
-    label: "Suppliers",
-    value: "46",
-    trend: "+4%",
-    icon: IconSuppliers,
-  },
-  {
-    label: "Quotes",
-    value: "87",
-    trend: "+18%",
-    icon: IconDocument,
-  },
-  {
-    label: "Active Projects",
-    value: "23",
-    trend: "+6%",
-    icon: IconProjects,
-  },
-];
+function buildStatCards(activeProjectsCount: number) {
+  return [
+    {
+      label: "Customers",
+      value: "128",
+      trend: "+12%",
+      icon: IconUsers,
+    },
+    {
+      label: "Suppliers",
+      value: "46",
+      trend: "+4%",
+      icon: IconSuppliers,
+    },
+    {
+      label: "Quotes",
+      value: "87",
+      trend: "+18%",
+      icon: IconDocument,
+    },
+    {
+      label: "Active Projects",
+      value: String(activeProjectsCount),
+      trend: "Live",
+      icon: IconProjects,
+    },
+  ];
+}
 
 const DETAIL_ROWS = [
   [
@@ -128,10 +130,15 @@ function greetingForNow() {
 
 interface WorkspaceHomeProps {
   firstName: string;
+  activeProjectsCount?: number;
 }
 
-export function WorkspaceHome({ firstName }: WorkspaceHomeProps) {
+export function WorkspaceHome({
+  firstName,
+  activeProjectsCount = 0,
+}: WorkspaceHomeProps) {
   const displayName = firstName || "there";
+  const statCards = buildStatCards(activeProjectsCount);
 
   return (
     <div className="flex min-h-full min-w-0 flex-1">
@@ -155,7 +162,7 @@ export function WorkspaceHome({ firstName }: WorkspaceHomeProps) {
         </header>
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {STAT_CARDS.map((stat) => {
+          {statCards.map((stat) => {
             const Icon = stat.icon;
             return (
               <div

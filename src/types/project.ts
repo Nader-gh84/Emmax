@@ -1,0 +1,69 @@
+import type { StoredLabourItem, StoredMaterial } from "@/types/quote";
+
+export type ProjectStatus = "active" | "completed" | "on_hold";
+
+export interface Project {
+  id: string;
+  user_id: string;
+  customer_id: string | null;
+  quote_id: string | null;
+  project_name: string;
+  value: number;
+  status: ProjectStatus;
+  start_date: string;
+  end_date: string | null;
+  materials: StoredMaterial[] | null;
+  labour_items: StoredLabourItem[] | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export function isProjectStatus(value: string): value is ProjectStatus {
+  return value === "active" || value === "completed" || value === "on_hold";
+}
+
+export function formatProjectDate(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value.includes("T") ? value : `${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-CA", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function formatProjectMoney(amount: number): string {
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    maximumFractionDigits: 0,
+  }).format(Number(amount) || 0);
+}
+
+export function projectStatusLabel(status: ProjectStatus): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "completed":
+      return "Completed";
+    case "on_hold":
+      return "On Hold";
+    default:
+      return status;
+  }
+}
+
+export function projectStatusClass(status: ProjectStatus): string {
+  switch (status) {
+    case "active":
+      return "bg-accent/15 text-accent ring-accent/30";
+    case "completed":
+      return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
+    case "on_hold":
+      return "bg-amber-500/15 text-amber-300 ring-amber-500/30";
+    default:
+      return "bg-white/10 text-slate-300 ring-white/15";
+  }
+}
