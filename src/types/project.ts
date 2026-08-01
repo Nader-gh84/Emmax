@@ -67,3 +67,46 @@ export function projectStatusClass(status: ProjectStatus): string {
       return "bg-white/10 text-slate-300 ring-white/15";
   }
 }
+
+/** True when the stored name is missing or the RPC/app placeholder. */
+export function isPlaceholderProjectName(
+  value: string | null | undefined
+): boolean {
+  const trimmed = value?.trim() ?? "";
+  return !trimmed || trimmed.toLowerCase() === "untitled project";
+}
+
+/**
+ * Resolve a display name for a project.
+ * Prefer the project's own name, then linked quote project_name / quote_number.
+ */
+export function resolveProjectDisplayName(
+  projectName: string | null | undefined,
+  linkedQuote?: {
+    project_name?: string | null;
+    quote_number?: string | null;
+  } | null
+): string {
+  const own = projectName?.trim() ?? "";
+  if (own && !isPlaceholderProjectName(own)) return own;
+
+  const fromQuote = linkedQuote?.project_name?.trim() ?? "";
+  if (fromQuote) return fromQuote;
+
+  const quoteNumber = linkedQuote?.quote_number?.trim() ?? "";
+  if (quoteNumber) return quoteNumber;
+
+  return own || "Untitled project";
+}
+
+export function asProjectMaterials(
+  value: Project["materials"]
+): NonNullable<Project["materials"]> {
+  return Array.isArray(value) ? value : [];
+}
+
+export function asProjectLabour(
+  value: Project["labour_items"]
+): NonNullable<Project["labour_items"]> {
+  return Array.isArray(value) ? value : [];
+}

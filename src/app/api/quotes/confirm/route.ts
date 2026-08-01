@@ -198,8 +198,11 @@ async function confirmQuoteWithAdmin(token: string) {
   }
 
   const customerName = quote.customer_name?.trim() || "Your customer";
+  // Same fallback chain as confirm_quote_by_confirmation_token (migration 019).
   const projectName =
-    quote.project_name?.trim() || "Untitled project";
+    quote.project_name?.trim() ||
+    quote.quote_number?.trim() ||
+    "Untitled project";
   const message = `${customerName} accepted your quote for ${
     quote.project_name?.trim() || "your project"
   }.`;
