@@ -33,5 +33,28 @@ export default async function DashboardPage() {
 
   const firstName = getFirstName(profile?.full_name, user?.email);
 
-  return <WorkspaceHome firstName={firstName} />;
+  let activeProjectsCount = 0;
+  if (user) {
+    const { count, error } = await supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("status", "active");
+
+    if (error) {
+      console.error(
+        "[Dashboard] active projects count failed (run migration 018?):",
+        error.message
+      );
+    } else {
+      activeProjectsCount = count ?? 0;
+    }
+  }
+
+  return (
+    <WorkspaceHome
+      firstName={firstName}
+      activeProjectsCount={activeProjectsCount}
+    />
+  );
 }

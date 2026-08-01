@@ -4,6 +4,7 @@ import { CustomerDetailsPage } from "@/components/customers/customer-details-pag
 import { buildMockCustomerDetails } from "@/lib/customer-details-mock";
 import { createClient } from "@/lib/supabase/server";
 import { getCustomerDisplayName, type Customer } from "@/types/customer";
+import { isProjectStatus, type Project } from "@/types/project";
 
 export const metadata: Metadata = {
   title: "Customer Details",
@@ -45,6 +46,27 @@ export default async function CustomerDetailsRoute({
     );
   }
 
+  const { data: projectRows, error: projectsError } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("customer_id", customerRow.id)
+    .order("start_date", { ascending: false });
+
+  if (projectsError) {
+    console.error(
+      "[CustomerDetails] projects query failed (run migration 018?):",
+      projectsError.message
+    );
+  }
+
+  const projects: Project[] = ((projectRows as Project[] | null) ?? []).map(
+    (row) => ({
+      ...row,
+      status: isProjectStatus(row.status) ? row.status : "active",
+      value: Number(row.value) || 0,
+    })
+  );
+
   const details = buildMockCustomerDetails({
     id: customerRow.id,
     firstName: customerRow.first_name,
@@ -56,8 +78,14 @@ export default async function CustomerDetailsRoute({
     createdAt: customerRow.created_at,
   });
 
-  // Prefer the real display name from DB fields.
   details.fullName = getCustomerDisplayName(customerRow);
+  details.counts.projects = projects.length;
 
-  return <CustomerDetailsPage customer={details} />;
+  return (
+    <CustomerDetailsPage
+      customer={details}
+      projects={projects}
+      addressPlaceholder={customerRow.address}
+    />
+  );
 }

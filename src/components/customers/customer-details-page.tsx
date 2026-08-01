@@ -26,6 +26,14 @@ import {
   type CustomerDetailsTab,
   type CustomerDetailsViewModel,
 } from "@/lib/customer-details-mock";
+import {
+  formatProjectDate,
+  formatProjectMoney,
+  projectStatusClass,
+  projectStatusLabel,
+  type Project,
+  type ProjectStatus,
+} from "@/types/project";
 
 function IconMapPin({ className }: { className?: string }) {
   return (
@@ -87,14 +95,29 @@ function activityAccent(type: CustomerActivityItem["type"]) {
 
 export function CustomerDetailsPage({
   customer,
+  projects = [],
+  addressPlaceholder = null,
 }: {
   customer: CustomerDetailsViewModel;
+  projects?: Project[];
+  addressPlaceholder?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<CustomerDetailsTab>("overview");
   const [moreOpen, setMoreOpen] = useState(false);
   const initials = useMemo(
     () => getCustomerInitials(customer.fullName),
     [customer.fullName]
+  );
+
+  const customerWithCounts = useMemo(
+    () => ({
+      ...customer,
+      counts: {
+        ...customer.counts,
+        projects: projects.length,
+      },
+    }),
+    [customer, projects.length]
   );
 
   return (
@@ -250,7 +273,7 @@ export function CustomerDetailsPage({
             <div className="flex min-w-max gap-1 pb-px">
               {CUSTOMER_DETAILS_TABS.map((tab) => {
                 const count = tab.countKey
-                  ? customer.counts[tab.countKey]
+                  ? customerWithCounts.counts[tab.countKey]
                   : null;
                 const isActive = activeTab === tab.id;
 
@@ -284,15 +307,24 @@ export function CustomerDetailsPage({
           </div>
 
           <div className="mt-5">
-            <TabPanel tab={activeTab} customerName={customer.fullName} />
+            <TabPanel
+              tab={activeTab}
+              customerName={customer.fullName}
+              projects={projects}
+              addressPlaceholder={addressPlaceholder}
+              onOpenProjects={() => setActiveTab("projects")}
+            />
           </div>
         </div>
 
         <aside className="w-full shrink-0 space-y-4 lg:w-80 xl:w-96">
-          <CustomerSummaryCard customer={customer} />
-          <LocationsCard customer={customer} onViewAll={() => setActiveTab("locations")} />
+          <CustomerSummaryCard customer={customerWithCounts} />
+          <LocationsCard
+            customer={customerWithCounts}
+            onViewAll={() => setActiveTab("locations")}
+          />
           <ActivityTimelineCard
-            items={customer.recentActivity}
+            items={customerWithCounts.recentActivity}
             onViewFull={() => setActiveTab("timeline")}
           />
         </aside>
@@ -387,26 +419,104 @@ function ActionButton({
 function TabPanel({
   tab,
   customerName,
+  projects,
+  addressPlaceholder,
+  onOpenProjects,
 }: {
   tab: CustomerDetailsTab;
   customerName: string;
+  projects: Project[];
+  addressPlaceholder: string | null;
+  onOpenProjects: () => void;
 }) {
   if (tab === "overview") {
+    const recent = projects.slice(0, 5);
     return (
-      <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6 sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-wide text-accent">
-          Overview
-        </p>
-        <h2 className="mt-2 text-xl font-semibold text-white">
-          Stage 1 shell for {customerName}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
-          Financial overview cards, recent projects, outstanding invoices,
-          payment history, and the revenue chart land in Stage 2. This tab is a
-          placeholder so header, tabs, and the right sidebar can be reviewed
-          first.
-        </p>
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6">
+          <p className="text-sm font-semibold uppercase tracking-wide text-accent">
+            Overview
+          </p>
+          <h2 className="mt-2 text-xl font-semibold text-white">
+            {customerName}
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+            Financial cards, invoices, payments, and charts come in a later
+            stage. Recent projects below use live data from accepted quotes.
+          </p>
+        </div>
+
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+              Recent Projects
+            </h3>
+            {projects.length > 0 ? (
+              <button
+                type="button"
+                onClick={onOpenProjects}
+                className="text-xs font-semibold text-accent hover:text-blue-400"
+              >
+                View all ({projects.length})
+              </button>
+            ) : null}
+          </div>
+
+          {recent.length === 0 ? (
+            <p className="mt-4 text-sm text-slate-500">
+              No projects yet. When a quote for this customer is accepted, a
+              project is created automatically.
+            </p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-xs uppercase tracking-wide text-slate-500">
+                    <th className="pb-2 pr-3 font-medium">Project</th>
+                    <th className="pb-2 pr-3 font-medium">Address</th>
+                    <th className="pb-2 pr-3 font-medium">Status</th>
+                    <th className="pb-2 pr-3 font-medium">Start</th>
+                    <th className="pb-2 font-medium text-right">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((project) => (
+                    <tr
+                      key={project.id}
+                      className="border-b border-white/5 text-slate-300"
+                    >
+                      <td className="py-3 pr-3 font-medium text-white">
+                        {project.project_name || "Untitled project"}
+                      </td>
+                      <td className="py-3 pr-3 text-slate-400">
+                        {addressPlaceholder || "Address TBD"}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <ProjectStatusBadge status={project.status} />
+                      </td>
+                      <td className="py-3 pr-3">
+                        {formatProjectDate(project.start_date)}
+                      </td>
+                      <td className="py-3 text-right font-medium text-white">
+                        {formatProjectMoney(Number(project.value))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </div>
+    );
+  }
+
+  if (tab === "projects") {
+    return (
+      <ProjectsTab
+        projects={projects}
+        addressPlaceholder={addressPlaceholder}
+      />
     );
   }
 
@@ -419,6 +529,164 @@ function TabPanel({
       <p className="mt-2 text-sm text-slate-400">
         Coming in a later stage — placeholder content only.
       </p>
+    </div>
+  );
+}
+
+function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ring-1 ${projectStatusClass(status)}`}
+    >
+      {projectStatusLabel(status)}
+    </span>
+  );
+}
+
+function ProjectsTab({
+  projects,
+  addressPlaceholder,
+}: {
+  projects: Project[];
+  addressPlaceholder: string | null;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (projects.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Projects</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          No projects for this customer yet. Accepting a quote creates one
+          automatically.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-white">
+          Projects ({projects.length})
+        </h2>
+      </div>
+
+      <ul className="space-y-3">
+        {projects.map((project) => {
+          const expanded = expandedId === project.id;
+          const materials = project.materials ?? [];
+          const labour = project.labour_items ?? [];
+
+          return (
+            <li
+              key={project.id}
+              className="rounded-2xl border border-white/10 bg-white/[0.03]"
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedId((current) =>
+                    current === project.id ? null : project.id
+                  )
+                }
+                className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left transition hover:bg-white/[0.03] sm:px-5"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-base font-semibold text-white">
+                      {project.project_name || "Untitled project"}
+                    </p>
+                    <ProjectStatusBadge status={project.status} />
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {addressPlaceholder || "Address TBD"}
+                    <span className="mx-2 text-slate-600">·</span>
+                    Started {formatProjectDate(project.start_date)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-semibold text-white">
+                    {formatProjectMoney(Number(project.value))}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {expanded ? "Hide details" : "View details"}
+                  </p>
+                </div>
+              </button>
+
+              {expanded ? (
+                <div className="border-t border-white/10 px-4 py-4 sm:px-5">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Materials snapshot
+                      </p>
+                      {materials.length === 0 ? (
+                        <p className="mt-2 text-sm text-slate-500">
+                          No materials on the accepted quote.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-1.5">
+                          {materials.map((item, index) => (
+                            <li
+                              key={`${item.item}-${index}`}
+                              className="text-sm text-slate-300"
+                            >
+                              {item.quantity} {item.unit}{" "}
+                              {item.item || "Material"}
+                              {item.brand ? ` (${item.brand})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Labour snapshot
+                      </p>
+                      {labour.length === 0 ? (
+                        <p className="mt-2 text-sm text-slate-500">
+                          No labour on the accepted quote.
+                        </p>
+                      ) : (
+                        <ul className="mt-2 space-y-1.5">
+                          {labour.map((item, index) => (
+                            <li
+                              key={`${item.description}-${index}`}
+                              className="text-sm text-slate-300"
+                            >
+                              {item.hours}h {item.description || "Labour"}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4 text-sm">
+                    {project.quote_id ? (
+                      <Link
+                        href={`/dashboard/quotes?quote=${project.quote_id}`}
+                        className="font-semibold text-accent hover:text-blue-400"
+                      >
+                        Open linked quote
+                      </Link>
+                    ) : (
+                      <span className="text-slate-500">No linked quote</span>
+                    )}
+                    {project.end_date ? (
+                      <span className="text-slate-500">
+                        End {formatProjectDate(project.end_date)}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
