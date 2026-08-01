@@ -311,6 +311,7 @@ export function CustomerDetailsPage({
           <div className="mt-5">
             <TabPanel
               tab={activeTab}
+              customerId={customer.id}
               customerName={customer.fullName}
               projects={projects}
               addressPlaceholder={addressPlaceholder}
@@ -420,12 +421,14 @@ function ActionButton({
 
 function TabPanel({
   tab,
+  customerId,
   customerName,
   projects,
   addressPlaceholder,
   onOpenProjects,
 }: {
   tab: CustomerDetailsTab;
+  customerId: string;
   customerName: string;
   projects: Project[];
   addressPlaceholder: string | null;
@@ -472,6 +475,7 @@ function TabPanel({
           ) : (
             <div className="mt-4">
               <ProjectList
+                customerId={customerId}
                 projects={recent}
                 addressPlaceholder={addressPlaceholder}
                 dense
@@ -486,6 +490,7 @@ function TabPanel({
   if (tab === "projects") {
     return (
       <ProjectsTab
+        customerId={customerId}
         projects={projects}
         addressPlaceholder={addressPlaceholder}
       />
@@ -516,9 +521,11 @@ function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
 }
 
 function ProjectsTab({
+  customerId,
   projects,
   addressPlaceholder,
 }: {
+  customerId: string;
   projects: Project[];
   addressPlaceholder: string | null;
 }) {
@@ -542,6 +549,7 @@ function ProjectsTab({
         </h2>
       </div>
       <ProjectList
+        customerId={customerId}
         projects={projects}
         addressPlaceholder={addressPlaceholder}
       />
@@ -550,10 +558,12 @@ function ProjectsTab({
 }
 
 function ProjectList({
+  customerId,
   projects,
   addressPlaceholder,
   dense = false,
 }: {
+  customerId: string;
   projects: Project[];
   addressPlaceholder: string | null;
   dense?: boolean;
@@ -567,6 +577,7 @@ function ProjectList({
         return (
           <ProjectCard
             key={project.id}
+            customerId={customerId}
             project={project}
             addressPlaceholder={addressPlaceholder}
             expanded={expanded}
@@ -584,12 +595,14 @@ function ProjectList({
 }
 
 function ProjectCard({
+  customerId,
   project,
   addressPlaceholder,
   expanded,
   dense,
   onToggle,
 }: {
+  customerId: string;
   project: Project;
   addressPlaceholder: string | null;
   expanded: boolean;
@@ -599,47 +612,68 @@ function ProjectCard({
   const materials = asProjectMaterials(project.materials);
   const labour = asProjectLabour(project.labour_items);
   const name = project.project_name?.trim() || "Untitled project";
+  const projectCustomerId = project.customer_id || customerId;
+  const projectDetailHref = `/dashboard/customers/${projectCustomerId}/projects/${project.id}`;
 
   return (
     <li className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={expanded}
-        className={`flex w-full items-start justify-between gap-3 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${
+      <div
+        className={`flex items-stretch gap-2 ${
           dense ? "px-3 py-3 sm:px-4" : "px-4 py-4 sm:px-5"
         }`}
       >
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <p
-              className={`font-semibold text-white ${
-                dense ? "text-sm" : "text-base"
-              }`}
-            >
-              {name}
-            </p>
-            <ProjectStatusBadge status={project.status} />
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="min-w-0 flex-1 rounded-xl text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p
+                  className={`font-semibold text-white ${
+                    dense ? "text-sm" : "text-base"
+                  }`}
+                >
+                  {name}
+                </p>
+                <ProjectStatusBadge status={project.status} />
+              </div>
+              <p
+                className={`mt-1 text-slate-400 ${dense ? "text-xs" : "text-sm"}`}
+              >
+                {addressPlaceholder || "Address TBD"}
+                <span className="mx-2 text-slate-600">·</span>
+                Started {formatProjectDate(project.start_date)}
+              </p>
+            </div>
+            <div className="shrink-0 text-right">
+              <p
+                className={`font-semibold text-white ${
+                  dense ? "text-sm" : "text-base"
+                }`}
+              >
+                {formatProjectMoney(Number(project.value))}
+              </p>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                {expanded ? "Hide details" : "View details"}
+              </p>
+            </div>
           </div>
-          <p className={`mt-1 text-slate-400 ${dense ? "text-xs" : "text-sm"}`}>
-            {addressPlaceholder || "Address TBD"}
-            <span className="mx-2 text-slate-600">·</span>
-            Started {formatProjectDate(project.start_date)}
-          </p>
-        </div>
-        <div className="shrink-0 text-right">
-          <p
-            className={`font-semibold text-white ${
-              dense ? "text-sm" : "text-base"
-            }`}
-          >
-            {formatProjectMoney(Number(project.value))}
-          </p>
-          <p className="mt-1 text-xs font-medium text-accent">
-            {expanded ? "Hide details" : "View details"}
-          </p>
-        </div>
-      </button>
+        </button>
+
+        <Link
+          href={projectDetailHref}
+          aria-label={`Open project ${name}`}
+          className={`inline-flex shrink-0 items-center justify-center gap-1.5 self-center rounded-xl border border-accent/40 bg-accent/15 px-3 font-semibold text-accent transition hover:border-accent hover:bg-accent/25 hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+            dense ? "min-h-[36px] text-xs" : "min-h-[40px] text-sm"
+          }`}
+        >
+          Open Project
+          <span aria-hidden="true">→</span>
+        </Link>
+      </div>
 
       {expanded ? (
         <div className="border-t border-white/10 px-4 py-4 sm:px-5">
