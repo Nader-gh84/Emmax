@@ -3,6 +3,7 @@ export const NOTIFICATION_TYPES = [
   "quote_accepted",
   "quote_declined",
   "supplier_price",
+  "materials_confirmed",
   "employee_clock",
 ] as const;
 
@@ -16,6 +17,12 @@ export interface NotificationMetadata {
   supplier_email?: string | null;
   item_count?: number | null;
   project_name?: string | null;
+  project_id?: string | null;
+  customer_id?: string | null;
+  material_order_id?: string | null;
+  availability_date?: string | null;
+  availability_time?: string | null;
+  branch_location?: string | null;
   decline_reason?: string | null;
   [key: string]: unknown;
 }
@@ -36,6 +43,20 @@ export function isNotificationType(value: string): value is NotificationType {
 }
 
 export function getNotificationHref(notification: AppNotification): string | null {
+  if (notification.type === "materials_confirmed") {
+    const customerId = notification.metadata?.customer_id;
+    const projectId = notification.metadata?.project_id;
+    if (
+      typeof customerId === "string" &&
+      customerId &&
+      typeof projectId === "string" &&
+      projectId
+    ) {
+      return `/dashboard/customers/${customerId}/projects/${projectId}`;
+    }
+    return "/dashboard/inbox";
+  }
+
   if (!notification.quote_id) return null;
 
   if (notification.type === "draft_quote") {
