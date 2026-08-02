@@ -38,15 +38,6 @@ function IconChat({ className }: { className?: string }) {
   );
 }
 
-function IconPlay({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
 function IconChevron({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -309,14 +300,13 @@ export function ProjectDetailPage({ project }: { project: ProjectDetailMock }) {
               ) : null}
             </div>
 
-            <button
-              type="button"
-              onClick={noop("Start Project")}
+            <Link
+              href={`/dashboard/customers/${project.customerId}/projects/${project.id}/order-materials`}
               className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"
             >
-              <IconPlay className="h-4 w-4" />
-              Start Project
-            </button>
+              <IconCube className="h-4 w-4" />
+              Order Materials
+            </Link>
           </div>
         </div>
       </div>
