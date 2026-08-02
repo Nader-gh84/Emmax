@@ -10,6 +10,12 @@ export interface OrderMaterialRow {
   status: "In Quote" | "Added" | "Edited";
 }
 
+export interface OrderSupplierOption {
+  id: string;
+  name: string;
+  email: string | null;
+}
+
 export interface OrderMaterialsMock {
   customerId: string;
   projectId: string;
@@ -22,11 +28,11 @@ export interface OrderMaterialsMock {
   quoteAmount: number;
   materials: OrderMaterialRow[];
   notes: string;
-  primarySupplier: string;
+  primarySupplierId: string;
   deliveryOption: string;
   requiredByDate: string;
   projectReference: string;
-  suppliers: string[];
+  suppliers: OrderSupplierOption[];
   deliveryOptions: string[];
   taxRate: number;
 }
@@ -47,11 +53,11 @@ export function getMockOrderMaterials(
     quoteAmount: 18450,
     notes:
       "Please stage pot lights and wire for first delivery. Call before drop-off.",
-    primarySupplier: "EECOL Electric",
+    primarySupplierId: "",
     deliveryOption: "Delivery to Site",
     requiredByDate: "2026-08-15",
     projectReference: "Kitchen Renovation — Ali Tajdar",
-    suppliers: ["EECOL Electric", "Gescan", "Rexel"],
+    suppliers: [],
     deliveryOptions: [
       "Delivery to Site",
       "Pickup at Counter",

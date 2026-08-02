@@ -23,6 +23,10 @@ import {
   type ProjectDetailMock,
   type ProjectDetailTab,
 } from "@/lib/project-detail-mock";
+import {
+  formatAvailabilityLabel,
+  type MaterialOrder,
+} from "@/types/material-order";
 
 function noop(label: string) {
   return () => {
@@ -180,7 +184,13 @@ function DonutChart({
   );
 }
 
-export function ProjectDetailPage({ project }: { project: ProjectDetailMock }) {
+export function ProjectDetailPage({
+  project,
+  materialOrder = null,
+}: {
+  project: ProjectDetailMock;
+  materialOrder?: MaterialOrder | null;
+}) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>("overview");
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -394,6 +404,7 @@ export function ProjectDetailPage({ project }: { project: ProjectDetailMock }) {
         {activeTab === "overview" ? (
           <OverviewTab
             project={project}
+            materialOrder={materialOrder}
             scopePreview={scopePreview}
             taskTotal={taskTotal}
             materialTotal={materialTotal}
@@ -524,11 +535,13 @@ function StatCard({
 
 function OverviewTab({
   project,
+  materialOrder,
   scopePreview,
   taskTotal,
   materialTotal,
 }: {
   project: ProjectDetailMock;
+  materialOrder: MaterialOrder | null;
   scopePreview: string[];
   taskTotal: number;
   materialTotal: number;
@@ -760,6 +773,55 @@ function OverviewTab({
 
       {/* Column 3 */}
       <div className="space-y-5 xl:col-span-3">
+        {materialOrder ? (
+          <section
+            className={`rounded-2xl border p-5 ${
+              materialOrder.status === "confirmed"
+                ? "border-emerald-500/30 bg-emerald-500/10"
+                : "border-accent/30 bg-accent/10"
+            }`}
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+              Materials Order
+            </h2>
+            {materialOrder.status === "confirmed" ? (
+              <>
+                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                  Materials Ready
+                </p>
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {formatAvailabilityLabel(
+                    materialOrder.availability_date,
+                    materialOrder.availability_time
+                  )}
+                </p>
+                <p className="mt-1 text-sm text-emerald-50/90">
+                  {materialOrder.branch_location || "—"}
+                </p>
+                <p className="mt-2 text-xs text-emerald-100/70">
+                  Confirmed by {materialOrder.supplier_name || "supplier"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-accent">
+                  Order Sent
+                </p>
+                <p className="mt-2 text-sm text-slate-200">
+                  Awaiting confirmation from{" "}
+                  {materialOrder.supplier_name || "supplier"}.
+                </p>
+              </>
+            )}
+            <Link
+              href={`/dashboard/customers/${project.customerId}/projects/${project.id}/order-materials`}
+              className="mt-4 inline-flex text-sm font-semibold text-accent hover:text-blue-400"
+            >
+              Open Order Materials →
+            </Link>
+          </section>
+        ) : null}
+
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
             Customer & Quote

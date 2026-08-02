@@ -31,6 +31,8 @@ function NotificationTypeIcon({ type }: { type: string }) {
       return <IconXCircle className={className} />;
     case "supplier_price":
       return <IconTruck className={className} />;
+    case "materials_confirmed":
+      return <IconCheckCircle className={className} />;
     case "employee_clock":
       return <IconClock className={className} />;
     default:
@@ -48,6 +50,8 @@ function typeAccent(type: string) {
       return "bg-red-500/15 text-red-300 ring-red-500/30";
     case "supplier_price":
       return "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30";
+    case "materials_confirmed":
+      return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
     case "employee_clock":
       return "bg-blue-500/15 text-blue-300 ring-blue-500/30";
     default:
