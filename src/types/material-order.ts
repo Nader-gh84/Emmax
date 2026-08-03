@@ -34,6 +34,7 @@ export interface MaterialOrder {
   availability_date: string | null;
   availability_time: string | null;
   branch_location: string | null;
+  materials_received_at?: string | null;
   created_at: string;
   updated_at: string;
 }
