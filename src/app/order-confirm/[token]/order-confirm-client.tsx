@@ -16,6 +16,27 @@ const BRANCH_OPTIONS = [
   "Other (see notes with contractor)",
 ];
 
+const TIME_SLOT_OPTIONS = [
+  "8:00 AM",
+  "9:00 AM",
+  "10:00 AM",
+  "11:00 AM",
+  "12:00 PM",
+  "1:00 PM",
+  "2:00 PM",
+  "3:00 PM",
+  "4:00 PM",
+  "5:00 PM",
+] as const;
+
+function todayIsoDate(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function OrderConfirmClient({
   token,
   initialOrder,
@@ -33,8 +54,11 @@ export function OrderConfirmClient({
     return "form";
   });
   const [availabilityDate, setAvailabilityDate] = useState("");
-  const [availabilityTime, setAvailabilityTime] = useState("09:00");
+  const [availabilityTime, setAvailabilityTime] = useState<string>(
+    TIME_SLOT_OPTIONS[1]
+  );
   const [branchLocation, setBranchLocation] = useState(BRANCH_OPTIONS[0]);
+  const minAvailabilityDate = useMemo(() => todayIsoDate(), []);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [justConfirmed, setJustConfirmed] = useState(false);
@@ -239,20 +263,55 @@ export function OrderConfirmClient({
               <input
                 type="date"
                 value={availabilityDate}
+                min={minAvailabilityDate}
                 onChange={(event) => setAvailabilityDate(event.target.value)}
-                className={touchInput}
+                onKeyDown={(event) => {
+                  // Calendar picker only — block typed digits/letters.
+                  const allowed = [
+                    "Tab",
+                    "Escape",
+                    "Enter",
+                    "ArrowUp",
+                    "ArrowDown",
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "Home",
+                    "End",
+                    "Backspace",
+                    "Delete",
+                  ];
+                  if (!allowed.includes(event.key)) {
+                    event.preventDefault();
+                  }
+                }}
+                onClick={(event) => {
+                  const input = event.currentTarget;
+                  if (typeof input.showPicker === "function") {
+                    try {
+                      input.showPicker();
+                    } catch {
+                      // Some browsers throw if showPicker is blocked; ignore.
+                    }
+                  }
+                }}
+                className={`${touchInput} cursor-pointer`}
               />
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Availability Time
               </span>
-              <input
-                type="time"
+              <select
                 value={availabilityTime}
                 onChange={(event) => setAvailabilityTime(event.target.value)}
                 className={touchInput}
-              />
+              >
+                {TIME_SLOT_OPTIONS.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
