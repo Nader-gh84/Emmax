@@ -11,7 +11,7 @@ import {
   IconTruck,
   IconXCircle,
 } from "@/components/dashboard/icons";
-import { touchBtnSecondary } from "@/components/quotes/ui";
+import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
@@ -66,6 +66,9 @@ export function InboxPage() {
   const [error, setError] = useState<string | null>(null);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -139,7 +142,46 @@ export function InboxPage() {
     [notifications]
   );
 
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const validIds = new Set(notifications.map((item) => item.id));
+      const next = new Set(
+        Array.from(current).filter((id) => validIds.has(id))
+      );
+      return next.size === current.size ? current : next;
+    });
+
+    if (notifications.length === 0 && isSelectionMode) {
+      setIsSelectionMode(false);
+    }
+  }, [notifications, isSelectionMode]);
+
   const unreadCount = notifications.filter((item) => !item.read).length;
+  const selectedCount = selectedIds.size;
+
+  function enterSelectionMode() {
+    setIsSelectionMode(true);
+    setSelectedIds(new Set());
+    setError(null);
+  }
+
+  function exitSelectionMode() {
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   async function markAsRead(notification: AppNotification) {
     if (notification.read) return;
@@ -201,6 +243,12 @@ export function InboxPage() {
     setNotifications((current) =>
       current.filter((item) => item.id !== notification.id)
     );
+    setSelectedIds((current) => {
+      if (!current.has(notification.id)) return current;
+      const next = new Set(current);
+      next.delete(notification.id);
+      return next;
+    });
 
     const supabase = createClient();
     const { error: deleteError } = await supabase
@@ -220,6 +268,40 @@ export function InboxPage() {
     });
   }
 
+  async function handleBulkDelete() {
+    if (selectedCount === 0 || isBulkDeleting) return;
+
+    const confirmed = window.confirm(
+      `Delete ${selectedCount} notification${selectedCount === 1 ? "" : "s"}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const ids = Array.from(selectedIds);
+    setError(null);
+    setIsBulkDeleting(true);
+
+    const previous = notifications;
+    setNotifications((current) =>
+      current.filter((item) => !selectedIds.has(item.id))
+    );
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from("notifications")
+      .delete()
+      .in("id", ids);
+
+    if (deleteError) {
+      setNotifications(previous);
+      setError("Failed to delete selected notifications. Please try again.");
+      setIsBulkDeleting(false);
+      return;
+    }
+
+    exitSelectionMode();
+    setIsBulkDeleting(false);
+  }
+
   return (
     <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -231,14 +313,50 @@ export function InboxPage() {
             Drafts, confirmations, and other updates in one place.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void markAllAsRead()}
-          disabled={unreadCount === 0 || isMarkingAll}
-          className={`${touchBtnSecondary} text-sm disabled:opacity-40`}
-        >
-          {isMarkingAll ? "Marking…" : "Mark all as read"}
-        </button>
+
+        {isSelectionMode ? (
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <span className="mr-1 text-sm font-medium text-slate-300">
+              {selectedCount} selected
+            </span>
+            <button
+              type="button"
+              onClick={() => void handleBulkDelete()}
+              disabled={selectedCount === 0 || isBulkDeleting}
+              className={`${touchBtnPrimary} gap-2 bg-red-600 px-4 text-sm hover:bg-red-500 disabled:opacity-40`}
+            >
+              <IconTrash className="h-4 w-4" />
+              {isBulkDeleting ? "Deleting…" : "Delete Selected"}
+            </button>
+            <button
+              type="button"
+              onClick={exitSelectionMode}
+              disabled={isBulkDeleting}
+              className={`${touchBtnSecondary} px-4 text-sm`}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <button
+              type="button"
+              onClick={enterSelectionMode}
+              disabled={notifications.length === 0 || isLoading}
+              className={`${touchBtnSecondary} px-4 text-sm disabled:opacity-40`}
+            >
+              Select
+            </button>
+            <button
+              type="button"
+              onClick={() => void markAllAsRead()}
+              disabled={unreadCount === 0 || isMarkingAll}
+              className={`${touchBtnSecondary} px-4 text-sm disabled:opacity-40`}
+            >
+              {isMarkingAll ? "Marking…" : "Mark all as read"}
+            </button>
+          </div>
+        )}
       </header>
 
       {error && (
@@ -254,21 +372,24 @@ export function InboxPage() {
         </div>
       ) : notifications.length === 0 ? (
         <div className="mt-12 flex flex-col items-center rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-16 text-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 text-accent ring-1 ring-accent/30">
-            <IconInbox className="h-7 w-7" />
-          </span>
-          <h2 className="mt-5 text-lg font-semibold text-white">
-            Your inbox is empty
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent/15 ring-1 ring-accent/30">
+            <IconInbox className="h-10 w-10 text-accent" />
+          </div>
+          <h2 className="mt-6 text-2xl font-bold tracking-tight text-white">
+            No notifications
           </h2>
-          <p className="mt-2 max-w-sm text-sm text-slate-400">
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-400 sm:text-base">
             Save a draft pre-invoice or wait for a customer confirmation — updates
             will show up here.
           </p>
           <Link
             href="/dashboard/voice-quote-builder"
-            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-5 text-sm font-semibold text-white transition hover:bg-blue-600"
+            className={`${touchBtnPrimary} mt-8 gap-2 px-8 shadow-lg shadow-accent/25`}
           >
-            Create a pre-invoice
+            <span className="text-lg leading-none" aria-hidden="true">
+              +
+            </span>
+            Create Pre-Invoice
           </Link>
         </div>
       ) : (
@@ -282,9 +403,10 @@ export function InboxPage() {
                 {group.items.map((notification) => {
                   const href = getNotificationHref(notification);
                   const isDeleting = deletingIds.has(notification.id);
+                  const isSelected = selectedIds.has(notification.id);
                   const mainClass = `flex min-w-0 flex-1 items-start gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04] ${
                     notification.read ? "opacity-80" : ""
-                  }`;
+                  } ${isSelected ? "bg-accent/5" : ""}`;
 
                   const body = (
                     <>
@@ -325,7 +447,27 @@ export function InboxPage() {
                       key={notification.id}
                       className="group flex items-stretch border-b border-white/5 last:border-b-0"
                     >
-                      {href ? (
+                      {isSelectionMode && (
+                        <label className="flex shrink-0 cursor-pointer items-center pl-4">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelected(notification.id)}
+                            className="h-4 w-4 rounded border-white/30 bg-white/5 text-accent focus:ring-accent focus:ring-offset-0"
+                            aria-label={`Select notification: ${notification.message}`}
+                          />
+                        </label>
+                      )}
+
+                      {isSelectionMode ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSelected(notification.id)}
+                          className={mainClass}
+                        >
+                          {body}
+                        </button>
+                      ) : href ? (
                         <Link
                           href={href}
                           onClick={() => void markAsRead(notification)}
@@ -342,21 +484,24 @@ export function InboxPage() {
                           {body}
                         </button>
                       )}
-                      <div className="flex shrink-0 items-center pr-3">
-                        <button
-                          type="button"
-                          aria-label="Delete notification"
-                          disabled={isDeleting}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            void handleDelete(notification);
-                          }}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-500/15 hover:text-red-300 disabled:opacity-40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                        >
-                          <IconTrash className="h-4 w-4" />
-                        </button>
-                      </div>
+
+                      {!isSelectionMode && (
+                        <div className="flex shrink-0 items-center pr-3">
+                          <button
+                            type="button"
+                            aria-label="Delete notification"
+                            disabled={isDeleting}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void handleDelete(notification);
+                            }}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 opacity-100 transition hover:bg-red-500/15 hover:text-red-300 disabled:opacity-40 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                          >
+                            <IconTrash className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </li>
                   );
                 })}
