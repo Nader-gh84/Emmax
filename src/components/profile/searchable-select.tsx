@@ -124,21 +124,30 @@ export function SearchableSelect({
           {filteredOptions.length === 0 ? (
             <li className="px-4 py-2.5 text-sm text-slate-400">No matches</li>
           ) : (
-            filteredOptions.map((option) => (
-              <li key={option.value} role="option" aria-selected={option.value === value}>
-                <button
-                  type="button"
-                  className="w-full px-4 py-2.5 text-left text-base text-white hover:bg-white/10"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
+            filteredOptions.map((option) => {
+              const isSelected = option.value === value;
+              return (
+                <li
+                  key={option.value}
+                  role="option"
+                  aria-selected={isSelected}
                 >
-                  {option.label}
-                </button>
-              </li>
-            ))
+                  <button
+                    type="button"
+                    className={`w-full px-4 py-2.5 text-left text-base text-white transition hover:bg-accent/20 ${
+                      isSelected ? "bg-accent/15 text-white" : ""
+                    }`}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              );
+            })
           )}
           {isTruncated && (
             <li className="border-t border-white/10 px-4 py-2 text-xs text-slate-500">

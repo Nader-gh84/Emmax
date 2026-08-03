@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/profile/searchable-select";
 import { touchBtnPrimary, touchInput } from "@/components/quotes/ui";
 import type { PublicMaterialOrder } from "@/types/material-order";
 import { formatAvailabilityLabel } from "@/types/material-order";
@@ -28,6 +32,14 @@ const TIME_SLOT_OPTIONS = [
   "4:00 PM",
   "5:00 PM",
 ] as const;
+
+const BRANCH_SELECT_OPTIONS: SearchableSelectOption[] = BRANCH_OPTIONS.map(
+  (option) => ({ value: option, label: option })
+);
+
+const TIME_SELECT_OPTIONS: SearchableSelectOption[] = TIME_SLOT_OPTIONS.map(
+  (slot) => ({ value: slot, label: slot })
+);
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -297,38 +309,40 @@ export function OrderConfirmClient({
                 className={`${touchInput} cursor-pointer`}
               />
             </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <div>
+              <label
+                htmlFor="order-confirm-availability-time"
+                className="block text-xs font-semibold uppercase tracking-wide text-slate-500"
+              >
                 Availability Time
-              </span>
-              <select
+              </label>
+              <SearchableSelect
+                id="order-confirm-availability-time"
                 value={availabilityTime}
-                onChange={(event) => setAvailabilityTime(event.target.value)}
-                className={touchInput}
+                onChange={setAvailabilityTime}
+                options={TIME_SELECT_OPTIONS}
+                placeholder="Select time"
+                disabled={isSubmitting}
+                emptyQueryMaxResults={TIME_SELECT_OPTIONS.length}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="order-confirm-branch-location"
+                className="block text-xs font-semibold uppercase tracking-wide text-slate-500"
               >
-                {TIME_SLOT_OPTIONS.map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Branch / Pickup Location
-              </span>
-              <select
+              </label>
+              <SearchableSelect
+                id="order-confirm-branch-location"
                 value={branchLocation}
-                onChange={(event) => setBranchLocation(event.target.value)}
-                className={touchInput}
-              >
-                {BRANCH_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setBranchLocation}
+                options={BRANCH_SELECT_OPTIONS}
+                placeholder="Select branch"
+                disabled={isSubmitting}
+                emptyQueryMaxResults={BRANCH_SELECT_OPTIONS.length}
+              />
+            </div>
 
             {formError ? (
               <p className="text-sm text-red-300">{formError}</p>
