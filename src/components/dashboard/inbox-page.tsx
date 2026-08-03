@@ -7,6 +7,7 @@ import {
   IconClock,
   IconDocumentDraft,
   IconInbox,
+  IconTrash,
   IconTruck,
   IconXCircle,
 } from "@/components/dashboard/icons";
@@ -64,6 +65,7 @@ export function InboxPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -185,6 +187,39 @@ export function InboxPage() {
     }
   }
 
+  async function handleDelete(notification: AppNotification) {
+    const confirmed = window.confirm(
+      "Delete this notification? This cannot be undone."
+    );
+    if (!confirmed) return;
+    if (deletingIds.has(notification.id)) return;
+
+    setError(null);
+    setDeletingIds((current) => new Set(current).add(notification.id));
+
+    const previous = notifications;
+    setNotifications((current) =>
+      current.filter((item) => item.id !== notification.id)
+    );
+
+    const supabase = createClient();
+    const { error: deleteError } = await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notification.id);
+
+    if (deleteError) {
+      setNotifications(previous);
+      setError("Failed to delete notification. Please try again.");
+    }
+
+    setDeletingIds((current) => {
+      const next = new Set(current);
+      next.delete(notification.id);
+      return next;
+    });
+  }
+
   return (
     <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -246,7 +281,8 @@ export function InboxPage() {
               <ul className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
                 {group.items.map((notification) => {
                   const href = getNotificationHref(notification);
-                  const rowClass = `flex w-full items-start gap-3 border-b border-white/5 px-4 py-4 text-left transition last:border-b-0 hover:bg-white/[0.04] ${
+                  const isDeleting = deletingIds.has(notification.id);
+                  const mainClass = `flex min-w-0 flex-1 items-start gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04] ${
                     notification.read ? "opacity-80" : ""
                   }`;
 
@@ -284,29 +320,43 @@ export function InboxPage() {
                     </>
                   );
 
-                  if (href) {
-                    return (
-                      <li key={notification.id}>
+                  return (
+                    <li
+                      key={notification.id}
+                      className="group flex items-stretch border-b border-white/5 last:border-b-0"
+                    >
+                      {href ? (
                         <Link
                           href={href}
                           onClick={() => void markAsRead(notification)}
-                          className={rowClass}
+                          className={mainClass}
                         >
                           {body}
                         </Link>
-                      </li>
-                    );
-                  }
-
-                  return (
-                    <li key={notification.id}>
-                      <button
-                        type="button"
-                        onClick={() => void markAsRead(notification)}
-                        className={rowClass}
-                      >
-                        {body}
-                      </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void markAsRead(notification)}
+                          className={mainClass}
+                        >
+                          {body}
+                        </button>
+                      )}
+                      <div className="flex shrink-0 items-center pr-3">
+                        <button
+                          type="button"
+                          aria-label="Delete notification"
+                          disabled={isDeleting}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void handleDelete(notification);
+                          }}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-red-500/15 hover:text-red-300 disabled:opacity-40 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                        >
+                          <IconTrash className="h-4 w-4" />
+                        </button>
+                      </div>
                     </li>
                   );
                 })}
