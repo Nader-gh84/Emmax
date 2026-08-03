@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   IconCalendar,
   IconCheckCircle,
@@ -27,6 +27,10 @@ import {
   formatAvailabilityLabel,
   type MaterialOrder,
 } from "@/types/material-order";
+import {
+  formatProjectDate,
+  type ProjectStatus,
+} from "@/types/project";
 
 function noop(label: string) {
   return () => {
@@ -187,12 +191,122 @@ function DonutChart({
 export function ProjectDetailPage({
   project,
   materialOrder = null,
+  projectStatus = "active",
+  startDateConfirmed = false,
+  rawStartDate = null,
 }: {
   project: ProjectDetailMock;
   materialOrder?: MaterialOrder | null;
+  projectStatus?: ProjectStatus;
+  startDateConfirmed?: boolean;
+  rawStartDate?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>("overview");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [liveStartDate, setLiveStartDate] = useState<string | null>(
+    startDateConfirmed ? rawStartDate : null
+  );
+  const [liveStartConfirmed, setLiveStartConfirmed] =
+    useState(startDateConfirmed);
+  const [liveStatus, setLiveStatus] = useState<ProjectStatus>(projectStatus);
+  const [liveOrder, setLiveOrder] = useState<MaterialOrder | null>(materialOrder);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const startDateInputRef = useRef<HTMLInputElement>(null);
+
+  const orderMaterialsHref = `/dashboard/customers/${project.customerId}/projects/${project.id}/order-materials`;
+  const materialsReceived = Boolean(liveOrder?.materials_received_at);
+  const canStartProject =
+    liveStartConfirmed &&
+    Boolean(liveOrder?.status === "confirmed" && materialsReceived) &&
+    liveStatus !== "in_progress";
+  const projectStarted = liveStatus === "in_progress";
+
+  const readinessLabel = projectStarted
+    ? "In Progress"
+    : project.readinessLabel;
+  const readinessSubtext = projectStarted
+    ? "Project started"
+    : project.readinessSubtext;
+  const statusBadgeLabel = projectStarted
+    ? "In Progress"
+    : project.statusLabel;
+  const displayStartDate = liveStartConfirmed
+    ? formatProjectDate(liveStartDate)
+    : "Not set";
+
+  const nextSteps = useMemo(() => {
+    return project.nextSteps.map((step) => {
+      if (step.id === "1") {
+        if (liveStartConfirmed) {
+          return {
+            ...step,
+            completed: true,
+            disabled: false,
+            tag: "Done",
+            tagTone: "done" as const,
+          };
+        }
+        return step;
+      }
+      if (step.id === "4") {
+        if (materialsReceived) {
+          return {
+            ...step,
+            completed: true,
+            disabled: false,
+            tag: "Done",
+            tagTone: "done" as const,
+          };
+        }
+        if (liveOrder?.status === "confirmed") {
+          return {
+            ...step,
+            tag: "Receive materials",
+            tagTone: "required" as const,
+            disabled: false,
+          };
+        }
+        if (liveOrder?.status === "sent") {
+          return {
+            ...step,
+            tag: "Awaiting supplier",
+            tagTone: "info" as const,
+            disabled: false,
+          };
+        }
+        return step;
+      }
+      if (step.id === "5") {
+        if (projectStarted) {
+          return {
+            ...step,
+            completed: true,
+            disabled: false,
+            tag: "Done",
+            tagTone: "done" as const,
+          };
+        }
+        if (canStartProject) {
+          return {
+            ...step,
+            disabled: false,
+            tag: "Ready",
+            tagTone: "info" as const,
+          };
+        }
+        return step;
+      }
+      return step;
+    });
+  }, [
+    canStartProject,
+    liveOrder?.status,
+    liveStartConfirmed,
+    materialsReceived,
+    project.nextSteps,
+    projectStarted,
+  ]);
 
   const scopePreview = useMemo(
     () => project.scopeItems.slice(0, 6),
@@ -211,6 +325,96 @@ export function ProjectDetailPage({
     project.materialStats.received +
     project.materialStats.used +
     project.materialStats.returned;
+
+  async function handleStartDateChange(value: string) {
+    if (!value) return;
+    setActionError(null);
+    setActionBusy("start-date");
+    try {
+      const response = await fetch(
+        `/api/projects/${project.id}/start-date`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startDate: value }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setActionError(data.error || "Failed to save start date.");
+        return;
+      }
+      setLiveStartDate(data.startDate || value);
+      setLiveStartConfirmed(true);
+    } catch {
+      setActionError("Failed to save start date.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleMarkMaterialsReceived() {
+    if (!liveOrder?.id) return;
+    setActionError(null);
+    setActionBusy("mark-received");
+    try {
+      const response = await fetch(
+        `/api/material-orders/${liveOrder.id}/mark-received`,
+        { method: "POST" }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setActionError(data.error || "Failed to mark materials received.");
+        return;
+      }
+      setLiveOrder((current) =>
+        current
+          ? {
+              ...current,
+              materials_received_at:
+                data.materialsReceivedAt || new Date().toISOString(),
+            }
+          : current
+      );
+    } catch {
+      setActionError("Failed to mark materials received.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function handleStartProject() {
+    setActionError(null);
+    setActionBusy("start-project");
+    try {
+      const response = await fetch(`/api/projects/${project.id}/start`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setActionError(data.error || "Failed to start project.");
+        return;
+      }
+      setLiveStatus("in_progress");
+    } catch {
+      setActionError("Failed to start project.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  function openStartDatePicker() {
+    const input = startDateInputRef.current;
+    if (!input) return;
+    input.focus();
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   return (
     <div className="relative flex w-full flex-1 flex-col pb-28">
@@ -244,8 +448,14 @@ export function ProjectDetailPage({
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {project.projectName}
               </h1>
-              <span className="inline-flex rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30">
-                {project.statusLabel}
+              <span
+                className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ring-1 ${
+                  projectStarted
+                    ? "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30"
+                    : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                }`}
+              >
+                {statusBadgeLabel}
               </span>
             </div>
 
@@ -310,15 +520,40 @@ export function ProjectDetailPage({
               ) : null}
             </div>
 
-            <Link
-              href={`/dashboard/customers/${project.customerId}/projects/${project.id}/order-materials`}
-              className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"
-            >
-              <IconCube className="h-4 w-4" />
-              Order Materials
-            </Link>
+            {projectStarted ? (
+              <button
+                type="button"
+                disabled
+                className="inline-flex min-h-[44px] cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-cyan-500/30 px-5 text-sm font-semibold text-cyan-100"
+              >
+                <IconCheckCircle className="h-4 w-4" />
+                In Progress
+              </button>
+            ) : canStartProject ? (
+              <button
+                type="button"
+                disabled={actionBusy === "start-project"}
+                onClick={() => void handleStartProject()}
+                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600 disabled:opacity-60"
+              >
+                <IconPlay className="h-4 w-4" />
+                {actionBusy === "start-project" ? "Starting…" : "Start Project"}
+              </button>
+            ) : (
+              <Link
+                href={orderMaterialsHref}
+                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"
+                title="Complete start date + materials received to activate Start Project"
+              >
+                <IconCube className="h-4 w-4" />
+                Order Materials
+              </Link>
+            )}
           </div>
         </div>
+        {actionError ? (
+          <p className="mt-3 text-sm text-red-300">{actionError}</p>
+        ) : null}
       </div>
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
@@ -326,11 +561,17 @@ export function ProjectDetailPage({
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Project Status"
-            value={project.readinessLabel}
-            valueClass="text-amber-400"
-            subtext={project.readinessSubtext}
+            value={readinessLabel}
+            valueClass={
+              projectStarted ? "text-cyan-300" : "text-amber-400"
+            }
+            subtext={readinessSubtext}
             icon={<IconStatus className="h-4 w-4" />}
-            iconWell="bg-amber-500/15 text-amber-300"
+            iconWell={
+              projectStarted
+                ? "bg-cyan-500/15 text-cyan-300"
+                : "bg-amber-500/15 text-amber-300"
+            }
           />
           <StatCard
             label="Quote Amount"
@@ -342,8 +583,9 @@ export function ProjectDetailPage({
           />
           <button
             type="button"
-            onClick={noop("Set start date")}
-            className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition hover:border-accent/40 hover:bg-accent/5"
+            onClick={openStartDatePicker}
+            disabled={actionBusy === "start-date"}
+            className="relative rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left transition hover:border-accent/40 hover:bg-accent/5 disabled:opacity-60"
           >
             <div className="flex items-start justify-between gap-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -354,13 +596,26 @@ export function ProjectDetailPage({
               </span>
             </div>
             <p className="mt-3 text-2xl font-bold text-white">
-              {project.startDate || "Not set"}
+              {displayStartDate}
             </p>
-            <p className="mt-1 text-xs text-slate-500">Click to set date</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {liveStartConfirmed ? "Click to change date" : "Click to set date"}
+            </p>
+            <input
+              ref={startDateInputRef}
+              type="date"
+              value={liveStartDate || ""}
+              onChange={(event) =>
+                void handleStartDateChange(event.target.value)
+              }
+              className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+              tabIndex={-1}
+              aria-hidden="true"
+            />
           </button>
           <StatCard
             label="Progress"
-            value={`${project.progressPercent}%`}
+            value={`${projectStarted ? Math.max(project.progressPercent, 10) : project.progressPercent}%`}
             valueClass="text-white"
             subtext={null}
             icon={<IconChartBar className="h-4 w-4" />}
@@ -369,7 +624,9 @@ export function ProjectDetailPage({
             <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full rounded-full bg-accent transition-all"
-                style={{ width: `${project.progressPercent}%` }}
+                style={{
+                  width: `${projectStarted ? Math.max(project.progressPercent, 10) : project.progressPercent}%`,
+                }}
               />
             </div>
           </StatCard>
@@ -404,10 +661,13 @@ export function ProjectDetailPage({
         {activeTab === "overview" ? (
           <OverviewTab
             project={project}
-            materialOrder={materialOrder}
+            nextSteps={nextSteps}
+            materialOrder={liveOrder}
             scopePreview={scopePreview}
             taskTotal={taskTotal}
             materialTotal={materialTotal}
+            onMarkMaterialsReceived={() => void handleMarkMaterialsReceived()}
+            markReceivedBusy={actionBusy === "mark-received"}
           />
         ) : (
           <PlaceholderTab
@@ -482,6 +742,15 @@ export function ProjectDetailPage({
   );
 }
 
+function IconPlay({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 function MetaItem({
   icon,
   label,
@@ -535,16 +804,22 @@ function StatCard({
 
 function OverviewTab({
   project,
+  nextSteps,
   materialOrder,
   scopePreview,
   taskTotal,
   materialTotal,
+  onMarkMaterialsReceived,
+  markReceivedBusy,
 }: {
   project: ProjectDetailMock;
+  nextSteps: ProjectDetailMock["nextSteps"];
   materialOrder: MaterialOrder | null;
   scopePreview: string[];
   taskTotal: number;
   materialTotal: number;
+  onMarkMaterialsReceived: () => void;
+  markReceivedBusy: boolean;
 }) {
   const completedPct =
     taskTotal === 0
@@ -683,18 +958,34 @@ function OverviewTab({
             Next Steps
           </h2>
           <ol className="mt-4 space-y-3">
-            {project.nextSteps.map((step, index) => (
+            {nextSteps.map((step, index) => (
               <li
                 key={step.id}
                 className={`flex items-start gap-3 ${
-                  step.disabled ? "opacity-45" : ""
+                  step.disabled && !step.completed ? "opacity-45" : ""
                 }`}
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-slate-300">
-                  {index + 1}
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    step.completed
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : "bg-white/10 text-slate-300"
+                  }`}
+                >
+                  {step.completed ? (
+                    <IconCheckCircle className="h-4 w-4" />
+                  ) : (
+                    index + 1
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-white">{step.label}</p>
+                  <p
+                    className={`text-sm font-medium ${
+                      step.completed ? "text-emerald-100" : "text-white"
+                    }`}
+                  >
+                    {step.label}
+                  </p>
                   <span
                     className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${
                       step.tagTone === "required"
@@ -703,7 +994,9 @@ function OverviewTab({
                           ? "bg-accent/15 text-accent ring-accent/30"
                           : step.tagTone === "locked"
                             ? "bg-white/5 text-slate-500 ring-white/10"
-                            : "bg-slate-500/15 text-slate-400 ring-slate-500/25"
+                            : step.tagTone === "done"
+                              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                              : "bg-slate-500/15 text-slate-400 ring-slate-500/25"
                     }`}
                   >
                     {step.tag}
@@ -787,7 +1080,9 @@ function OverviewTab({
             {materialOrder.status === "confirmed" ? (
               <>
                 <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-emerald-300">
-                  Materials Ready
+                  {materialOrder.materials_received_at
+                    ? "Materials Received"
+                    : "Materials Ready"}
                 </p>
                 <p className="mt-2 text-sm font-semibold text-white">
                   {formatAvailabilityLabel(
@@ -801,6 +1096,29 @@ function OverviewTab({
                 <p className="mt-2 text-xs text-emerald-100/70">
                   Confirmed by {materialOrder.supplier_name || "supplier"}
                 </p>
+                {materialOrder.materials_received_at ? (
+                  <p className="mt-2 text-xs text-emerald-200/80">
+                    Received{" "}
+                    {new Date(
+                      materialOrder.materials_received_at
+                    ).toLocaleDateString("en-CA", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onMarkMaterialsReceived}
+                    disabled={markReceivedBusy}
+                    className="mt-4 inline-flex min-h-[40px] w-full items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60"
+                  >
+                    {markReceivedBusy
+                      ? "Saving…"
+                      : "Mark Materials as Received"}
+                  </button>
+                )}
               </>
             ) : (
               <>

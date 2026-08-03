@@ -33,8 +33,9 @@ export interface ProjectDetailMock {
     id: string;
     label: string;
     tag: string;
-    tagTone: "required" | "info" | "optional" | "locked";
+    tagTone: "required" | "info" | "optional" | "locked" | "done";
     disabled?: boolean;
+    completed?: boolean;
   }[];
   taskStats: {
     toDo: number;
