@@ -11,6 +11,7 @@ import {
   IconTruck,
   IconXCircle,
 } from "@/components/dashboard/icons";
+import { SentQuotePreviewModal } from "@/components/quotes/sent-quote-preview-modal";
 import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
 import {
@@ -18,7 +19,9 @@ import {
   formatNotificationTime,
   getNotificationHref,
   groupNotificationsByDay,
+  opensQuotePreviewModal,
 } from "@/types/notification";
+import type { Quote } from "@/types/quote";
 
 function NotificationTypeIcon({ type }: { type: string }) {
   const className = "h-5 w-5";
@@ -69,6 +72,7 @@ export function InboxPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -197,6 +201,27 @@ export function InboxPage() {
         item.id === notification.id ? { ...item, read: true } : item
       )
     );
+  }
+
+  async function handleOpenQuotePreview(notification: AppNotification) {
+    void markAsRead(notification);
+
+    if (!notification.quote_id) return;
+
+    setError(null);
+    const supabase = createClient();
+    const { data, error: loadError } = await supabase
+      .from("quotes")
+      .select("*")
+      .eq("id", notification.quote_id)
+      .maybeSingle();
+
+    if (loadError || !data) {
+      setError("Failed to load quote preview. Please try again.");
+      return;
+    }
+
+    setPreviewQuote(data as Quote);
   }
 
   async function markAllAsRead() {
@@ -392,7 +417,10 @@ export function InboxPage() {
               </h2>
               <ul className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
                 {group.items.map((notification) => {
-                  const href = getNotificationHref(notification);
+                  const opensPreview = opensQuotePreviewModal(notification);
+                  const href = opensPreview
+                    ? null
+                    : getNotificationHref(notification);
                   const isDeleting = deletingIds.has(notification.id);
                   const isSelected = selectedIds.has(notification.id);
                   const mainClass = `flex min-w-0 flex-1 items-start gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04] ${
@@ -458,6 +486,16 @@ export function InboxPage() {
                         >
                           {body}
                         </button>
+                      ) : opensPreview ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void handleOpenQuotePreview(notification)
+                          }
+                          className={mainClass}
+                        >
+                          {body}
+                        </button>
                       ) : href ? (
                         <Link
                           href={href}
@@ -500,6 +538,13 @@ export function InboxPage() {
             </section>
           ))}
         </div>
+      )}
+
+      {previewQuote && (
+        <SentQuotePreviewModal
+          quote={previewQuote}
+          onClose={() => setPreviewQuote(null)}
+        />
       )}
     </main>
   );

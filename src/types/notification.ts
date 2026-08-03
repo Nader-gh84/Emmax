@@ -67,15 +67,27 @@ export function getNotificationHref(notification: AppNotification): string | nul
     return `/dashboard/voice-quote-builder?quote=${notification.quote_id}&uploadPricing=1`;
   }
 
-  if (notification.type === "quote_accepted") {
-    return `/dashboard/quotes?quote=${notification.quote_id}`;
-  }
-
-  if (notification.type === "quote_declined") {
-    return `/dashboard/quotes?quote=${notification.quote_id}`;
+  // Accepted/declined quotes open an in-place preview modal on Inbox
+  // (and mark-as-read elsewhere). Do not route to the Quotes page.
+  if (
+    notification.type === "quote_accepted" ||
+    notification.type === "quote_declined"
+  ) {
+    return null;
   }
 
   return `/dashboard/quotes?quote=${notification.quote_id}`;
+}
+
+/** Notifications that should open the quote summary modal without leaving Inbox. */
+export function opensQuotePreviewModal(
+  notification: AppNotification
+): boolean {
+  return (
+    (notification.type === "quote_accepted" ||
+      notification.type === "quote_declined") &&
+    Boolean(notification.quote_id)
+  );
 }
 
 export function formatNotificationTime(dateString: string): string {
