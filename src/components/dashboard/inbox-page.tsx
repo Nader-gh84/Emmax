@@ -382,15 +382,6 @@ export function InboxPage() {
             Save a draft pre-invoice or wait for a customer confirmation — updates
             will show up here.
           </p>
-          <Link
-            href="/dashboard/voice-quote-builder"
-            className={`${touchBtnPrimary} mt-8 gap-2 px-8 shadow-lg shadow-accent/25`}
-          >
-            <span className="text-lg leading-none" aria-hidden="true">
-              +
-            </span>
-            Create Pre-Invoice
-          </Link>
         </div>
       ) : (
         <div className="mt-8 space-y-8">
