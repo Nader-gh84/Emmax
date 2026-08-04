@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -34,11 +34,15 @@ function SummaryRow({
   value,
   emphasize,
   tone,
+  hint,
+  badge,
 }: {
   label: string;
   value: string;
   emphasize?: boolean;
   tone?: "default" | "positive" | "negative";
+  hint?: string;
+  badge?: string;
 }) {
   const valueClass =
     tone === "positive"
@@ -51,18 +55,47 @@ function SummaryRow({
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 ${
+      className={`flex items-start justify-between gap-3 ${
         emphasize
           ? "rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3"
           : ""
       }`}
     >
-      <dt
-        className={`text-sm ${emphasize ? "font-semibold text-white" : "text-slate-400"}`}
-      >
-        {label}
+      <dt className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`text-sm ${
+              emphasize ? "font-semibold text-white" : "text-slate-400"
+            }`}
+          >
+            {label}
+          </span>
+          {badge ? (
+            <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-500/30">
+              {badge}
+            </span>
+          ) : null}
+        </div>
+        {hint ? <p className="mt-0.5 text-xs text-slate-500">{hint}</p> : null}
       </dt>
-      <dd className={`text-sm font-semibold ${valueClass}`}>{value}</dd>
+      <dd className={`shrink-0 text-sm font-semibold ${valueClass}`}>{value}</dd>
+    </div>
+  );
+}
+
+function SummarySection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2.5 border-t border-white/10 pt-4 first:border-t-0 first:pt-0">
+      <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        {title}
+      </h3>
+      <div className="space-y-2.5">{children}</div>
     </div>
   );
 }
@@ -229,78 +262,108 @@ export function FinancialSummaryCard({
         </p>
       ) : null}
 
-      {/* Interim flat list — Chunk 3 will regroup into Revenue / Costs / Profit / Cash sections. */}
-      <dl className="mt-4 space-y-3">
-        <SummaryRow
-          label="Contract Value"
-          value={formatProjectMoney(summary.contractValue)}
-        />
-        <SummaryRow
-          label="Change Orders (approved)"
-          value={formatProjectMoney(summary.changeOrdersAmount)}
-        />
-        <SummaryRow
-          label="Revised Contract Value"
-          value={formatProjectMoney(summary.revisedContractValue)}
-          emphasize
-        />
-        <SummaryRow
-          label="Customer Payments"
-          value={formatProjectMoney(summary.customerPayments)}
-        />
-        <SummaryRow
-          label="Outstanding Customer Balance"
-          value={formatProjectMoney(summary.outstandingCustomerBalance)}
-        />
-        <SummaryRow
-          label="Supplier Costs"
-          value={formatProjectMoney(summary.supplierCosts)}
-        />
-        <SummaryRow
-          label="Extra Purchases"
-          value={formatProjectMoney(summary.extraPurchases)}
-        />
-        <SummaryRow
-          label="Labour Cost"
-          value={formatProjectMoney(summary.labourCost)}
-        />
-        <SummaryRow
-          label="Other Expenses"
-          value={formatProjectMoney(summary.otherExpenses)}
-        />
-        <SummaryRow
-          label="Total Project Cost"
-          value={formatProjectMoney(summary.totalProjectCost)}
-        />
-        <SummaryRow
-          label="Gross Profit"
-          value={formatProjectMoney(summary.grossProfit)}
-          tone={profitTone}
-        />
-        <SummaryRow
-          label="Profit Margin"
-          value={`${summary.profitMargin.toFixed(1)}%`}
-          tone={profitTone}
-        />
-        <SummaryRow
-          label="Total Money Paid Out"
-          value={formatProjectMoney(summary.totalMoneyPaidOut)}
-        />
-        <SummaryRow
-          label="Cash Flow"
-          value={formatProjectMoney(summary.cashFlow)}
-          emphasize
-          tone={cashTone}
-        />
-        <SummaryRow
-          label="Accounts Payable"
-          value={formatProjectMoney(summary.accountsPayable)}
-        />
-        <SummaryRow
-          label="Net Receivable Position"
-          value={formatProjectMoney(summary.netReceivablePosition)}
-        />
-      </dl>
+      <div className="mt-5 space-y-1">
+        <SummarySection title="Revenue">
+          <SummaryRow
+            label="Contract Value"
+            value={formatProjectMoney(summary.contractValue)}
+          />
+          <SummaryRow
+            label="Change Orders"
+            value={formatProjectMoney(summary.changeOrdersAmount)}
+            hint="Approved change orders only"
+          />
+          <SummaryRow
+            label="Revised Contract Value"
+            value={formatProjectMoney(summary.revisedContractValue)}
+            emphasize
+          />
+        </SummarySection>
+
+        <SummarySection title="Customer Payments">
+          <SummaryRow
+            label="Paid by Customer"
+            value={formatProjectMoney(summary.customerPayments)}
+          />
+          <SummaryRow
+            label="Outstanding Customer Balance"
+            value={formatProjectMoney(summary.outstandingCustomerBalance)}
+            hint="Negative means customer overpaid"
+          />
+        </SummarySection>
+
+        <SummarySection title="Project Costs">
+          <SummaryRow
+            label="Supplier Costs"
+            value={formatProjectMoney(summary.supplierCosts)}
+          />
+          <SummaryRow
+            label="Extra Purchases"
+            value={formatProjectMoney(summary.extraPurchases)}
+            badge={
+              summary.pendingReviewCount > 0
+                ? `${summary.pendingReviewCount} pending review`
+                : undefined
+            }
+            hint={
+              summary.pendingReviewCount > 0
+                ? `${formatProjectMoney(summary.pendingReviewAmount)} not counted until billing status is set`
+                : undefined
+            }
+          />
+          <SummaryRow
+            label="Labour Cost"
+            value={formatProjectMoney(summary.labourCost)}
+          />
+          <SummaryRow
+            label="Other Expenses"
+            value={formatProjectMoney(summary.otherExpenses)}
+          />
+          <SummaryRow
+            label="Total Project Cost"
+            value={formatProjectMoney(summary.totalProjectCost)}
+            emphasize
+          />
+        </SummarySection>
+
+        <SummarySection title="Profit">
+          <SummaryRow
+            label="Gross Profit"
+            value={formatProjectMoney(summary.grossProfit)}
+            tone={profitTone}
+          />
+          <SummaryRow
+            label="Profit Margin"
+            value={`${summary.profitMargin.toFixed(1)}%`}
+            tone={profitTone}
+          />
+        </SummarySection>
+
+        <SummarySection title="Cash">
+          <SummaryRow
+            label="Total Money Paid Out"
+            value={formatProjectMoney(summary.totalMoneyPaidOut)}
+          />
+          <SummaryRow
+            label="Cash Flow"
+            value={formatProjectMoney(summary.cashFlow)}
+            emphasize
+            tone={cashTone}
+          />
+        </SummarySection>
+
+        <SummarySection title="Outstanding Obligations">
+          <SummaryRow
+            label="Accounts Payable"
+            value={formatProjectMoney(summary.accountsPayable)}
+          />
+          <SummaryRow
+            label="Net Receivable Position"
+            value={formatProjectMoney(summary.netReceivablePosition)}
+            emphasize
+          />
+        </SummarySection>
+      </div>
 
       {showDetails ? (
         <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">

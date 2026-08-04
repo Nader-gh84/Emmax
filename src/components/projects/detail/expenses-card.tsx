@@ -15,11 +15,47 @@ import {
 } from "@/lib/expense-receipt-storage";
 import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
-import type { ProjectExpense } from "@/types/project-operations";
+import {
+  isExpenseBillingStatus,
+  type ExpenseBillingStatus,
+  type ProjectExpense,
+} from "@/types/project-operations";
 import { formatProjectDate, formatProjectMoney } from "@/types/project";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+const BILLING_STATUS_OPTIONS: {
+  id: ExpenseBillingStatus;
+  label: string;
+}[] = [
+  { id: "pending_review", label: "Pending Review" },
+  { id: "add_to_change_order", label: "Add to Change Order" },
+  { id: "included_in_customer_billing", label: "Included in Customer Billing" },
+  { id: "company_cost", label: "Company Cost" },
+];
+
+function billingStatusLabel(status: ExpenseBillingStatus): string {
+  return (
+    BILLING_STATUS_OPTIONS.find((option) => option.id === status)?.label ??
+    "Pending Review"
+  );
+}
+
+function billingStatusSelectClass(status: ExpenseBillingStatus): string {
+  switch (status) {
+    case "pending_review":
+      return "border-amber-500/40 bg-amber-500/10 text-amber-100";
+    case "add_to_change_order":
+      return "border-sky-500/40 bg-sky-500/10 text-sky-100";
+    case "included_in_customer_billing":
+      return "border-emerald-500/40 bg-emerald-500/10 text-emerald-100";
+    case "company_cost":
+      return "border-slate-500/40 bg-slate-500/10 text-slate-200";
+    default:
+      return "border-white/15 bg-white/5 text-slate-200";
+  }
 }
 
 function IconReceipt({ className }: { className?: string }) {
@@ -60,8 +96,13 @@ export function ExpensesCard({
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(
     null
   );
+  const [billingStatus, setBillingStatus] =
+    useState<ExpenseBillingStatus>("pending_review");
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [updatingBillingId, setUpdatingBillingId] = useState<string | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -114,9 +155,16 @@ export function ExpensesCard({
     setDescription("");
     setAmount("");
     setExpenseDate(todayIsoDate());
+    setBillingStatus("pending_review");
     setReceiptFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
+  const pendingReviewCount = useMemo(
+    () =>
+      expenses.filter((row) => row.billing_status === "pending_review").length,
+    [expenses]
+  );
 
   function closeModal() {
     if (busy) return;
@@ -145,6 +193,53 @@ export function ExpensesCard({
     }
     setError(null);
     setReceiptFile(file);
+  }
+
+  async function handleBillingStatusChange(
+    expense: ProjectExpense,
+    nextStatus: ExpenseBillingStatus
+  ) {
+    if (expense.billing_status === nextStatus) return;
+
+    setUpdatingBillingId(expense.id);
+    setError(null);
+
+    const supabase = createClient();
+    const { error: updateError } = await supabase
+      .from("project_expenses")
+      .update({ billing_status: nextStatus })
+      .eq("id", expense.id)
+      .eq("project_id", projectId);
+
+    if (updateError) {
+      setError(
+        updateError.message?.includes("billing_status")
+          ? "Failed to update billing status. Run migration 034."
+          : "Failed to update billing status."
+      );
+      setUpdatingBillingId(null);
+      return;
+    }
+
+    syncExpenses(
+      expenses.map((row) =>
+        row.id === expense.id ? { ...row, billing_status: nextStatus } : row
+      )
+    );
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      await logProjectActivity(supabase, {
+        userId: user.id,
+        projectId,
+        activityType: "expense_billing_updated",
+        description: `Updated billing status for ${expense.store_name || "expense"} to ${billingStatusLabel(nextStatus)}`,
+      });
+    }
+
+    setUpdatingBillingId(null);
   }
 
   async function handleDelete(expense: ProjectExpense) {
@@ -223,7 +318,7 @@ export function ExpensesCard({
         description: description.trim(),
         amount: parsedAmount,
         receipt_url: receiptPath,
-        billing_status: "pending_review",
+        billing_status: billingStatus,
         payment_status: "unpaid",
         expense_kind: "extra_purchase",
       })
@@ -244,10 +339,14 @@ export function ExpensesCard({
       return;
     }
 
+    const createdRaw = data as ProjectExpense;
+    const createdStatus = isExpenseBillingStatus(createdRaw.billing_status)
+      ? createdRaw.billing_status
+      : billingStatus;
     const created: ProjectExpense = {
-      ...(data as ProjectExpense),
-      amount: Number((data as ProjectExpense).amount) || 0,
-      billing_status: "pending_review",
+      ...createdRaw,
+      amount: Number(createdRaw.amount) || 0,
+      billing_status: createdStatus,
       payment_status: "unpaid",
       expense_kind: "extra_purchase",
     };
@@ -257,7 +356,7 @@ export function ExpensesCard({
       userId: user.id,
       projectId,
       activityType: "expense_added",
-      description: `Added expense at ${created.store_name} (${formatProjectMoney(parsedAmount)})${
+      description: `Added expense at ${created.store_name} (${formatProjectMoney(parsedAmount)}, ${billingStatusLabel(createdStatus)})${
         receiptPath ? " with receipt" : ""
       }`,
     });
@@ -283,6 +382,9 @@ export function ExpensesCard({
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             Running total {formatProjectMoney(total)}
+            {pendingReviewCount > 0
+              ? ` · ${pendingReviewCount} pending review`
+              : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -356,7 +458,7 @@ export function ExpensesCard({
                       No receipt
                     </span>
                   )}
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-white">
                       {expense.store_name || "Store"}
                     </p>
@@ -364,9 +466,38 @@ export function ExpensesCard({
                       {expense.description || "—"} ·{" "}
                       {formatProjectDate(expense.expense_date)}
                     </p>
+                    <label className="mt-2 block">
+                      <span className="sr-only">
+                        Billing status for {expense.store_name || "expense"}
+                      </span>
+                      <select
+                        value={
+                          isExpenseBillingStatus(expense.billing_status)
+                            ? expense.billing_status
+                            : "pending_review"
+                        }
+                        disabled={updatingBillingId === expense.id}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          if (!isExpenseBillingStatus(next)) return;
+                          void handleBillingStatusChange(expense, next);
+                        }}
+                        className={`mt-0.5 w-full max-w-[220px] rounded-lg border px-2 py-1.5 text-[11px] font-semibold outline-none transition focus:ring-1 focus:ring-accent disabled:opacity-50 ${billingStatusSelectClass(
+                          isExpenseBillingStatus(expense.billing_status)
+                            ? expense.billing_status
+                            : "pending_review"
+                        )}`}
+                      >
+                        {BILLING_STATUS_OPTIONS.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-col items-end gap-2">
                   <span className="text-sm font-semibold text-white">
                     {formatProjectMoney(Number(expense.amount) || 0)}
                   </span>
@@ -482,6 +613,33 @@ export function ExpensesCard({
                   className={`${touchInput} mt-1.5`}
                   required
                 />
+              </div>
+              <div>
+                <label
+                  htmlFor="expense-billing-status"
+                  className="block text-sm font-medium text-slate-300"
+                >
+                  Billing status
+                </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  Pending Review expenses are excluded from Financial Summary
+                  totals until resolved.
+                </p>
+                <select
+                  id="expense-billing-status"
+                  value={billingStatus}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (isExpenseBillingStatus(next)) setBillingStatus(next);
+                  }}
+                  className={`${touchInput} mt-1.5`}
+                >
+                  {BILLING_STATUS_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label
