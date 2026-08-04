@@ -5,6 +5,9 @@ import type { LabourItem, MaterialItem } from "@/types/quote";
 /**
  * Ensures a projects row exists for a quote so the Pre-Invoices dashboard
  * can list early-stage jobs (before customer accept).
+ *
+ * Safe to call repeatedly: updates an existing row for the same quote_id,
+ * or inserts one. Handles concurrent inserts via unique(quote_id) retry.
  */
 export async function ensureProjectForQuote(input: {
   userId: string;
@@ -71,10 +74,34 @@ export async function ensureProjectForQuote(input: {
     .select("id")
     .single();
 
-  if (insertError || !created) {
-    console.error("[ensureProjectForQuote] insert failed:", insertError);
-    return null;
+  if (!insertError && created?.id) {
+    return created.id as string;
   }
 
-  return created.id as string;
+  // Concurrent create won the unique(quote_id) race — load and update that row.
+  if (insertError?.code === "23505") {
+    const { data: raced } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("quote_id", input.quoteId)
+      .maybeSingle();
+
+    if (raced?.id) {
+      await supabase
+        .from("projects")
+        .update({
+          project_name: projectName,
+          customer_id: input.customerId,
+          materials,
+          labour_items: labourItems,
+          value,
+          updated_at: now,
+        })
+        .eq("id", raced.id);
+      return raced.id as string;
+    }
+  }
+
+  console.error("[ensureProjectForQuote] insert failed:", insertError);
+  return null;
 }

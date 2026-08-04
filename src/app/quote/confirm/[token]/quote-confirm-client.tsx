@@ -90,6 +90,8 @@ export function QuoteConfirmClient({
   }, [token, initialQuote, initialError]);
 
   async function handleConfirm() {
+    if (isConfirming || view === "accepted") return;
+
     setIsConfirming(true);
     setActionError(null);
 
@@ -107,6 +109,27 @@ export function QuoteConfirmClient({
           status: response.status,
           data,
         });
+
+        // If a prior attempt already accepted (or project already exists),
+        // re-check quote status so the customer still lands on success.
+        const refresh = await fetch(
+          `/api/quotes/confirm?token=${encodeURIComponent(token)}`
+        );
+        const refreshData = await refresh.json().catch(() => ({}));
+        if (refresh.ok && refreshData.quote?.status === "accepted") {
+          setConfirmedAt(
+            refreshData.quote.confirmed_at ?? new Date().toISOString()
+          );
+          setJustAccepted(true);
+          setView("accepted");
+          setQuote({
+            ...(quote ?? refreshData.quote),
+            ...refreshData.quote,
+            status: "accepted",
+          });
+          return;
+        }
+
         throw new Error(data.error || "Failed to confirm quote");
       }
 

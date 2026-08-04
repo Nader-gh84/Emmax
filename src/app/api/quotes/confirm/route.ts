@@ -71,10 +71,16 @@ export async function POST(request: Request) {
         message.includes("not configured") ||
         message.includes("42883") ||
         message.includes("confirm_quote_by_confirmation_token");
+      // Old RPC (pre-023/033) inserts projects blindly and hits
+      // projects_quote_id_key when a pre-accept project already exists.
+      const duplicateProject =
+        message.includes("23505") ||
+        message.includes("projects_quote_id_key");
 
-      if (rpcMissing && isAdminClientConfigured()) {
+      if ((rpcMissing || duplicateProject) && isAdminClientConfigured()) {
         console.warn(
-          "[POST /api/quotes/confirm] RPC unavailable; falling back to admin path"
+          "[POST /api/quotes/confirm] RPC unavailable or duplicate project; falling back to admin path",
+          { duplicateProject, rpcMissing }
         );
         return confirmQuoteWithAdmin(token);
       }
@@ -234,8 +240,40 @@ async function confirmQuoteWithAdmin(token: string) {
     );
   }
 
-  const { error: projectError } = await admin.from("projects").upsert(
-    {
+  // Prefer update when a pre-accept project already exists for this quote_id
+  // (created by ensureProjectForQuote). Avoids projects_quote_id_key (23505).
+  const { data: existingProject, error: existingProjectError } = await admin
+    .from("projects")
+    .select("id")
+    .eq("quote_id", quote.id)
+    .maybeSingle();
+
+  if (existingProjectError) {
+    logSupabaseError(
+      "POST /api/quotes/confirm.admin.projectLookup",
+      existingProjectError,
+      { token, quoteId: quote.id }
+    );
+  }
+
+  let projectError: import("@supabase/supabase-js").PostgrestError | null =
+    null;
+
+  if (existingProject?.id) {
+    const { error } = await admin
+      .from("projects")
+      .update({
+        customer_id: quote.customer_id,
+        project_name: projectName,
+        value: Number(quote.grand_total) || 0,
+        materials: quote.materials ?? [],
+        labour_items: quote.labour_items ?? [],
+        updated_at: confirmedAt,
+      })
+      .eq("id", existingProject.id);
+    projectError = error;
+  } else {
+    const { error } = await admin.from("projects").insert({
       user_id: quote.user_id,
       customer_id: quote.customer_id,
       quote_id: quote.id,
@@ -246,9 +284,25 @@ async function confirmQuoteWithAdmin(token: string) {
       materials: quote.materials ?? [],
       labour_items: quote.labour_items ?? [],
       updated_at: confirmedAt,
-    },
-    { onConflict: "quote_id" }
-  );
+    });
+    projectError = error;
+
+    // Race: another request created the project between lookup and insert.
+    if (projectError?.code === "23505") {
+      const { error: retryError } = await admin
+        .from("projects")
+        .update({
+          customer_id: quote.customer_id,
+          project_name: projectName,
+          value: Number(quote.grand_total) || 0,
+          materials: quote.materials ?? [],
+          labour_items: quote.labour_items ?? [],
+          updated_at: confirmedAt,
+        })
+        .eq("quote_id", quote.id);
+      projectError = retryError;
+    }
+  }
 
   if (projectError) {
     logSupabaseError("POST /api/quotes/confirm.admin.project", projectError, {
@@ -270,7 +324,7 @@ async function confirmQuoteWithAdmin(token: string) {
     return NextResponse.json(
       {
         error:
-          "Failed to create project from accepted quote. Run migration 018_projects_and_accept_create.sql.",
+          "Failed to create project from accepted quote. Run migration 033_confirm_quote_project_upsert.sql (or 023).",
       },
       { status: 500 }
     );
