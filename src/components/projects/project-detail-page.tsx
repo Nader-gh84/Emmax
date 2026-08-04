@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   IconCalendar,
   IconCheckCircle,
@@ -17,6 +17,10 @@ import {
   IconPhone,
   IconProjects,
 } from "@/components/dashboard/workspace-icons";
+import {
+  EditProjectOverviewModal,
+  type ProjectOverviewFormData,
+} from "@/components/projects/edit-project-overview-modal";
 import {
   formatProjectDetailMoney,
   PROJECT_DETAIL_TABS,
@@ -203,6 +207,9 @@ export function ProjectDetailPage({
 }) {
   const [activeTab, setActiveTab] = useState<ProjectDetailTab>("overview");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [liveProject, setLiveProject] = useState(project);
+  const [overviewEditOpen, setOverviewEditOpen] = useState(false);
+  const [overviewSaving, setOverviewSaving] = useState(false);
   const [liveStartDate, setLiveStartDate] = useState<string | null>(
     startDateConfirmed ? rawStartDate : null
   );
@@ -214,7 +221,11 @@ export function ProjectDetailPage({
   const [actionError, setActionError] = useState<string | null>(null);
   const startDateInputRef = useRef<HTMLInputElement>(null);
 
-  const orderMaterialsHref = `/dashboard/customers/${project.customerId}/projects/${project.id}/order-materials`;
+  useEffect(() => {
+    setLiveProject(project);
+  }, [project]);
+
+  const orderMaterialsHref = `/dashboard/customers/${liveProject.customerId}/projects/${liveProject.id}/order-materials`;
   const materialsReceived = Boolean(liveOrder?.materials_received_at);
   const canStartProject =
     liveStartConfirmed &&
@@ -403,6 +414,46 @@ export function ProjectDetailPage({
     }
   }
 
+  async function handleSaveOverview(form: ProjectOverviewFormData) {
+    setActionError(null);
+    setOverviewSaving(true);
+    try {
+      const response = await fetch(`/api/projects/${liveProject.id}/overview`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: form.description,
+          address: form.address,
+          projectType: form.projectType,
+          projectManager: form.projectManager,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save project overview.");
+      }
+
+      const savedAddress =
+        (typeof data.address === "string" ? data.address.trim() : "") ||
+        form.address.trim();
+
+      setLiveProject((current) => ({
+        ...current,
+        description: data.description || form.description,
+        address: savedAddress || "—",
+        projectType: data.projectType || form.projectType,
+        projectManager: data.projectManager || form.projectManager,
+      }));
+      setOverviewEditOpen(false);
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : new Error("Failed to save project overview.");
+    } finally {
+      setOverviewSaving(false);
+    }
+  }
+
   function openStartDatePicker() {
     const input = startDateInputRef.current;
     if (!input) return;
@@ -433,20 +484,20 @@ export function ProjectDetailPage({
           </Link>
           <span className="text-slate-600">›</span>
           <Link
-            href={`/dashboard/customers/${project.customerId}`}
+            href={`/dashboard/customers/${liveProject.customerId}`}
             className="transition hover:text-accent"
           >
-            {project.customerName}
+            {liveProject.customerName}
           </Link>
           <span className="text-slate-600">›</span>
-          <span className="text-slate-300">{project.projectName}</span>
+          <span className="text-slate-300">{liveProject.projectName}</span>
         </nav>
 
         <div className="mt-4 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                {project.projectName}
+                {liveProject.projectName}
               </h1>
               <span
                 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ring-1 ${
@@ -462,19 +513,19 @@ export function ProjectDetailPage({
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-5 sm:gap-y-2">
               <MetaItem
                 icon={<IconPhone className="h-3.5 w-3.5" />}
-                label={project.customerName}
+                label={liveProject.customerName}
               />
               <MetaItem
                 icon={<IconLocation className="h-3.5 w-3.5" />}
-                label={project.address}
+                label={liveProject.address}
               />
               <MetaItem
                 icon={<IconCalendar className="h-3.5 w-3.5" />}
-                label={`Accepted ${project.acceptedDate}`}
+                label={`Accepted ${liveProject.acceptedDate}`}
               />
               <MetaItem
                 icon={<IconDollar className="h-3.5 w-3.5" />}
-                label={formatProjectDetailMoney(project.quoteAmount)}
+                label={formatProjectDetailMoney(liveProject.quoteAmount)}
               />
             </div>
           </div>
@@ -660,7 +711,7 @@ export function ProjectDetailPage({
 
         {activeTab === "overview" ? (
           <OverviewTab
-            project={project}
+            project={liveProject}
             nextSteps={nextSteps}
             materialOrder={liveOrder}
             scopePreview={scopePreview}
@@ -668,6 +719,7 @@ export function ProjectDetailPage({
             materialTotal={materialTotal}
             onMarkMaterialsReceived={() => void handleMarkMaterialsReceived()}
             markReceivedBusy={actionBusy === "mark-received"}
+            onEditOverview={() => setOverviewEditOpen(true)}
           />
         ) : (
           <PlaceholderTab
@@ -738,6 +790,25 @@ export function ProjectDetailPage({
           <IconMicrophone className="h-4 w-4" />
         </span>
       </button>
+
+      {overviewEditOpen ? (
+        <EditProjectOverviewModal
+          customerId={liveProject.customerId}
+          customerName={liveProject.customerName}
+          internalProjectNumber={liveProject.internalProjectNumber}
+          initialForm={{
+            description: liveProject.description,
+            address: liveProject.address === "—" ? "" : liveProject.address,
+            projectType: liveProject.projectType,
+            projectManager: liveProject.projectManager,
+          }}
+          isSaving={overviewSaving}
+          onClose={() => {
+            if (!overviewSaving) setOverviewEditOpen(false);
+          }}
+          onSave={handleSaveOverview}
+        />
+      ) : null}
     </div>
   );
 }
@@ -811,6 +882,7 @@ function OverviewTab({
   materialTotal,
   onMarkMaterialsReceived,
   markReceivedBusy,
+  onEditOverview,
 }: {
   project: ProjectDetailMock;
   nextSteps: ProjectDetailMock["nextSteps"];
@@ -820,6 +892,7 @@ function OverviewTab({
   materialTotal: number;
   onMarkMaterialsReceived: () => void;
   markReceivedBusy: boolean;
+  onEditOverview: () => void;
 }) {
   const completedPct =
     taskTotal === 0
@@ -865,7 +938,7 @@ function OverviewTab({
             </h2>
             <button
               type="button"
-              onClick={noop("Edit overview")}
+              onClick={onEditOverview}
               className="text-xs font-semibold text-accent hover:text-blue-400"
             >
               Edit

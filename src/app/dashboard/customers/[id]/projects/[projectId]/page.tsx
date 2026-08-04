@@ -139,19 +139,24 @@ export default async function ProjectDetailRoute({
   const description =
     projectRow.notes?.trim() || linkedQuote?.notes?.trim() || "";
 
+  const displayAddress =
+    projectRow.address?.trim() || customerRow?.address?.trim() || null;
+
   const project = buildProjectDetailViewModel({
     id: projectRow.id,
     customerId: customerId || customerIdParam,
     projectName,
     customerName,
     customerPhone: customerRow?.phone ?? null,
-    address: customerRow?.address ?? null,
+    address: displayAddress,
     quoteAmount:
       Number(projectRow.value) || Number(linkedQuote?.grand_total) || 0,
     status,
     startDateConfirmed,
     startDate: projectRow.start_date,
     description,
+    projectType: projectRow.project_type,
+    projectManager: projectRow.project_manager,
     scopeItems: labourItems
       .map((item) => item.description?.trim() || "")
       .filter(Boolean),
