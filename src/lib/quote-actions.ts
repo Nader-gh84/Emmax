@@ -480,6 +480,17 @@ export async function sendQuoteEmailAndPersist(
 
   const confirmationToken = await ensureConfirmationToken(quoteId, user.id);
 
+  let pdfStoragePath: string | null = null;
+  const { data: storedQuote } = await supabase
+    .from("quotes")
+    .select("pdf_url")
+    .eq("id", quoteId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (storedQuote?.pdf_url && typeof storedQuote.pdf_url === "string") {
+    pdfStoragePath = storedQuote.pdf_url.trim() || null;
+  }
+
   const response = await fetch("/api/send-quote", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -500,6 +511,7 @@ export async function sendQuoteEmailAndPersist(
       priceDisplayMode: state.priceDisplayMode,
       quoteNumber,
       confirmationToken,
+      pdfStoragePath,
       materials: state.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
           item,

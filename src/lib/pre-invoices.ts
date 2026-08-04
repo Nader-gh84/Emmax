@@ -50,6 +50,8 @@ export interface PreInvoiceProjectCard {
   materialOrderId: string | null;
   orderConfirmed: boolean;
   materialsReceived: boolean;
+  /** Storage path in quote-pdfs bucket (not a public URL). */
+  pdfPath: string | null;
   projectNumber: string;
   title: string;
   favorited: boolean;
@@ -329,6 +331,7 @@ export function mapQuoteToPreInvoiceCard(
     materialOrderId: latestOrder?.id ?? null,
     orderConfirmed: Boolean(orderConfirmed),
     materialsReceived,
+    pdfPath: quote.pdf_url?.trim() || null,
     projectNumber: quote.quote_number?.trim() || `Q-${quote.id.slice(0, 6)}`,
     title,
     favorited: false,

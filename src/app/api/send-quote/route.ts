@@ -8,6 +8,7 @@ import {
 import { buildQuoteAcceptUrl } from "@/lib/quote-confirmation";
 import { generateQuotePdfBuffer } from "@/lib/pdf/generate-quote-pdf";
 import { loadCompanyBrandingForPdfServer } from "@/lib/pdf/load-company-branding-server";
+import { createClient } from "@/lib/supabase/server";
 
 interface SendQuoteRequestBody extends QuoteEmailData {
   confirmationToken?: string;
@@ -15,6 +16,8 @@ interface SendQuoteRequestBody extends QuoteEmailData {
   // Never trust client-provided URLs in email content.
   acceptUrl?: string;
   pdfUrl?: string;
+  /** Private storage path in quote-pdfs (e.g. {userId}/{quoteId}.pdf). */
+  pdfStoragePath?: string;
 }
 
 function pickQuoteEmailPayload(body: SendQuoteRequestBody): QuoteEmailData & {
@@ -39,6 +42,42 @@ function pickQuoteEmailPayload(body: SendQuoteRequestBody): QuoteEmailData & {
     labourItems: body.labourItems ?? [],
     customerPhone: body.customerPhone?.trim() || undefined,
   };
+}
+
+async function resolvePdfAttachment(
+  body: SendQuoteRequestBody,
+  payload: QuoteEmailData & { customerPhone?: string }
+): Promise<Buffer> {
+  const requestedPath = body.pdfStoragePath?.trim() || "";
+
+  if (requestedPath) {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user && requestedPath.startsWith(`${user.id}/`)) {
+      const { data, error } = await supabase.storage
+        .from("quote-pdfs")
+        .download(requestedPath);
+
+      if (!error && data) {
+        return Buffer.from(await data.arrayBuffer());
+      }
+
+      console.warn(
+        "[send-quote] Failed to load stored PDF; regenerating.",
+        error?.message
+      );
+    }
+  }
+
+  const company = await loadCompanyBrandingForPdfServer();
+  return generateQuotePdfBuffer({
+    ...payload,
+    company,
+    template: company.quoteTemplate,
+  });
 }
 
 export async function POST(request: Request) {
@@ -81,7 +120,10 @@ export async function POST(request: Request) {
 
     if (!body.confirmationToken || !isUuid(body.confirmationToken)) {
       return NextResponse.json(
-        { error: "A valid confirmation token is required to send quote emails." },
+        {
+          error:
+            "A valid confirmation token is required to send quote emails.",
+        },
         { status: 400 }
       );
     }
@@ -94,12 +136,7 @@ export async function POST(request: Request) {
       acceptUrl,
     });
 
-    const company = await loadCompanyBrandingForPdfServer();
-    const pdfBuffer = await generateQuotePdfBuffer({
-      ...payload,
-      company,
-      template: company.quoteTemplate,
-    });
+    const pdfBuffer = await resolvePdfAttachment(body, payload);
 
     const resend = new Resend(apiKey);
     const fromEmail =
