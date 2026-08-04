@@ -190,12 +190,54 @@ type TableRow =
   | { kind: "material"; item: MaterialItem }
   | { kind: "labour"; item: LabourItem };
 
-export function VoiceQuoteBuilder() {
-  const searchParams = useSearchParams();
-  const quoteParam = searchParams.get("quote");
-  const uploadPricingParam = searchParams.get("uploadPricing");
+export type VoiceQuoteBuilderProps = {
+  /**
+   * When true, renders inside the Pre-Invoices dashboard: compact chrome,
+   * project-name field next to the recorder, and details as an expandable
+   * panel instead of a fixed page sidebar.
+   */
+  embedded?: boolean;
+  /** Called after draft save, send-to-supplier, or send-to-customer succeeds. */
+  onPersisted?: () => void;
+};
 
-  const [showSidebar, setShowSidebar] = useState(true);
+export function VoiceQuoteBuilder(props: VoiceQuoteBuilderProps = {}) {
+  if (props.embedded) {
+    return (
+      <VoiceQuoteBuilderInner
+        embedded
+        onPersisted={props.onPersisted}
+        quoteParam={null}
+        uploadPricingParam={null}
+      />
+    );
+  }
+
+  return <VoiceQuoteBuilderWithSearchParams {...props} />;
+}
+
+function VoiceQuoteBuilderWithSearchParams(props: VoiceQuoteBuilderProps) {
+  const searchParams = useSearchParams();
+  return (
+    <VoiceQuoteBuilderInner
+      embedded={false}
+      onPersisted={props.onPersisted}
+      quoteParam={searchParams.get("quote")}
+      uploadPricingParam={searchParams.get("uploadPricing")}
+    />
+  );
+}
+
+function VoiceQuoteBuilderInner({
+  embedded = false,
+  onPersisted,
+  quoteParam,
+  uploadPricingParam,
+}: VoiceQuoteBuilderProps & {
+  quoteParam: string | null;
+  uploadPricingParam: string | null;
+}) {
+  const [showSidebar, setShowSidebar] = useState(!embedded);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
@@ -755,6 +797,7 @@ export function VoiceQuoteBuilder() {
           ? `Saved as draft ${result.quoteNumber}.`
           : "Saved to Drafts."
       );
+      onPersisted?.();
     } catch (error) {
       showFeedback(
         "error",
@@ -788,6 +831,7 @@ export function VoiceQuoteBuilder() {
         "success",
         `Quote sent to ${customerEmail.trim()}.`
       );
+      onPersisted?.();
     } catch (error) {
       showFeedback(
         "error",
@@ -826,6 +870,7 @@ export function VoiceQuoteBuilder() {
         "success",
         `Materials list sent to ${payload.supplier.supplier_name}. Awaiting pricing.`
       );
+      onPersisted?.();
     } catch (error) {
       showFeedback(
         "error",
@@ -949,7 +994,13 @@ export function VoiceQuoteBuilder() {
   })();
 
   return (
-    <div className="relative flex min-h-full min-w-0 flex-1">
+    <div
+      className={
+        embedded
+          ? "relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"
+          : "relative flex min-h-full min-w-0 flex-1"
+      }
+    >
       {isLoadingQuote && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/70 backdrop-blur-sm">
           <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0B1220] px-4 py-3 text-sm text-slate-300">
@@ -958,42 +1009,74 @@ export function VoiceQuoteBuilder() {
           </div>
         </div>
       )}
-      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                Voice Quote Builder
-              </h1>
-              <span className="rounded-full border border-accent/40 bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent">
-                Beta
-              </span>
+      <div
+        className={
+          embedded
+            ? "min-w-0 flex-1 px-4 py-5 sm:px-5"
+            : "min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8"
+        }
+      >
+        {embedded ? (
+          <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Record Your Voice
+              </h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Speak the materials list. Ema extracts line items so you can
+                edit, price, save, or send — then a pre-invoice card appears
+                below.
+              </p>
             </div>
-            <p className="mt-1 text-sm text-slate-400">
-              Speak naturally and Ema will build the pre-invoice for you.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowHowItWorks(true)}
-            className={`${touchBtnSecondary} gap-2 text-sm`}
-          >
-            <IconInfo className="h-4 w-4" />
-            How it works?
-          </button>
-        </header>
+            <input
+              type="text"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="Project name (optional)"
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-accent sm:mt-0 sm:max-w-xs"
+            />
+          </header>
+        ) : (
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  Voice Quote Builder
+                </h1>
+                <span className="rounded-full border border-accent/40 bg-accent/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-accent">
+                  Beta
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-slate-400">
+                Speak naturally and Ema will build the pre-invoice for you.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowHowItWorks(true)}
+              className={`${touchBtnSecondary} gap-2 text-sm`}
+            >
+              <IconInfo className="h-4 w-4" />
+              How it works?
+            </button>
+          </header>
+        )}
 
-        {(recorderError || actionFeedback) && (
+        {(recorderError || actionFeedback || (embedded && pipelineError)) && (
           <div
             className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
-              actionFeedback?.type === "error" || recorderError
+              actionFeedback?.type === "error" || recorderError || (embedded && pipelineError)
                 ? "border-red-500/30 bg-red-500/10 text-red-200"
                 : actionFeedback?.type === "success"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-200"
             }`}
           >
-            {recorderError || actionFeedback?.message}
+            {recorderError ||
+              (embedded && pipelineError && !actionFeedback
+                ? pipelineError
+                : null) ||
+              actionFeedback?.message}
           </div>
         )}
 
@@ -1002,8 +1085,14 @@ export function VoiceQuoteBuilder() {
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white">
-                  <span className="mr-2 text-accent">1</span>
-                  Record Your Voice
+                  {embedded ? (
+                    "Recording"
+                  ) : (
+                    <>
+                      <span className="mr-2 text-accent">1</span>
+                      Record Your Voice
+                    </>
+                  )}
                 </h2>
                 {isRecording && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-400">
@@ -1018,7 +1107,9 @@ export function VoiceQuoteBuilder() {
                   type="button"
                   onClick={() => void handleMicClick()}
                   disabled={phase === "transcribing" || phase === "extracting"}
-                  className={`flex h-24 w-24 items-center justify-center rounded-full shadow-lg transition disabled:opacity-50 ${
+                  className={`flex items-center justify-center rounded-full shadow-lg transition disabled:opacity-50 ${
+                    embedded ? "h-20 w-20" : "h-24 w-24"
+                  } ${
                     isRecording
                       ? "bg-red-500 shadow-red-500/30 ring-4 ring-red-500/20"
                       : "bg-accent shadow-accent/30 ring-4 ring-accent/20 hover:bg-blue-600"
@@ -1026,9 +1117,15 @@ export function VoiceQuoteBuilder() {
                   aria-label={isRecording ? "Stop recording" : "Start recording"}
                 >
                   {phase === "transcribing" || phase === "extracting" ? (
-                    <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+                    <span
+                      className={`animate-spin rounded-full border-4 border-white/20 border-t-white ${
+                        embedded ? "h-8 w-8" : "h-10 w-10"
+                      }`}
+                    />
                   ) : (
-                    <IconMicrophone className="h-10 w-10 text-white" />
+                    <IconMicrophone
+                      className={`text-white ${embedded ? "h-8 w-8" : "h-10 w-10"}`}
+                    />
                   )}
                 </button>
                 <p className="mt-3 text-sm font-medium text-slate-300">
@@ -1041,8 +1138,12 @@ export function VoiceQuoteBuilder() {
                         : "Tap to record"}
                 </p>
 
-                <div className="mt-5 flex h-12 w-full items-end justify-center gap-1 rounded-xl border border-white/10 bg-navy/50 px-3 py-2">
-                  {Array.from({ length: 24 }).map((_, index) => (
+                <div
+                  className={`mt-5 flex w-full items-end justify-center gap-1 rounded-xl border border-white/10 bg-navy/50 px-3 py-2 ${
+                    embedded ? "h-10" : "h-12"
+                  }`}
+                >
+                  {Array.from({ length: embedded ? 20 : 24 }).map((_, index) => (
                     <span
                       key={index}
                       className={`w-1 rounded-full bg-cyan-400/80 ${
@@ -1056,10 +1157,18 @@ export function VoiceQuoteBuilder() {
                   ))}
                 </div>
 
-                <p className="mt-3 font-mono text-2xl font-bold text-white">
+                <p
+                  className={`mt-3 font-mono font-bold text-white ${
+                    embedded ? "text-xl" : "text-2xl"
+                  }`}
+                >
                   {formatTimer(isRecording ? seconds : 0)}
                 </p>
-                <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-slate-400">
+                <p
+                  className={`mt-2 inline-flex items-center gap-1.5 text-slate-400 ${
+                    embedded ? "text-[11px]" : "text-xs"
+                  }`}
+                >
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
                     <IconCheck className="h-3 w-3" />
                   </span>
@@ -1071,8 +1180,14 @@ export function VoiceQuoteBuilder() {
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-white">
-                  <span className="mr-2 text-accent">2</span>
-                  Your Transcript
+                  {embedded ? (
+                    "Transcript"
+                  ) : (
+                    <>
+                      <span className="mr-2 text-accent">2</span>
+                      Your Transcript
+                    </>
+                  )}
                 </h2>
                 <button
                   type="button"
@@ -1720,7 +1835,7 @@ export function VoiceQuoteBuilder() {
               </button>
             </section>
 
-            {!showSidebar && (
+            {!showSidebar && !embedded && (
               <button
                 type="button"
                 onClick={() => setShowSidebar(true)}
@@ -1729,182 +1844,80 @@ export function VoiceQuoteBuilder() {
                 Show Pre-Invoice Details
               </button>
             )}
+
+            {embedded && (
+              <section className="rounded-2xl border border-white/10 bg-white/[0.04]">
+                <button
+                  type="button"
+                  onClick={() => setShowSidebar((current) => !current)}
+                  className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+                >
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">
+                      Pre-Invoice Details
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      Customer, project, valid until, notes, and quick actions
+                    </p>
+                  </div>
+                  <IconChevron
+                    className={`h-4 w-4 shrink-0 text-slate-400 transition ${
+                      showSidebar ? "rotate-90" : ""
+                    }`}
+                  />
+                </button>
+                {showSidebar ? (
+                  <div className="border-t border-white/10 px-5 pb-5 pt-4">
+                    <VoiceQuoteDetailsPanel
+                      quoteNumber={quoteNumber}
+                      quoteStatus={quoteStatus}
+                      customerDisplay={customerDisplay}
+                      customerDisplaySecondary={customerDisplaySecondary}
+                      projectDisplay={projectDisplay}
+                      validUntilDisplay={validUntilDisplay}
+                      totals={totals}
+                      gstRate={gstRate}
+                      pstRate={pstRate}
+                      priceMode={priceMode}
+                      notes={notes}
+                      onClose={() => setShowSidebar(false)}
+                      showClose={false}
+                      onChangeCustomer={() => setActiveModal("customer")}
+                      onChangeProject={() => setActiveModal("project")}
+                      onChangeValidUntil={() => setActiveModal("validUntil")}
+                      onChangeNotes={() => setActiveModal("notes")}
+                      onPriceModeChange={setPriceMode}
+                    />
+                  </div>
+                ) : null}
+              </section>
+            )}
           </div>
         </div>
       </div>
 
-      {showSidebar && (
+      {!embedded && showSidebar && (
         <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#0B1220] xl:flex">
-          <div className="flex items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
-            <div>
-              <h2 className="text-base font-semibold text-white">
-                Pre-Invoice Details
-              </h2>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
-                  {quoteNumber || "Q-····-····"}
-                </span>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
-                    quoteStatus === "sent"
-                      ? "bg-blue-500/15 text-blue-300 ring-blue-500/30"
-                      : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
-                  }`}
-                >
-                  {quoteStatus === "sent" ? "Sent" : "Draft"}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSidebar(false)}
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
-              aria-label="Close details"
-            >
-              <IconClose className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-            {[
-              {
-                label: "Customer",
-                value: customerDisplay,
-                secondary: customerDisplaySecondary,
-                onChange: () => setActiveModal("customer"),
-              },
-              {
-                label: "Project",
-                value: projectDisplay,
-                secondary: "",
-                onChange: () => setActiveModal("project"),
-              },
-              {
-                label: "Valid Until",
-                value: validUntilDisplay,
-                secondary: "",
-                onChange: () => setActiveModal("validUntil"),
-              },
-            ].map((field) => (
-              <div key={field.label}>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                    {field.label}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={field.onChange}
-                    className="text-xs font-semibold text-accent hover:text-blue-400"
-                  >
-                    Change
-                  </button>
-                </div>
-                <p className="mt-1 text-sm text-white">{field.value}</p>
-                {field.secondary ? (
-                  <p className="mt-0.5 text-xs text-slate-400">{field.secondary}</p>
-                ) : null}
-              </div>
-            ))}
-
-            <div className="space-y-2 border-t border-white/10 pt-4 text-sm">
-              {[
-                ["Materials Total", formatCurrency(totals.materialsTotal)],
-                ["Labour Total", formatCurrency(totals.labourTotal)],
-                ["Subtotal", formatCurrency(totals.subtotal)],
-                [`GST (${gstRate}%)`, formatCurrency(totals.gst)],
-                [`PST (${pstRate}%)`, formatCurrency(totals.pst)],
-                ["Discount", formatCurrency(totals.discountApplied)],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3 text-slate-400">
-                  <span>{label}</span>
-                  <span className="text-white">{value}</span>
-                </div>
-              ))}
-              <div className="border-t border-white/10 pt-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  Grand Total
-                </p>
-                <p className="mt-1 text-2xl font-bold text-accent">
-                  {formatCurrency(totals.grandTotal)}
-                </p>
-                <p className="text-xs font-semibold text-cyan-400">CAD</p>
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-sm font-semibold text-white">Price Options</p>
-              <div className="mt-3 space-y-2">
-                {[
-                  {
-                    value: "detailed" as const,
-                    label: "Show Detailed Materials",
-                  },
-                  {
-                    value: "merged" as const,
-                    label: "Merged Materials (Hide Details)",
-                  },
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
-                      priceMode === option.value
-                        ? "border-accent/40 bg-accent/10 text-white"
-                        : "border-white/10 text-slate-300 hover:bg-white/5"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="price-mode"
-                      checked={priceMode === option.value}
-                      onChange={() => setPriceMode(option.value)}
-                      className="accent-blue-500"
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="border-t border-white/10 pt-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-white">Notes</p>
-                <button
-                  type="button"
-                  onClick={() => setActiveModal("notes")}
-                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
-                  aria-label="Edit notes"
-                >
-                  <IconPencil className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <p className="mt-2 text-sm leading-relaxed text-slate-400">
-                {notes ||
-                  "Scope notes from extraction will appear here after you record."}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
-              {[
-                { label: "Call", icon: IconPhone },
-                { label: "Email", icon: IconMail },
-                { label: "Message", icon: IconSend },
-                { label: "Notes", icon: IconPencil },
-                { label: "More", icon: IconUsers },
-              ].map((action) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={action.label}
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/10"
-                  >
-                    <Icon className="h-3.5 w-3.5 text-cyan-400" />
-                    {action.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <VoiceQuoteDetailsPanel
+            quoteNumber={quoteNumber}
+            quoteStatus={quoteStatus}
+            customerDisplay={customerDisplay}
+            customerDisplaySecondary={customerDisplaySecondary}
+            projectDisplay={projectDisplay}
+            validUntilDisplay={validUntilDisplay}
+            totals={totals}
+            gstRate={gstRate}
+            pstRate={pstRate}
+            priceMode={priceMode}
+            notes={notes}
+            onClose={() => setShowSidebar(false)}
+            showClose
+            onChangeCustomer={() => setActiveModal("customer")}
+            onChangeProject={() => setActiveModal("project")}
+            onChangeValidUntil={() => setActiveModal("validUntil")}
+            onChangeNotes={() => setActiveModal("notes")}
+            onPriceModeChange={setPriceMode}
+          />
         </aside>
       )}
 
@@ -2032,6 +2045,236 @@ export function VoiceQuoteBuilder() {
         />
       )}
     </div>
+  );
+}
+
+function VoiceQuoteDetailsPanel({
+  quoteNumber,
+  quoteStatus,
+  customerDisplay,
+  customerDisplaySecondary,
+  projectDisplay,
+  validUntilDisplay,
+  totals,
+  gstRate,
+  pstRate,
+  priceMode,
+  notes,
+  onClose,
+  showClose,
+  onChangeCustomer,
+  onChangeProject,
+  onChangeValidUntil,
+  onChangeNotes,
+  onPriceModeChange,
+}: {
+  quoteNumber: string | null;
+  quoteStatus: "draft" | "sent";
+  customerDisplay: string;
+  customerDisplaySecondary: string;
+  projectDisplay: string;
+  validUntilDisplay: string;
+  totals: ReturnType<typeof calculateVoiceQuoteTotals>;
+  gstRate: number;
+  pstRate: number;
+  priceMode: PriceDisplayMode;
+  notes: string;
+  onClose: () => void;
+  showClose: boolean;
+  onChangeCustomer: () => void;
+  onChangeProject: () => void;
+  onChangeValidUntil: () => void;
+  onChangeNotes: () => void;
+  onPriceModeChange: (mode: PriceDisplayMode) => void;
+}) {
+  return (
+    <>
+      <div
+        className={`flex items-start justify-between gap-3 ${
+          showClose ? "border-b border-white/10 px-5 py-4" : "pb-2"
+        }`}
+      >
+        <div>
+          {showClose ? (
+            <h2 className="text-base font-semibold text-white">
+              Pre-Invoice Details
+            </h2>
+          ) : null}
+          <div className={`${showClose ? "mt-2" : ""} flex flex-wrap gap-2`}>
+            <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] font-semibold text-slate-300">
+              {quoteNumber || "Q-····-····"}
+            </span>
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${
+                quoteStatus === "sent"
+                  ? "bg-blue-500/15 text-blue-300 ring-blue-500/30"
+                  : "bg-emerald-500/15 text-emerald-400 ring-emerald-500/30"
+              }`}
+            >
+              {quoteStatus === "sent" ? "Sent" : "Draft"}
+            </span>
+          </div>
+        </div>
+        {showClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
+            aria-label="Close details"
+          >
+            <IconClose className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
+
+      <div
+        className={`space-y-5 ${
+          showClose ? "flex-1 overflow-y-auto px-5 py-4" : ""
+        }`}
+      >
+        {[
+          {
+            label: "Customer",
+            value: customerDisplay,
+            secondary: customerDisplaySecondary,
+            onChange: onChangeCustomer,
+          },
+          {
+            label: "Project",
+            value: projectDisplay,
+            secondary: "",
+            onChange: onChangeProject,
+          },
+          {
+            label: "Valid Until",
+            value: validUntilDisplay,
+            secondary: "",
+            onChange: onChangeValidUntil,
+          },
+        ].map((field) => (
+          <div key={field.label}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                {field.label}
+              </p>
+              <button
+                type="button"
+                onClick={field.onChange}
+                className="text-xs font-semibold text-accent hover:text-blue-400"
+              >
+                Change
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-white">{field.value}</p>
+            {field.secondary ? (
+              <p className="mt-0.5 text-xs text-slate-400">{field.secondary}</p>
+            ) : null}
+          </div>
+        ))}
+
+        <div className="space-y-2 border-t border-white/10 pt-4 text-sm">
+          {[
+            ["Materials Total", formatCurrency(totals.materialsTotal)],
+            ["Labour Total", formatCurrency(totals.labourTotal)],
+            ["Subtotal", formatCurrency(totals.subtotal)],
+            [`GST (${gstRate}%)`, formatCurrency(totals.gst)],
+            [`PST (${pstRate}%)`, formatCurrency(totals.pst)],
+            ["Discount", formatCurrency(totals.discountApplied)],
+          ].map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-3 text-slate-400">
+              <span>{label}</span>
+              <span className="text-white">{value}</span>
+            </div>
+          ))}
+          <div className="border-t border-white/10 pt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+              Grand Total
+            </p>
+            <p className="mt-1 text-2xl font-bold text-accent">
+              {formatCurrency(totals.grandTotal)}
+            </p>
+            <p className="text-xs font-semibold text-cyan-400">CAD</p>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 pt-4">
+          <p className="text-sm font-semibold text-white">Price Options</p>
+          <div className="mt-3 space-y-2">
+            {[
+              {
+                value: "detailed" as const,
+                label: "Show Detailed Materials",
+              },
+              {
+                value: "merged" as const,
+                label: "Merged Materials (Hide Details)",
+              },
+            ].map((option) => (
+              <label
+                key={option.value}
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+                  priceMode === option.value
+                    ? "border-accent/40 bg-accent/10 text-white"
+                    : "border-white/10 text-slate-300 hover:bg-white/5"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="price-mode"
+                  checked={priceMode === option.value}
+                  onChange={() => onPriceModeChange(option.value)}
+                  className="accent-blue-500"
+                />
+                {option.label}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-white">Notes</p>
+            <button
+              type="button"
+              onClick={onChangeNotes}
+              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/5 hover:text-white"
+              aria-label="Edit notes"
+            >
+              <IconPencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">
+            {notes ||
+              "Scope notes from extraction will appear here after you record."}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 border-t border-white/10 pt-4">
+          {[
+            { label: "Call", icon: IconPhone },
+            { label: "Email", icon: IconMail },
+            { label: "Message", icon: IconSend },
+            { label: "Notes", icon: IconPencil },
+            { label: "More", icon: IconUsers },
+          ].map((action) => {
+            const Icon = action.icon;
+            return (
+              <button
+                key={action.label}
+                type="button"
+                onClick={
+                  action.label === "Notes" ? onChangeNotes : undefined
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-white/10"
+              >
+                <Icon className="h-3.5 w-3.5 text-cyan-400" />
+                {action.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
