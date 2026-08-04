@@ -2,14 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { ProfileFormFields } from "@/components/profile/profile-form-fields";
+import { QuoteTemplatePicker } from "@/components/quotes/quote-template-picker";
 import { touchBtnPrimary, touchInput } from "@/components/quotes/ui";
 import {
   DEFAULT_COUNTRY,
   formatPhoneForStorage,
   parsePhoneFromStorage,
 } from "@/lib/location";
+import {
+  DEFAULT_QUOTE_TEMPLATE,
+  normalizeQuoteTemplate,
+  type QuoteTemplateId,
+} from "@/lib/pdf/quote-templates";
 import { createClient } from "@/lib/supabase";
 import {
+  BRANDING_FIELDS,
   EMPTY_PROFILE,
   PROFILE_FIELDS,
   type ProfileData,
@@ -23,6 +30,7 @@ const EMPTY_FORM: SettingsFormData = {
   ...EMPTY_PROFILE,
   defaultTaxRate: 13,
   defaultValidityDays: 30,
+  quoteTemplate: DEFAULT_QUOTE_TEMPLATE,
 };
 
 export default function SettingsPage() {
@@ -49,13 +57,18 @@ export default function SettingsPage() {
       const { data, error: fetchError } = await supabase
         .from("business_profiles")
         .select(
-          "full_name, company_name, trade, country, city, email, phone, default_tax_rate, default_validity_days"
+          "full_name, company_name, trade, country, city, email, phone, tagline, website, address, default_tax_rate, default_validity_days, quote_template"
         )
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (fetchError) {
-        setError("Failed to load profile. Please try again.");
+        setError(
+          fetchError.message?.includes("quote_template") ||
+            fetchError.code === "42703"
+            ? "Failed to load profile. Run migration 027_quote_template_and_branding.sql in Supabase."
+            : "Failed to load profile. Please try again."
+        );
         setIsLoading(false);
         return;
       }
@@ -71,8 +84,12 @@ export default function SettingsPage() {
           city: data.city ?? "",
           email: data.email ?? "",
           phone: data.phone ?? "",
+          tagline: data.tagline ?? "",
+          website: data.website ?? "",
+          address: data.address ?? "",
           defaultTaxRate: Number(data.default_tax_rate) || 13,
           defaultValidityDays: Number(data.default_validity_days) || 30,
+          quoteTemplate: normalizeQuoteTemplate(data.quote_template),
         });
         setPhoneLocal(parsePhoneFromStorage(data.phone, country));
       }
@@ -80,7 +97,7 @@ export default function SettingsPage() {
       setIsLoading(false);
     }
 
-    loadProfile();
+    void loadProfile();
   }, []);
 
   function updateField(key: ProfileFieldKey, value: string) {
@@ -135,8 +152,12 @@ export default function SettingsPage() {
           city: form.city.trim(),
           email: form.email.trim(),
           phone,
+          tagline: form.tagline.trim(),
+          website: form.website.trim(),
+          address: form.address.trim(),
           defaultTaxRate: form.defaultTaxRate,
           defaultValidityDays: form.defaultValidityDays,
+          quoteTemplate: form.quoteTemplate,
         }),
       });
 
@@ -166,70 +187,126 @@ export default function SettingsPage() {
 
   return (
     <main className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto w-full max-w-3xl">
         <h1 className="text-2xl font-bold text-white">Settings</h1>
         <p className="mt-2 text-base text-slate-400">
-          Update your business profile and quote defaults.
+          Update your business profile, branding, and quote PDF template.
         </p>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-          <ProfileFormFields
-            profile={form}
-            phoneLocal={phoneLocal}
-            idPrefix="settings"
-            onFieldChange={updateField}
-            onPhoneLocalChange={(value) => {
-              setPhoneLocal(value);
-              setSuccess(false);
-            }}
-            onCountryChange={handleCountryChange}
-          />
-
-          <div>
-            <label
-              htmlFor="settings-defaultTaxRate"
-              className="block text-base font-medium text-slate-300"
-            >
-              Default Tax Rate (%)
-            </label>
-            <input
-              id="settings-defaultTaxRate"
-              type="number"
-              min="0"
-              max="100"
-              step="0.1"
-              value={form.defaultTaxRate}
-              onChange={(event) =>
-                updateNumberField(
-                  "defaultTaxRate",
-                  parseFloat(event.target.value) || 0
-                )
-              }
-              className={`${touchInput} mt-1.5`}
+        <form onSubmit={handleSubmit} className="mt-8 space-y-8">
+          <section className="space-y-5">
+            <h2 className="text-lg font-semibold text-white">Business profile</h2>
+            <ProfileFormFields
+              profile={form}
+              phoneLocal={phoneLocal}
+              idPrefix="settings"
+              onFieldChange={updateField}
+              onPhoneLocalChange={(value) => {
+                setPhoneLocal(value);
+                setSuccess(false);
+              }}
+              onCountryChange={handleCountryChange}
             />
-          </div>
+          </section>
 
-          <div>
-            <label
-              htmlFor="settings-defaultValidityDays"
-              className="block text-base font-medium text-slate-300"
-            >
-              Default Quote Validity (days)
-            </label>
-            <input
-              id="settings-defaultValidityDays"
-              type="number"
-              min="1"
-              value={form.defaultValidityDays}
-              onChange={(event) =>
-                updateNumberField(
-                  "defaultValidityDays",
-                  parseInt(event.target.value, 10) || 30
-                )
-              }
-              className={`${touchInput} mt-1.5`}
+          <section className="space-y-5">
+            <h2 className="text-lg font-semibold text-white">
+              PDF branding details
+            </h2>
+            <p className="text-sm text-slate-400">
+              Used on Pre-Invoice / Quote PDFs. Logo upload is not available yet
+              — templates use a built-in mark.
+            </p>
+            {BRANDING_FIELDS.map((field) => (
+              <div key={field.key}>
+                <label
+                  htmlFor={`settings-${field.key}`}
+                  className="block text-base font-medium text-slate-300"
+                >
+                  {field.label}
+                  {field.optional ? (
+                    <span className="ml-1 text-slate-500">(optional)</span>
+                  ) : null}
+                </label>
+                <input
+                  id={`settings-${field.key}`}
+                  type="text"
+                  value={form[field.key]}
+                  onChange={(event) =>
+                    updateField(field.key, event.target.value)
+                  }
+                  className={`${touchInput} mt-1.5`}
+                  placeholder={
+                    field.key === "tagline"
+                      ? "Your Company Tagline Here"
+                      : field.key === "website"
+                        ? "www.example.com"
+                        : "123 Main St"
+                  }
+                />
+              </div>
+            ))}
+          </section>
+
+          <section className="space-y-5">
+            <h2 className="text-lg font-semibold text-white">Quote defaults</h2>
+            <div>
+              <label
+                htmlFor="settings-defaultTaxRate"
+                className="block text-base font-medium text-slate-300"
+              >
+                Default Tax Rate (%)
+              </label>
+              <input
+                id="settings-defaultTaxRate"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={form.defaultTaxRate}
+                onChange={(event) =>
+                  updateNumberField(
+                    "defaultTaxRate",
+                    parseFloat(event.target.value) || 0
+                  )
+                }
+                className={`${touchInput} mt-1.5`}
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="settings-defaultValidityDays"
+                className="block text-base font-medium text-slate-300"
+              >
+                Default Quote Validity (days)
+              </label>
+              <input
+                id="settings-defaultValidityDays"
+                type="number"
+                min="1"
+                value={form.defaultValidityDays}
+                onChange={(event) =>
+                  updateNumberField(
+                    "defaultValidityDays",
+                    parseInt(event.target.value, 10) || 30
+                  )
+                }
+                className={`${touchInput} mt-1.5`}
+              />
+            </div>
+          </section>
+
+          <section>
+            <QuoteTemplatePicker
+              value={form.quoteTemplate}
+              onChange={(quoteTemplate: QuoteTemplateId) => {
+                setForm((current) => ({ ...current, quoteTemplate }));
+                setSuccess(false);
+              }}
+              disabled={isSaving}
             />
-          </div>
+          </section>
 
           {success && (
             <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">

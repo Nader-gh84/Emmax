@@ -7,6 +7,7 @@ import {
 } from "@/lib/email/quote-email";
 import { buildQuoteAcceptUrl } from "@/lib/quote-confirmation";
 import { generateQuotePdfBuffer } from "@/lib/pdf/generate-quote-pdf";
+import { loadCompanyBrandingForPdfServer } from "@/lib/pdf/load-company-branding-server";
 
 interface SendQuoteRequestBody extends QuoteEmailData {
   confirmationToken?: string;
@@ -93,7 +94,12 @@ export async function POST(request: Request) {
       acceptUrl,
     });
 
-    const pdfBuffer = await generateQuotePdfBuffer(payload);
+    const company = await loadCompanyBrandingForPdfServer();
+    const pdfBuffer = await generateQuotePdfBuffer({
+      ...payload,
+      company,
+      template: company.quoteTemplate,
+    });
 
     const resend = new Resend(apiKey);
     const fromEmail =

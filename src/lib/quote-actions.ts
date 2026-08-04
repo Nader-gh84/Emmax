@@ -301,6 +301,21 @@ function buildPdfInput(state: QuoteActionState, allowDraftPlaceholders: boolean)
   };
 }
 
+async function buildPdfInputWithBranding(
+  state: QuoteActionState,
+  allowDraftPlaceholders: boolean
+) {
+  const { loadCompanyBrandingForPdf } = await import(
+    "@/lib/pdf/load-company-branding"
+  );
+  const company = await loadCompanyBrandingForPdf();
+  return {
+    ...buildPdfInput(state, allowDraftPlaceholders),
+    company,
+    template: company.quoteTemplate,
+  };
+}
+
 export async function saveQuoteDraftWithPdf(
   state: QuoteActionState
 ): Promise<{ quoteId: string; quoteNumber: string | null; pdfUrl: string }> {
@@ -327,7 +342,7 @@ export async function saveQuoteDraftWithPdf(
   const nextState = { ...state, quoteId, quoteNumber };
 
   const pdfBlob = await fetchQuotePdfBlob(
-    buildPdfInput(nextState, true)
+    await buildPdfInputWithBranding(nextState, true)
   );
 
   const pdfUrl = await uploadQuotePdf(user.id, quoteId, pdfBlob);
@@ -510,7 +525,10 @@ export async function sendQuoteEmailAndPersist(
 
   try {
     const pdfBlob = await fetchQuotePdfBlob(
-      buildPdfInput({ ...nextState, quoteId, quoteNumber }, false)
+      await buildPdfInputWithBranding(
+        { ...nextState, quoteId, quoteNumber },
+        false
+      )
     );
     const pdfUrl = await uploadQuotePdf(user.id, quoteId, pdfBlob);
     await upsertQuoteRecord(

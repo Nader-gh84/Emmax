@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { QuoteEmailData } from "@/lib/email/quote-email";
 import { generateQuotePdfBuffer } from "@/lib/pdf/generate-quote-pdf";
-import type { QuotePdfData } from "@/lib/pdf/quote-pdf";
+import type { QuotePdfData } from "@/lib/pdf/quote-pdf-types";
+import { normalizeQuoteTemplate } from "@/lib/pdf/quote-templates";
 
 export async function POST(request: Request) {
   try {
@@ -40,6 +41,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const template = normalizeQuoteTemplate(
+      body.template ?? body.company?.quoteTemplate
+    );
+
     const quoteData: QuoteEmailData = {
       customerName,
       customerEmail,
@@ -62,6 +67,8 @@ export async function POST(request: Request) {
     const buffer = await generateQuotePdfBuffer({
       ...quoteData,
       customerPhone: body.customerPhone,
+      company: body.company ?? undefined,
+      template,
     });
 
     return new NextResponse(new Uint8Array(buffer), {

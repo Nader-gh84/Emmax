@@ -84,7 +84,7 @@ export function StepQuoteDefaults({ onComplete }: StepQuoteDefaultsProps) {
           disabled={isSaving}
           className={`${touchBtnPrimary} w-full`}
         >
-          {isSaving ? "Saving..." : "Finish setup"}
+          {isSaving ? "Saving..." : "Continue"}
         </button>
       </form>
     </div>
