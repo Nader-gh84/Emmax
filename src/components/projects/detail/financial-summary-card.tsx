@@ -95,6 +95,7 @@ export function FinancialSummaryCard({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
@@ -181,16 +182,25 @@ export function FinancialSummaryCard({
             {summary.depositStatus}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setModalOpen(true);
-          }}
-          className={`${touchBtnPrimary} px-4 text-sm`}
-        >
-          + Record Payment
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowDetails((open) => !open)}
+            className="text-xs font-semibold text-accent transition hover:text-blue-400"
+          >
+            {showDetails ? "Hide Details" : "View Details"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setModalOpen(true);
+            }}
+            className={`${touchBtnPrimary} px-4 text-sm`}
+          >
+            + Record Payment
+          </button>
+        </div>
       </div>
 
       {error && !modalOpen ? (
@@ -235,6 +245,41 @@ export function FinancialSummaryCard({
           value={`${formatProjectMoney(summary.depositAmount)} · ${summary.depositStatus}`}
         />
       </dl>
+
+      {showDetails ? (
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Payment history
+          </p>
+          {payments.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">No payments recorded yet.</p>
+          ) : (
+            <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+              {payments.map((payment) => (
+                <li
+                  key={payment.id}
+                  className="flex items-start justify-between gap-2 border-b border-white/5 pb-2 text-sm last:border-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-200">
+                      {payment.payment_type === "customer_payment"
+                        ? "Customer payment"
+                        : "Supplier payment"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {payment.payment_date}
+                      {payment.notes ? ` · ${payment.notes}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-semibold text-slate-300">
+                    {formatProjectMoney(Number(payment.amount) || 0)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">

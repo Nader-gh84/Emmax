@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   IconCalendar,
@@ -27,7 +28,11 @@ import {
   type ProjectOverviewFormData,
 } from "@/components/projects/edit-project-overview-modal";
 import { formatProjectDetailMoney } from "@/lib/project-detail-mock";
-import type { ProjectWorkflowStep } from "@/lib/pre-invoices";
+import {
+  PRE_INVOICE_WORKFLOW_STEPS,
+  type ProjectWorkflowStep,
+  type WorkflowStepId,
+} from "@/lib/pre-invoices";
 import type { Employee } from "@/types/employee";
 import type { MaterialOrder } from "@/types/material-order";
 import {
@@ -146,6 +151,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     allEmployees,
   } = props;
 
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [overviewEditOpen, setOverviewEditOpen] = useState(false);
   const [overviewSaving, setOverviewSaving] = useState(false);
@@ -493,10 +499,61 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     }
   }
 
-  const nextStepLabel =
-    workflowSteps.find((s) => s.state === "active")?.actionLabel ||
-    workflowActionLabel ||
-    "Continue";
+  const nextActiveStep = useMemo(() => {
+    const active = workflowSteps.find((s) => s.state === "active");
+    if (active) {
+      const def = PRE_INVOICE_WORKFLOW_STEPS.find((d) => d.id === active.id);
+      return def ?? null;
+    }
+    return null;
+  }, [workflowSteps]);
+
+  const nextStepLabel = nextActiveStep?.title ?? null;
+
+  function handleSaveAsDraft() {
+    setActionError(null);
+    setActionSuccess("Saved as draft.");
+  }
+
+  function handleNextStep() {
+    if (!nextActiveStep) return;
+    const stepId: WorkflowStepId = nextActiveStep.id;
+
+    switch (stepId) {
+      case "voice_materials":
+        router.push("/dashboard/voice-quote-builder");
+        return;
+      case "send_supplier":
+      case "upload_prices":
+      case "create_quote":
+      case "send_customer":
+      case "customer_accept":
+        if (quoteId) {
+          router.push(`/dashboard/quotes?quoteId=${quoteId}`);
+        } else {
+          router.push("/dashboard/quotes");
+        }
+        return;
+      case "order_materials":
+        router.push(orderMaterialsHref);
+        return;
+      case "materials_ready":
+        if (liveOrder?.status === "confirmed" && !materialsReceived) {
+          void handleMarkMaterialsReceived();
+        } else {
+          router.push(orderMaterialsHref);
+        }
+        return;
+      case "schedule_project":
+        openStartDatePicker();
+        return;
+      case "start_project":
+        void handleStartProject();
+        return;
+      default:
+        return;
+    }
+  }
 
   return (
     <div className="relative flex w-full flex-1 flex-col pb-28">
@@ -735,7 +792,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                 }
               />
               <ProjectAssignedEmployees projectId={projectId} />
-              <RecentActivityCard activities={activities.slice(0, 5)} />
+              <RecentActivityCard activities={activities} />
             </div>
           </div>
         )}
@@ -748,28 +805,27 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
             >
               Back to Projects
             </Link>
-            <div className="flex flex-wrap gap-2">
-              {!projectStarted ? (
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={handleSaveAsDraft}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+              >
+                Save as Draft
+              </button>
+              {nextStepLabel ? (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (primaryCta.kind === "start") void handleStartProject();
-                    else if (primaryCta.kind === "mark_received")
-                      void handleMarkMaterialsReceived();
-                    else if (primaryCta.kind === "set_date") openStartDatePicker();
-                  }}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-blue-600"
+                  disabled={Boolean(actionBusy)}
+                  onClick={handleNextStep}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60"
                 >
                   Next Step: {nextStepLabel}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleNotifyEmployees()}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-white transition hover:bg-blue-600"
-                >
-                  Notify Assigned Employees
-                </button>
+                <span className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-500/15 px-4 text-sm font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+                  All Steps Complete
+                </span>
               )}
             </div>
           </div>

@@ -41,6 +41,7 @@ export function TasksOverviewCard({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   useEffect(() => {
     setTasks(initialTasks);
@@ -56,6 +57,7 @@ export function TasksOverviewCard({
     [tasks]
   );
   const percent = computeTaskCompletionPercent(tasks);
+  const visibleTasks = showAllTasks ? tasks : tasks.slice(0, 5);
 
   function employeeName(task: ProjectTask): string {
     if (task.employees?.full_name) return task.employees.full_name;
@@ -223,16 +225,29 @@ export function TasksOverviewCard({
             {completedCount} of {tasks.length} completed · {percent}%
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setModalOpen(true);
-          }}
-          className={`${touchBtnPrimary} px-4 text-sm`}
-        >
-          + Add Task
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {tasks.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAllTasks((open) => !open)}
+              className="text-xs font-semibold text-accent transition hover:text-blue-400"
+            >
+              {showAllTasks && tasks.length > 5
+                ? "Show Less"
+                : "View All Tasks"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setModalOpen(true);
+            }}
+            className={`${touchBtnPrimary} px-4 text-sm`}
+          >
+            + Add Task
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
@@ -252,7 +267,7 @@ export function TasksOverviewCard({
         <p className="mt-4 text-sm text-slate-500">No tasks yet.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {tasks.map((task) => {
+          {visibleTasks.map((task) => {
             const done = task.status === "completed";
             return (
               <li
