@@ -328,7 +328,11 @@ export async function saveQuoteDraftWithPdf(
 
 export async function saveQuoteDraft(
   state: QuoteActionState
-): Promise<{ quoteId: string; quoteNumber: string | null }> {
+): Promise<{
+  quoteId: string;
+  quoteNumber: string | null;
+  projectId: string | null;
+}> {
   const supabase = createClient();
   const {
     data: { user },
@@ -357,6 +361,17 @@ export async function saveQuoteDraft(
     discountMode: state.discountMode,
     discountAmount: state.discountAmount,
     discountPercent: state.discountPercent,
+  });
+
+  const projectId = await ensureProjectForQuote({
+    userId: user.id,
+    quoteId: result.quoteId,
+    projectName: state.projectName,
+    customerId: state.selectedCustomerId,
+    customerName: state.customerName,
+    materials: state.materials,
+    labourItems: state.labourItems,
+    grandTotal: totals.grandTotal,
   });
 
   const label =
@@ -393,7 +408,7 @@ export async function saveQuoteDraft(
     console.error("[saveQuoteDraft] Notification request failed:", error);
   }
 
-  return result;
+  return { ...result, projectId };
 }
 
 export async function sendQuoteEmailAndPersist(
