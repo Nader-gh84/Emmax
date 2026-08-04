@@ -2,18 +2,57 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { IconMicrophone } from "@/components/dashboard/icons";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { IconWaveform } from "@/components/dashboard/workspace-icons";
-import { workspaceNavItems } from "@/components/dashboard/workspace-nav";
+import {
+  isWorkspaceNavItemActive,
+  workspaceNavItems,
+} from "@/components/dashboard/workspace-nav";
 import { UnreadCountBadge } from "@/components/dashboard/unread-count-badge";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 
-export function WorkspaceSidebar() {
+function WorkspaceSidebarNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const section = searchParams.get("section");
   const { unreadCount } = useUnreadNotifications(20);
 
+  return (
+    <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      {workspaceNavItems.map((item) => {
+        const isActive = isWorkspaceNavItemActive(item, pathname, section);
+        const Icon = item.icon;
+        const showInboxBadge =
+          item.href === "/dashboard/inbox" && unreadCount > 0;
+
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+              isActive
+                ? "bg-accent/15 text-white ring-1 ring-accent/40"
+                : "text-slate-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <Icon
+              className={`h-5 w-5 shrink-0 ${
+                isActive ? "text-accent" : "text-slate-500"
+              }`}
+            />
+            <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            {showInboxBadge ? <UnreadCountBadge count={unreadCount} /> : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+export function WorkspaceSidebar() {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-[#0B1220] lg:flex">
       <div className="border-b border-white/10 px-5 py-5">
@@ -32,36 +71,27 @@ export function WorkspaceSidebar() {
         </Link>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {workspaceNavItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          const Icon = item.icon;
-          const showInboxBadge =
-            item.href === "/dashboard/inbox" && unreadCount > 0;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                isActive
-                  ? "bg-accent/15 text-white ring-1 ring-accent/40"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              <Icon
-                className={`h-5 w-5 shrink-0 ${
-                  isActive ? "text-accent" : "text-slate-500"
-                }`}
-              />
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {showInboxBadge ? <UnreadCountBadge count={unreadCount} /> : null}
-            </Link>
-          );
-        })}
-      </nav>
+      <Suspense
+        fallback={
+          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+            {workspaceNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex min-h-[44px] items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"
+                >
+                  <Icon className="h-5 w-5 shrink-0 text-slate-500" />
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        }
+      >
+        <WorkspaceSidebarNav />
+      </Suspense>
 
       <div className="space-y-3 p-3">
         <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] p-4">
