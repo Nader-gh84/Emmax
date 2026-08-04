@@ -58,13 +58,6 @@ export function getNotificationHref(
   return null;
 }
 
-/** True when a quote row can enrich the in-place summary modal. */
-export function notificationHasQuoteDetails(
-  notification: AppNotification
-): boolean {
-  return Boolean(notification.quote_id);
-}
-
 export function formatNotificationTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
