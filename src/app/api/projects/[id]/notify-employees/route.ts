@@ -39,7 +39,7 @@ export async function POST(
     const { data: project, error: projectError } = await supabase
       .from("projects")
       .select(
-        "id, project_name, customer_id, start_date, start_date_confirmed, status, address"
+        "id, project_name, customer_id, start_date, start_date_confirmed, status"
       )
       .eq("id", projectId)
       .eq("user_id", user.id)
@@ -52,7 +52,15 @@ export async function POST(
         { projectId }
       );
       return NextResponse.json(
-        { error: "Failed to load project" },
+        {
+          error: "Failed to load project",
+          supabase: {
+            message: projectError.message,
+            code: projectError.code,
+            details: projectError.details,
+            hint: projectError.hint,
+          },
+        },
         { status: 500 }
       );
     }
@@ -134,8 +142,24 @@ export async function POST(
     const customerName = customerRow
       ? `${customerRow.first_name ?? ""} ${customerRow.last_name ?? ""}`.trim()
       : "Customer";
+
+    let projectAddress: string | null = null;
+    try {
+      const { data: overviewRow } = await supabase
+        .from("projects")
+        .select("address")
+        .eq("id", projectId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (typeof overviewRow?.address === "string") {
+        projectAddress = overviewRow.address;
+      }
+    } catch {
+      // Optional column — ignore.
+    }
+
     const address =
-      (typeof project.address === "string" && project.address.trim()) ||
+      (projectAddress && projectAddress.trim()) ||
       (typeof customerRow?.address === "string" && customerRow.address.trim()) ||
       "—";
     const companyName = profile?.company_name?.trim() || "EmaX Contractor";

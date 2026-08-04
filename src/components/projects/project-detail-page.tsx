@@ -312,7 +312,16 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setActionError(data.error || "Failed to start project.");
+        const supabaseDetail =
+          typeof data?.supabase?.message === "string"
+            ? ` (${data.supabase.message}${
+                data.supabase.code ? ` · ${data.supabase.code}` : ""
+              })`
+            : "";
+        // Do not flip liveStatus / workflow — stay on previous state until success.
+        setActionError(
+          `${data.error || "Failed to start project."}${supabaseDetail}`
+        );
         return;
       }
       setLiveStatus("in_progress");
@@ -322,6 +331,8 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
         );
       } else if (typeof data.emailsSent === "number" && data.emailsSent > 0) {
         setActionSuccess(`Project started. Notified ${data.emailsSent} employee(s).`);
+      } else {
+        setActionSuccess("Project started.");
       }
     } catch {
       setActionError("Failed to start project.");
@@ -499,14 +510,32 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     }
   }
 
+  const displayWorkflowSteps = useMemo((): ProjectWorkflowStep[] => {
+    // Only mark the full flow complete after start actually succeeds.
+    if (liveStatus !== "in_progress" && liveStatus !== "completed") {
+      return workflowSteps.map((step) =>
+        step.id === "start_project" && step.state === "completed"
+          ? { ...step, state: "active" as const, actionLabel: "Start Project" }
+          : step
+      );
+    }
+    return PRE_INVOICE_WORKFLOW_STEPS.map((def) => ({
+      id: def.id,
+      state: "completed" as const,
+      completedDate:
+        workflowSteps.find((s) => s.id === def.id)?.completedDate ?? null,
+      actionLabel: null,
+    }));
+  }, [workflowSteps, liveStatus]);
+
   const nextActiveStep = useMemo(() => {
-    const active = workflowSteps.find((s) => s.state === "active");
+    const active = displayWorkflowSteps.find((s) => s.state === "active");
     if (active) {
       const def = PRE_INVOICE_WORKFLOW_STEPS.find((d) => d.id === active.id);
       return def ?? null;
     }
     return null;
-  }, [workflowSteps]);
+  }, [displayWorkflowSteps]);
 
   const nextStepLabel = nextActiveStep?.title ?? null;
 
@@ -676,7 +705,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
       </div>
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-        <WorkflowStepsBar steps={workflowSteps} />
+        <WorkflowStepsBar steps={displayWorkflowSteps} />
 
         <input
           ref={startDateInputRef}

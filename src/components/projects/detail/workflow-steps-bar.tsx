@@ -182,7 +182,9 @@ function statusText(
   if (state === "completed") {
     return completedDate ? completedDate : "Done";
   }
-  if (state === "active") return "In Progress";
+  // Avoid labeling the *current* step as "In Progress" — that reads as if the
+  // project already started (especially for Step 10: Start Project).
+  if (state === "active") return "Current";
   return "Locked";
 }
 
