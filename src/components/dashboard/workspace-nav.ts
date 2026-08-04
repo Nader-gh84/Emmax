@@ -32,7 +32,7 @@ export const workspaceNavItems = [
   },
   {
     label: "Pre Invoice",
-    href: "/dashboard/voice-quote-builder",
+    href: "/dashboard/quotes",
     icon: IconInvoice,
   },
   {
