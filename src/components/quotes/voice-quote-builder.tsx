@@ -867,21 +867,10 @@ function VoiceQuoteBuilderInner({
     setActionFeedback(null);
     try {
       if (quoteId && quoteStatus === "draft") {
-        const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (user) {
-          const { error } = await supabase
-            .from("quotes")
-            .delete()
-            .eq("id", quoteId)
-            .eq("user_id", user.id)
-            .eq("status", "draft");
-          if (error) {
-            throw new Error(error.message || "Failed to delete draft quote");
-          }
-        }
+        const { deletePreInvoiceByQuoteId } = await import(
+          "@/lib/delete-pre-invoice"
+        );
+        await deletePreInvoiceByQuoteId(quoteId);
       }
 
       setQuoteId(null);

@@ -29,6 +29,7 @@ import {
   prepareCustomerQuote,
   quoteToActionState,
 } from "@/lib/pre-invoice-actions";
+import { deletePreInvoiceByQuoteId } from "@/lib/delete-pre-invoice";
 import {
   PRE_INVOICE_WORKFLOW_STEPS,
   buildPreInvoiceStats,
@@ -287,18 +288,28 @@ function ProjectStepNode({
   );
 }
 
+function IconTrash({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+  );
+}
+
 function ProjectCard({
   project,
   busy,
   onStepAction,
   onEdit,
   onViewPdf,
+  onDelete,
 }: {
   project: PreInvoiceProjectCard;
   busy: boolean;
   onStepAction: (stepId: WorkflowStepId) => void;
   onEdit: () => void;
   onViewPdf: () => void;
+  onDelete: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -383,7 +394,8 @@ function ProjectCard({
               <button
                 type="button"
                 onClick={() => setMoreOpen((open) => !open)}
-                className={`${touchBtnSecondary} min-h-[36px] gap-1.5 px-3 text-sm`}
+                disabled={busy}
+                className={`${touchBtnSecondary} min-h-[36px] gap-1.5 px-3 text-sm disabled:opacity-50`}
               >
                 More
                 <IconChevronDown
@@ -414,6 +426,17 @@ function ProjectCard({
                       View PDF
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onDelete();
+                    }}
+                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
+                  >
+                    <IconTrash className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -865,6 +888,52 @@ export function PreInvoicesDashboard() {
     }
   }
 
+  async function handleDeleteCard(card: PreInvoiceProjectCard) {
+    if (!card.quoteId) {
+      showFeedback("error", "This card has no quote to delete.");
+      return;
+    }
+    if (actionBusy) return;
+
+    const label = card.projectNumber || card.title || "this pre-invoice";
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${label}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const quoteId = card.quoteId;
+    const previousCards = cards;
+    const previousQuotes = quotesById;
+
+    // Optimistic UI — stats recompute from cards via useMemo.
+    setCards((current) => current.filter((item) => item.id !== card.id));
+    setQuotesById((current) => {
+      const next = { ...current };
+      delete next[quoteId];
+      return next;
+    });
+    if (activeModal && "quoteId" in activeModal && activeModal.quoteId === quoteId) {
+      setActiveModal(null);
+      setSendState(null);
+    }
+
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      await deletePreInvoiceByQuoteId(quoteId);
+      showFeedback("success", `${label} deleted.`);
+    } catch (err) {
+      setCards(previousCards);
+      setQuotesById(previousQuotes);
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to delete pre-invoice"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function handleSaveStartDate(startDate: string) {
     if (!activeModal || activeModal.kind !== "start_date") return;
     setActionBusy(true);
@@ -1007,6 +1076,7 @@ export function PreInvoicesDashboard() {
                     pdfPath: project.pdfPath,
                   });
                 }}
+                onDelete={() => void handleDeleteCard(project)}
               />
             ))
           )}
