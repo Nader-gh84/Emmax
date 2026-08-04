@@ -3,16 +3,15 @@
 import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
 import { IconBell } from "@/components/dashboard/icons";
-import { NotificationSummaryModal } from "@/components/dashboard/notification-summary-modal";
+import { NotificationDetailModals } from "@/components/dashboard/notification-detail-modals";
 import { UnreadCountBadge } from "@/components/dashboard/unread-count-badge";
+import { useNotificationDetailModal } from "@/hooks/use-notification-detail-modal";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
   formatNotificationTime,
-  notificationHasQuoteDetails,
 } from "@/types/notification";
-import type { Quote } from "@/types/quote";
 
 export function NotificationBell() {
   const {
@@ -22,10 +21,7 @@ export function NotificationBell() {
     setUnreadCount,
   } = useUnreadNotifications(20);
   const [isOpen, setIsOpen] = useState(false);
-  const [activeNotification, setActiveNotification] =
-    useState<AppNotification | null>(null);
-  const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
-  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const notificationDetail = useNotificationDetailModal();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,12 +37,6 @@ export function NotificationBell() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  function closeNotificationModal() {
-    setActiveNotification(null);
-    setPreviewQuote(null);
-    setIsLoadingQuote(false);
-  }
 
   async function handleOpenNotification(notification: AppNotification) {
     if (!notification.read) {
@@ -65,30 +55,7 @@ export function NotificationBell() {
     }
 
     setIsOpen(false);
-    setActiveNotification(notification);
-    setPreviewQuote(null);
-
-    if (!notificationHasQuoteDetails(notification) || !notification.quote_id) {
-      setIsLoadingQuote(false);
-      return;
-    }
-
-    setIsLoadingQuote(true);
-    const supabase = createClient();
-    const { data, error: loadError } = await supabase
-      .from("quotes")
-      .select("*")
-      .eq("id", notification.quote_id)
-      .maybeSingle();
-
-    if (loadError || !data) {
-      setPreviewQuote(null);
-      setIsLoadingQuote(false);
-      return;
-    }
-
-    setPreviewQuote(data as Quote);
-    setIsLoadingQuote(false);
+    await notificationDetail.open(notification);
   }
 
   return (
@@ -151,14 +118,14 @@ export function NotificationBell() {
         )}
       </div>
 
-      {activeNotification && (
-        <NotificationSummaryModal
-          notification={activeNotification}
-          quote={previewQuote}
-          isLoadingQuote={isLoadingQuote}
-          onClose={closeNotificationModal}
-        />
-      )}
+      <NotificationDetailModals
+        activeNotification={notificationDetail.activeNotification}
+        modalKind={notificationDetail.modalKind}
+        previewQuote={notificationDetail.previewQuote}
+        materialSummary={notificationDetail.materialSummary}
+        isLoadingDetail={notificationDetail.isLoadingDetail}
+        onClose={notificationDetail.close}
+      />
     </>
   );
 }

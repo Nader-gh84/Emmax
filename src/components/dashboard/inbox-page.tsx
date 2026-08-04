@@ -10,16 +10,15 @@ import {
   IconTruck,
   IconXCircle,
 } from "@/components/dashboard/icons";
-import { NotificationSummaryModal } from "@/components/dashboard/notification-summary-modal";
+import { NotificationDetailModals } from "@/components/dashboard/notification-detail-modals";
 import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
+import { useNotificationDetailModal } from "@/hooks/use-notification-detail-modal";
 import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
   formatNotificationTime,
   groupNotificationsByDay,
-  notificationHasQuoteDetails,
 } from "@/types/notification";
-import type { Quote } from "@/types/quote";
 
 function NotificationTypeIcon({ type }: { type: string }) {
   const className = "h-5 w-5";
@@ -70,10 +69,7 @@ export function InboxPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const [activeNotification, setActiveNotification] =
-    useState<AppNotification | null>(null);
-  const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
-  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const notificationDetail = useNotificationDetailModal();
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -188,12 +184,6 @@ export function InboxPage() {
     });
   }
 
-  function closeNotificationModal() {
-    setActiveNotification(null);
-    setPreviewQuote(null);
-    setIsLoadingQuote(false);
-  }
-
   async function markAsRead(notification: AppNotification) {
     if (notification.read) return;
 
@@ -213,31 +203,7 @@ export function InboxPage() {
   async function handleOpenNotification(notification: AppNotification) {
     void markAsRead(notification);
     setError(null);
-    setActiveNotification(notification);
-    setPreviewQuote(null);
-
-    if (!notificationHasQuoteDetails(notification) || !notification.quote_id) {
-      setIsLoadingQuote(false);
-      return;
-    }
-
-    setIsLoadingQuote(true);
-    const supabase = createClient();
-    const { data, error: loadError } = await supabase
-      .from("quotes")
-      .select("*")
-      .eq("id", notification.quote_id)
-      .maybeSingle();
-
-    if (loadError || !data) {
-      // Fall back to metadata summary inside the modal — stay on Inbox.
-      setPreviewQuote(null);
-      setIsLoadingQuote(false);
-      return;
-    }
-
-    setPreviewQuote(data as Quote);
-    setIsLoadingQuote(false);
+    await notificationDetail.open(notification);
   }
 
   async function markAllAsRead() {
@@ -536,14 +502,14 @@ export function InboxPage() {
         </div>
       )}
 
-      {activeNotification && (
-        <NotificationSummaryModal
-          notification={activeNotification}
-          quote={previewQuote}
-          isLoadingQuote={isLoadingQuote}
-          onClose={closeNotificationModal}
-        />
-      )}
+      <NotificationDetailModals
+        activeNotification={notificationDetail.activeNotification}
+        modalKind={notificationDetail.modalKind}
+        previewQuote={notificationDetail.previewQuote}
+        materialSummary={notificationDetail.materialSummary}
+        isLoadingDetail={notificationDetail.isLoadingDetail}
+        onClose={notificationDetail.close}
+      />
     </main>
   );
 }
