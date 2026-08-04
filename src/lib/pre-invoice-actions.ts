@@ -16,9 +16,8 @@ export function quoteToActionState(quote: Quote): QuoteActionState {
 }
 
 /**
- * Persist supplier unit prices and/or an attached supplier quote file.
- * Either prices or a file (new or existing) stamps supplier_pricing_uploaded_at
- * so Pre-Invoice step 3 completes.
+ * Persist confirmed supplier unit prices for EVERY material line.
+ * File attachment is optional audit only — it cannot complete step 3 alone.
  */
 export async function applySupplierPricesToQuote(
   quote: Quote,
@@ -35,28 +34,38 @@ export async function applySupplierPricesToQuote(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("You must be logged in.");
 
-  const file = options.file ?? null;
-  const removeExistingFile = Boolean(options.removeExistingFile);
-  const hasExistingFile =
-    Boolean(quote.supplier_pricing_file_path) && !removeExistingFile;
-  const willHaveFile = Boolean(file) || hasExistingFile;
+  if (materials.length === 0) {
+    throw new Error("No materials on this quote.");
+  }
 
-  if (updates.length === 0 && !willHaveFile) {
-    throw new Error("Enter at least one supplier price or attach a file.");
+  if (updates.length !== materials.length) {
+    throw new Error(
+      "Every material line must have a confirmed unit price before completing Upload Prices."
+    );
   }
 
   const priceById = new Map(
     updates.map((update) => [update.materialId, update.unitPrice])
   );
 
-  const nextMaterials =
-    updates.length === 0
-      ? materials
-      : materials.map((item) => {
-          const nextPrice = priceById.get(item.id);
-          if (nextPrice == null) return item;
-          return { ...item, unitPrice: nextPrice };
-        });
+  for (const item of materials) {
+    if (!priceById.has(item.id)) {
+      throw new Error(
+        `Missing confirmed price for “${item.item || "material"}”.`
+      );
+    }
+    const price = priceById.get(item.id);
+    if (price == null || !Number.isFinite(price) || price < 0) {
+      throw new Error(
+        `Invalid price for “${item.item || "material"}”.`
+      );
+    }
+  }
+
+  const nextMaterials = materials.map((item) => ({
+    ...item,
+    unitPrice: priceById.get(item.id) as number,
+  }));
 
   const state = quoteToActionState({
     ...quote,
@@ -73,6 +82,9 @@ export async function applySupplierPricesToQuote(
     discountAmount: state.discountAmount,
     discountPercent: state.discountPercent,
   });
+
+  const file = options.file ?? null;
+  const removeExistingFile = Boolean(options.removeExistingFile);
 
   let filePath: string | null | undefined = quote.supplier_pricing_file_path ?? null;
   if (removeExistingFile && !file) {

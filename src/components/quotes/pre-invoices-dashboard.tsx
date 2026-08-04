@@ -771,9 +771,7 @@ export function PreInvoicesDashboard() {
       );
       setActiveModal(null);
       await refreshAfterAction(
-        payload.updates.length > 0
-          ? "Supplier prices saved. Step 3 complete — create the customer quote next."
-          : "Supplier pricing file saved. Step 3 complete — enter unit prices before creating the quote if totals are still $0."
+        "Supplier prices confirmed for every line. Step 3 complete — create the customer quote next."
       );
     } catch (err) {
       showFeedback(
@@ -971,6 +969,9 @@ export function PreInvoicesDashboard() {
         <EnterSupplierPricesModal
           materials={modalMaterials}
           existingFilePath={modalQuote.supplier_pricing_file_path}
+          pricesAlreadyConfirmed={Boolean(
+            modalQuote.supplier_pricing_uploaded_at
+          )}
           isSaving={actionBusy}
           onClose={() => setActiveModal(null)}
           onSave={handleSavePrices}
