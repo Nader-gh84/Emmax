@@ -765,8 +765,17 @@ export function PreInvoicesDashboard() {
           );
           const data = await response.json().catch(() => ({}));
           if (!response.ok) {
+            const supabaseDetail =
+              typeof (data as { supabase?: { message?: string } })?.supabase
+                ?.message === "string"
+                ? ` (${(data as { supabase: { message: string; code?: string } }).supabase.message}${
+                    (data as { supabase: { code?: string } }).supabase.code
+                      ? ` · ${(data as { supabase: { code?: string } }).supabase.code}`
+                      : ""
+                  })`
+                : "";
             throw new Error(
-              (data as { error?: string }).error || "Failed to start project"
+              `${(data as { error?: string }).error || "Failed to start project"}${supabaseDetail}`
             );
           }
 
