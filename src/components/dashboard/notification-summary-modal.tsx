@@ -10,7 +10,7 @@ import { formatCurrency } from "@/types/quote";
 function typeLabel(type: string): string {
   switch (type) {
     case "draft_quote":
-      return "Draft Pre-Invoice";
+      return "Draft Project";
     case "employee_clock":
       return "Employee Clock";
     default:

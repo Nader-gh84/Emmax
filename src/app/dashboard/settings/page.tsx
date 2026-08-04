@@ -214,7 +214,7 @@ export default function SettingsPage() {
               PDF branding details
             </h2>
             <p className="text-sm text-slate-400">
-              Used on Pre-Invoice / Quote PDFs. Logo upload is not available yet
+              Used on quote PDFs. Logo upload is not available yet
               — templates use a built-in mark.
             </p>
             {BRANDING_FIELDS.map((field) => (

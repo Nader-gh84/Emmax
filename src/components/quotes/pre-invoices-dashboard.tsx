@@ -537,7 +537,7 @@ export function PreInvoicesDashboard() {
       ]);
 
     if (quotesError) {
-      setError("Failed to load pre-invoices. Please try again.");
+      setError("Failed to load projects. Please try again.");
       setIsLoading(false);
       return;
     }
@@ -895,7 +895,7 @@ export function PreInvoicesDashboard() {
     }
     if (actionBusy) return;
 
-    const label = card.projectNumber || card.title || "this pre-invoice";
+    const label = card.projectNumber || card.title || "this project";
     const confirmed = window.confirm(
       `Are you sure you want to delete ${label}? This cannot be undone.`
     );
@@ -927,7 +927,7 @@ export function PreInvoicesDashboard() {
       setQuotesById(previousQuotes);
       showFeedback(
         "error",
-        err instanceof Error ? err.message : "Failed to delete pre-invoice"
+        err instanceof Error ? err.message : "Failed to delete project"
       );
     } finally {
       setActionBusy(false);
@@ -973,15 +973,15 @@ export function PreInvoicesDashboard() {
         <header className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Pre-Invoices
+              Projects
             </h1>
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
               <IconInfo className="h-5 w-5" />
             </span>
           </div>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Create pre-invoices with voice, get supplier prices, send quotes to
-            customers, order materials and start projects - all in one place.
+            Create projects with voice, get supplier prices, send quotes, order
+            materials and start projects - all in one place.
           </p>
         </header>
 
@@ -1024,7 +1024,7 @@ export function PreInvoicesDashboard() {
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 sm:px-6">
-          <h2 className="text-lg font-semibold text-white">Pre-Invoice Workflow</h2>
+          <h2 className="text-lg font-semibold text-white">Project Workflow</h2>
           <p className="mt-1 text-sm text-slate-400">
             Each step unlocks when the previous step is completed.
           </p>
@@ -1039,14 +1039,14 @@ export function PreInvoicesDashboard() {
           {isLoading ? (
             <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-10 text-sm text-slate-400">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
-              Loading pre-invoices…
+              Loading projects…
             </div>
           ) : cards.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-14 text-center">
-              <h2 className="text-lg font-semibold text-white">No pre-invoices yet</h2>
+              <h2 className="text-lg font-semibold text-white">No projects yet</h2>
               <p className="mt-2 text-sm text-slate-400">
                 Record materials above and send them to a supplier to create your
-                first pre-invoice card.
+                first project card.
               </p>
             </div>
           ) : (

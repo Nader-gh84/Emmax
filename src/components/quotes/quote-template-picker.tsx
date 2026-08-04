@@ -149,7 +149,7 @@ export function QuoteTemplatePicker({
     <fieldset disabled={disabled} className="space-y-3">
       <legend className="text-sm font-semibold text-white">Quote Template</legend>
       <p className="text-sm text-slate-400">
-        Choose the default Pre-Invoice / Quote PDF layout. Used when you Create
+        Choose the default Quote PDF layout. Used when you Create
         Quote, download, or send.
       </p>
       <div className="grid gap-3 sm:grid-cols-3">

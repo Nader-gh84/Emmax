@@ -10,8 +10,8 @@ export function DashboardTopHeader() {
       <Link
         href="/dashboard/voice-quote-builder"
         className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-lg font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white"
-        aria-label="New pre-invoice"
-        title="New pre-invoice"
+        aria-label="New project"
+        title="New project"
       >
         +
       </Link>

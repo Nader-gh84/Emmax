@@ -105,7 +105,7 @@ export function CustomerSelectModal({
   return (
     <ModalShell
       title="Select customer"
-      description="Choose a saved customer for this pre-invoice."
+      description="Choose a saved customer for this project."
       onClose={onClose}
     >
       {isLoading ? (
@@ -171,7 +171,7 @@ export function ProjectEditModal({
   return (
     <ModalShell
       title="Project name"
-      description="Name this job for the pre-invoice and PDF."
+      description="Name this job for the project quote and PDF."
       onClose={onClose}
     >
       <input

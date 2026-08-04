@@ -42,10 +42,10 @@ export function InProgressQuoteSummaryModal({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-accent">
-              Pre-Invoice Summary
+              Project Summary
             </p>
             <h2 className="mt-1 text-xl font-semibold text-white">
-              {projectName.trim() || quoteNumber || "Current pre-invoice"}
+              {projectName.trim() || quoteNumber || "Current project"}
             </h2>
             <p className="mt-1 text-sm text-slate-400">
               Read-only preview before you save, send, or continue editing.

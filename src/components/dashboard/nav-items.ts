@@ -1,11 +1,11 @@
 import {
-  IconDocument,
   IconHome,
   IconMicrophone,
   IconSettings,
   IconSuppliers,
   IconUsers,
 } from "@/components/dashboard/icons";
+import { IconProjects } from "@/components/dashboard/workspace-icons";
 
 export const dashboardNavItems = [
   {
@@ -23,10 +23,10 @@ export const dashboardNavItems = [
     highlight: true,
   },
   {
-    label: "Pre-Invoices",
-    shortLabel: "Pre-Inv",
+    label: "Projects",
+    shortLabel: "Projects",
     href: "/dashboard/quotes",
-    icon: IconDocument,
+    icon: IconProjects,
     highlight: false,
   },
   {
