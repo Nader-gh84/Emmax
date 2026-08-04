@@ -53,6 +53,14 @@ function SummaryRow({
           ? "text-white"
           : "text-slate-200";
 
+  // Keep hint in sync with value tone for debt/warning rows (e.g. customer balance).
+  const hintClass =
+    tone === "negative"
+      ? "text-red-300/80"
+      : tone === "positive"
+        ? "text-emerald-300/70"
+        : "text-slate-500";
+
   return (
     <div
       className={`flex items-start justify-between gap-3 ${
@@ -76,11 +84,26 @@ function SummaryRow({
             </span>
           ) : null}
         </div>
-        {hint ? <p className="mt-0.5 text-xs text-slate-500">{hint}</p> : null}
+        {hint ? <p className={`mt-0.5 text-xs ${hintClass}`}>{hint}</p> : null}
       </dt>
       <dd className={`shrink-0 text-sm font-semibold ${valueClass}`}>{value}</dd>
     </div>
   );
+}
+
+function moneyTone(
+  value: number,
+  mode: "profit" | "debt" | "cash" = "profit"
+): "default" | "positive" | "negative" {
+  if (value === 0) return "default";
+  if (mode === "debt") {
+    // Positive = money owed (warning/debt) → red; zero/negative → neutral.
+    return value > 0 ? "negative" : "default";
+  }
+  if (mode === "cash" || mode === "profit") {
+    return value > 0 ? "positive" : "negative";
+  }
+  return "default";
 }
 
 function SummarySection({
@@ -207,18 +230,20 @@ export function FinancialSummaryCard({
     setBusy(false);
   }
 
-  const cashTone =
-    summary.cashFlow > 0
-      ? "positive"
-      : summary.cashFlow < 0
-        ? "negative"
-        : "default";
-  const profitTone =
-    summary.grossProfit > 0
-      ? "positive"
-      : summary.grossProfit < 0
-        ? "negative"
-        : "default";
+  const outstandingBalanceTone = moneyTone(
+    summary.outstandingCustomerBalance,
+    "debt"
+  );
+  const accountsPayableTone = moneyTone(summary.accountsPayable, "debt");
+  const cashTone = moneyTone(summary.cashFlow, "cash");
+  const profitTone = moneyTone(summary.grossProfit, "profit");
+  const netReceivableTone = moneyTone(summary.netReceivablePosition, "profit");
+  const outstandingBalanceHint =
+    summary.outstandingCustomerBalance > 0
+      ? "Customer still owes this amount"
+      : summary.outstandingCustomerBalance < 0
+        ? "Negative means customer overpaid"
+        : "Settled — no balance remaining";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -288,7 +313,8 @@ export function FinancialSummaryCard({
           <SummaryRow
             label="Outstanding Customer Balance"
             value={formatProjectMoney(summary.outstandingCustomerBalance)}
-            hint="Negative means customer overpaid"
+            tone={outstandingBalanceTone}
+            hint={outstandingBalanceHint}
           />
         </SummarySection>
 
@@ -356,11 +382,13 @@ export function FinancialSummaryCard({
           <SummaryRow
             label="Accounts Payable"
             value={formatProjectMoney(summary.accountsPayable)}
+            tone={accountsPayableTone}
           />
           <SummaryRow
             label="Net Receivable Position"
             value={formatProjectMoney(summary.netReceivablePosition)}
             emphasize
+            tone={netReceivableTone}
           />
         </SummarySection>
       </div>
