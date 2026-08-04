@@ -2,8 +2,10 @@
 
 import { QuotePreviewBody } from "@/components/quotes/quote-preview-body";
 import { touchBtnSecondary } from "@/components/quotes/ui";
+import { storedToLabourItems } from "@/lib/quotes";
 import {
   Quote,
+  StoredLabourItem,
   StoredMaterial,
   formatQuoteDate,
   storedToMaterials,
@@ -53,6 +55,9 @@ export function SentQuotePreviewModal({
   onClose: () => void;
 }) {
   const materials = storedToMaterials(quote.materials as StoredMaterial[]);
+  const labourItems = storedToLabourItems(
+    (quote.labour_items as StoredLabourItem[] | undefined) ?? []
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
@@ -83,6 +88,7 @@ export function SentQuotePreviewModal({
             notes={quote.notes ?? ""}
             validityDays={quote.validity_days}
             materials={materials}
+            labourItems={labourItems}
             subtotal={Number(quote.subtotal)}
             tax={Number(quote.tax)}
             grandTotal={Number(quote.grand_total)}
