@@ -429,8 +429,25 @@ export function ProjectDetailPage({
         }),
       });
       const data = await response.json().catch(() => ({}));
+
       if (!response.ok) {
-        throw new Error(data.error || "Failed to save project overview.");
+        // Description may have been saved even when overview columns are missing.
+        if (
+          response.status === 409 &&
+          data.partial &&
+          typeof data.description === "string"
+        ) {
+          setLiveProject((current) => ({
+            ...current,
+            description: data.description,
+          }));
+        }
+
+        const message =
+          (typeof data.error === "string" && data.error) ||
+          "Failed to save project overview.";
+        setActionError(message);
+        throw new Error(message);
       }
 
       const savedAddress =
@@ -444,11 +461,15 @@ export function ProjectDetailPage({
         projectType: data.projectType || form.projectType,
         projectManager: data.projectManager || form.projectManager,
       }));
+      setActionError(null);
       setOverviewEditOpen(false);
     } catch (error) {
-      throw error instanceof Error
-        ? error
-        : new Error("Failed to save project overview.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to save project overview.";
+      setActionError(message);
+      throw error instanceof Error ? error : new Error(message);
     } finally {
       setOverviewSaving(false);
     }

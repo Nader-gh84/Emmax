@@ -38,7 +38,16 @@ export function EditProjectOverviewModal({
 
   useEffect(() => {
     setForm(initialForm);
-  }, [initialForm]);
+    setError(null);
+    // Sync when parent opens modal with a fresh project snapshot — compare
+    // field values so a new object identity alone does not wipe in-progress edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional field deps
+  }, [
+    initialForm.description,
+    initialForm.address,
+    initialForm.projectType,
+    initialForm.projectManager,
+  ]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -88,15 +97,34 @@ export function EditProjectOverviewModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-      <div className="absolute inset-0" aria-hidden="true" onClick={onClose} />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl">
-        <h2 className="text-xl font-semibold text-white">Edit Project Overview</h2>
+      <div
+        className="absolute inset-0"
+        aria-hidden="true"
+        onClick={() => {
+          if (!isSaving) onClose();
+        }}
+      />
+      <div
+        className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-project-overview-title"
+      >
+        <h2
+          id="edit-project-overview-title"
+          className="text-xl font-semibold text-white"
+        >
+          Edit Project Overview
+        </h2>
         <p className="mt-1 text-sm text-slate-400">
           Update the overview details for this project.
         </p>
 
         {error ? (
-          <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+          <div
+            role="alert"
+            className="mt-4 whitespace-pre-wrap rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+          >
             {error}
           </div>
         ) : null}
@@ -117,7 +145,6 @@ export function EditProjectOverviewModal({
               }
               className={`${touchTextarea} mt-1.5 min-h-[120px]`}
               placeholder="Describe the project scope and goals"
-              required
             />
           </div>
 
@@ -173,7 +200,6 @@ export function EditProjectOverviewModal({
               }
               className={`${touchInput} mt-1.5`}
               placeholder="e.g. Residential Renovation"
-              required
             />
           </div>
 
@@ -193,7 +219,6 @@ export function EditProjectOverviewModal({
               }
               className={`${touchInput} mt-1.5`}
               placeholder="Assigned manager"
-              required
             />
           </div>
 
@@ -220,12 +245,7 @@ export function EditProjectOverviewModal({
             </button>
             <button
               type="submit"
-              disabled={
-                isSaving ||
-                !form.description.trim() ||
-                !form.projectType.trim() ||
-                !form.projectManager.trim()
-              }
+              disabled={isSaving}
               className={`${touchBtnPrimary} w-full sm:w-auto`}
             >
               {isSaving ? "Saving..." : "Save Overview"}
