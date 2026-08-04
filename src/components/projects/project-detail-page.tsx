@@ -37,6 +37,7 @@ import type { Employee } from "@/types/employee";
 import type { MaterialOrder } from "@/types/material-order";
 import {
   computeTaskCompletionPercent,
+  type ChangeOrder,
   type ProjectActivity,
   type ProjectExpense,
   type ProjectPayment,
@@ -112,6 +113,8 @@ export interface ProjectDetailDashboardProps {
   rawStartDate: string | null;
   rawEndDate: string | null;
   materialOrder: MaterialOrder | null;
+  /** All material orders for supplier cost rollups (latest is also in materialOrder). */
+  materialOrders: MaterialOrder[];
   projectMaterials: StoredMaterial[];
   workflowSteps: ProjectWorkflowStep[];
   workflowActionLabel: string | null;
@@ -120,6 +123,7 @@ export interface ProjectDetailDashboardProps {
   initialExpenses: ProjectExpense[];
   initialPayments: ProjectPayment[];
   initialTimeEntries: TimeEntry[];
+  initialChangeOrders: ChangeOrder[];
   initialActivities: ProjectActivity[];
   assignedEmployees: Employee[];
   allEmployees: Pick<Employee, "id" | "full_name">[];
@@ -168,9 +172,18 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
   const [liveEndDate, setLiveEndDate] = useState<string | null>(props.rawEndDate);
   const [liveStatus, setLiveStatus] = useState<ProjectStatus>(props.projectStatus);
   const [liveOrder, setLiveOrder] = useState<MaterialOrder | null>(materialOrder);
+  const [materialOrders, setMaterialOrders] = useState<MaterialOrder[]>(
+    props.materialOrders?.length
+      ? props.materialOrders
+      : materialOrder
+        ? [materialOrder]
+        : []
+  );
   const [tasks, setTasks] = useState(props.initialTasks);
   const [expenses, setExpenses] = useState(props.initialExpenses);
   const [payments, setPayments] = useState(props.initialPayments);
+  const [timeEntries, setTimeEntries] = useState(props.initialTimeEntries);
+  const [changeOrders, setChangeOrders] = useState(props.initialChangeOrders);
   const [activities, setActivities] = useState(props.initialActivities);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -181,13 +194,37 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     setTasks(props.initialTasks);
     setExpenses(props.initialExpenses);
     setPayments(props.initialPayments);
+    setTimeEntries(props.initialTimeEntries);
+    setChangeOrders(props.initialChangeOrders);
     setActivities(props.initialActivities);
+    setMaterialOrders(
+      props.materialOrders?.length
+        ? props.materialOrders
+        : props.materialOrder
+          ? [props.materialOrder]
+          : []
+    );
   }, [
     props.initialTasks,
     props.initialExpenses,
     props.initialPayments,
+    props.initialTimeEntries,
+    props.initialChangeOrders,
     props.initialActivities,
+    props.materialOrders,
+    props.materialOrder,
   ]);
+
+  useEffect(() => {
+    if (!liveOrder) return;
+    setMaterialOrders((current) => {
+      const index = current.findIndex((row) => row.id === liveOrder.id);
+      if (index === -1) return [liveOrder, ...current];
+      const next = [...current];
+      next[index] = liveOrder;
+      return next;
+    });
+  }, [liveOrder]);
 
   const projectStarted =
     liveStatus === "in_progress" || liveStatus === "completed";
@@ -795,7 +832,8 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               <TeamTimeCard
                 projectId={projectId}
                 assignedEmployees={props.assignedEmployees}
-                initialEntries={props.initialTimeEntries}
+                initialEntries={timeEntries}
+                onEntriesChange={setTimeEntries}
               />
             </div>
             <div className="space-y-5 xl:col-span-4">
@@ -816,6 +854,9 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                 depositAmount={depositAmount}
                 payments={payments}
                 expenses={expenses}
+                materialOrders={materialOrders}
+                timeEntries={timeEntries}
+                changeOrders={changeOrders}
                 onPaymentAdded={(payment) =>
                   setPayments((current) => [payment, ...current])
                 }

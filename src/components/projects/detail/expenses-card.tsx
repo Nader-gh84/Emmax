@@ -223,6 +223,9 @@ export function ExpensesCard({
         description: description.trim(),
         amount: parsedAmount,
         receipt_url: receiptPath,
+        billing_status: "pending_review",
+        payment_status: "unpaid",
+        expense_kind: "extra_purchase",
       })
       .select("*")
       .single();
@@ -232,13 +235,22 @@ export function ExpensesCard({
       setError(
         insertError?.message?.includes("receipt_url")
           ? "Failed to add expense. Run migration 031/032 so receipt_url exists."
-          : "Failed to add expense."
+          : insertError?.message?.includes("billing_status") ||
+              insertError?.message?.includes("expense_kind")
+            ? "Failed to add expense. Run migration 034_project_financial_accounting.sql."
+            : "Failed to add expense."
       );
       setBusy(false);
       return;
     }
 
-    const created = data as ProjectExpense;
+    const created: ProjectExpense = {
+      ...(data as ProjectExpense),
+      amount: Number((data as ProjectExpense).amount) || 0,
+      billing_status: "pending_review",
+      payment_status: "unpaid",
+      expense_kind: "extra_purchase",
+    };
     syncExpenses([created, ...expenses]);
 
     await logProjectActivity(supabase, {

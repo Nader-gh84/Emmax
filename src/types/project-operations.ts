@@ -138,53 +138,264 @@ export function computeTaskCompletionPercent(tasks: { status: string }[]): numbe
   return Math.round((completed / tasks.length) * 100);
 }
 
+function asMoney(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function normalizeBillingStatus(
+  value: string | null | undefined
+): ExpenseBillingStatus {
+  const candidate = value ?? "";
+  return isExpenseBillingStatus(candidate) ? candidate : "pending_review";
+}
+
+function normalizeExpenseKind(value: string | null | undefined): ExpenseKind {
+  const candidate = value ?? "";
+  return isExpenseKind(candidate) ? candidate : "extra_purchase";
+}
+
+function normalizePaymentStatus(
+  value: string | null | undefined
+): CostPaymentStatus {
+  const candidate = value ?? "";
+  return isCostPaymentStatus(candidate) ? candidate : "unpaid";
+}
+
+/** Line total for a material order (qty × unitPrice). Tax not included. */
+export function computeMaterialOrderTotal(order: {
+  materials?:
+    | { quantity?: number | null; unitPrice?: number | null }[]
+    | null;
+}): number {
+  if (!Array.isArray(order.materials)) return 0;
+  return order.materials.reduce((sum, line) => {
+    const qty = asMoney(line.quantity);
+    const unit = asMoney(line.unitPrice);
+    return sum + qty * unit;
+  }, 0);
+}
+
+export type FinancialSummaryMaterialOrder = {
+  payment_status?: string | null;
+  materials?:
+    | { quantity?: number | null; unitPrice?: number | null }[]
+    | null;
+};
+
+export type FinancialSummaryTimeEntry = {
+  hours: number;
+  payment_status?: string | null;
+  employees?: {
+    pay_rate?: number | null;
+    pay_type?: string | null;
+  } | null;
+  /** Fallback rate when join is missing (e.g. employee_id lookup). */
+  hourlyRate?: number | null;
+};
+
+export type FinancialSummaryExpense = {
+  amount: number;
+  billing_status?: string | null;
+  payment_status?: string | null;
+  expense_kind?: string | null;
+};
+
+export type FinancialSummaryChangeOrder = {
+  amount: number;
+  status: string;
+};
+
 /**
- * Financial summary helpers.
+ * Full project accounting summary.
  *
- * Net Position = Total Paid by Customer − Total Costs
- * (cash net to date). Outstanding AR is shown separately as Total Due.
- * Total Costs = Paid to Suppliers + Extra Purchases (labor shown on Team card).
+ * Revenue: Contract Value + approved Change Orders → Revised Contract Value
+ * Costs: Supplier (material orders) + Extra Purchases + Labour + Other Expenses
+ *   (pending_review expenses excluded until resolved)
+ * Cash: Customer Payments − Total Money Paid Out
+ * Labour uses employees.pay_rate when pay_type is hourly; salary → $0 for now.
+ * Outstanding Customer Balance may be negative (overpayment).
  */
 export function computeFinancialSummary(input: {
+  /** Accepted quote amount (Contract Value). */
   quoteAmount: number;
-  depositAmount: number;
+  depositAmount?: number;
   payments: Pick<ProjectPayment, "payment_type" | "amount">[];
-  expenses: Pick<ProjectExpense, "amount">[];
+  expenses: FinancialSummaryExpense[];
+  changeOrders?: FinancialSummaryChangeOrder[];
+  materialOrders?: FinancialSummaryMaterialOrder[];
+  timeEntries?: FinancialSummaryTimeEntry[];
 }) {
-  const quoteAmount = Number(input.quoteAmount) || 0;
-  const depositAmount = Number(input.depositAmount) || 0;
-  const paidByCustomer = input.payments
+  const contractValue = asMoney(input.quoteAmount);
+  const depositAmount = asMoney(input.depositAmount);
+
+  const changeOrdersAmount = (input.changeOrders ?? [])
+    .filter((row) => row.status === "approved")
+    .reduce((sum, row) => sum + asMoney(row.amount), 0);
+
+  const revisedContractValue = contractValue + changeOrdersAmount;
+
+  const customerPayments = (input.payments ?? [])
     .filter((p) => p.payment_type === "customer_payment")
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const paidToSuppliers = input.payments
+    .reduce((sum, p) => sum + asMoney(p.amount), 0);
+
+  // Legacy optional — not used in paid-out / AP (material_orders.payment_status is source of truth).
+  const legacySupplierPayments = (input.payments ?? [])
     .filter((p) => p.payment_type === "supplier_payment")
-    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-  const extraPurchases = input.expenses.reduce(
-    (sum, e) => sum + (Number(e.amount) || 0),
-    0
-  );
-  const totalCosts = paidToSuppliers + extraPurchases;
-  const totalDue = Math.max(0, quoteAmount - paidByCustomer);
-  const netPosition = paidByCustomer - totalCosts;
+    .reduce((sum, p) => sum + asMoney(p.amount), 0);
+
+  // Allow negative when customer has overpaid.
+  const outstandingCustomerBalance = revisedContractValue - customerPayments;
+
+  let supplierCosts = 0;
+  let paidSupplierCosts = 0;
+  let unpaidSupplierCosts = 0;
+  for (const order of input.materialOrders ?? []) {
+    const total = computeMaterialOrderTotal(order);
+    supplierCosts += total;
+    if (normalizePaymentStatus(order.payment_status) === "paid") {
+      paidSupplierCosts += total;
+    } else {
+      unpaidSupplierCosts += total;
+    }
+  }
+
+  let extraPurchases = 0;
+  let otherExpenses = 0;
+  let paidExtraPurchases = 0;
+  let unpaidExtraPurchases = 0;
+  let paidOtherExpenses = 0;
+  let unpaidOtherExpenses = 0;
+  let pendingReviewCount = 0;
+  let pendingReviewAmount = 0;
+
+  for (const raw of input.expenses ?? []) {
+    const amount = asMoney(raw.amount);
+    const billing = normalizeBillingStatus(raw.billing_status);
+    const kind = normalizeExpenseKind(raw.expense_kind);
+    const paid = normalizePaymentStatus(raw.payment_status) === "paid";
+
+    if (billing === "pending_review") {
+      pendingReviewCount += 1;
+      pendingReviewAmount += amount;
+      continue;
+    }
+
+    if (kind === "other_expense") {
+      otherExpenses += amount;
+      if (paid) paidOtherExpenses += amount;
+      else unpaidOtherExpenses += amount;
+    } else {
+      // extra_purchase — includes company_cost / add_to_change_order /
+      // included_in_customer_billing (cost side only; revenue via change_orders).
+      extraPurchases += amount;
+      if (paid) paidExtraPurchases += amount;
+      else unpaidExtraPurchases += amount;
+    }
+  }
+
+  let labourCost = 0;
+  let paidLabourCost = 0;
+  let unpaidLabourCost = 0;
+
+  for (const entry of input.timeEntries ?? []) {
+    const hours = asMoney(entry.hours);
+    const payType = entry.employees?.pay_type ?? "hourly";
+    const rate =
+      payType === "salary"
+        ? 0
+        : asMoney(
+            entry.employees?.pay_rate ?? entry.hourlyRate ?? 0
+          );
+    const cost = hours * rate;
+    labourCost += cost;
+    if (normalizePaymentStatus(entry.payment_status) === "paid") {
+      paidLabourCost += cost;
+    } else {
+      unpaidLabourCost += cost;
+    }
+  }
+
+  const totalProjectCost =
+    supplierCosts + extraPurchases + labourCost + otherExpenses;
+  const grossProfit = revisedContractValue - totalProjectCost;
+  const profitMargin =
+    revisedContractValue === 0
+      ? 0
+      : (grossProfit / revisedContractValue) * 100;
+
+  const totalMoneyPaidOut =
+    paidSupplierCosts +
+    paidExtraPurchases +
+    paidLabourCost +
+    paidOtherExpenses;
+
+  const cashFlow = customerPayments - totalMoneyPaidOut;
+
+  const accountsPayable =
+    unpaidSupplierCosts +
+    unpaidExtraPurchases +
+    unpaidLabourCost +
+    unpaidOtherExpenses;
+
+  const netReceivablePosition = outstandingCustomerBalance - accountsPayable;
+
   const depositStatus =
     depositAmount <= 0
       ? "Not Required"
-      : paidByCustomer >= depositAmount
+      : customerPayments >= depositAmount
         ? "Paid"
-        : paidByCustomer > 0
+        : customerPayments > 0
           ? "Partial"
           : "Not Paid";
 
   return {
-    quoteAmount,
+    // Revenue
+    contractValue,
+    changeOrdersAmount,
+    revisedContractValue,
+    // Customer payments
+    customerPayments,
+    outstandingCustomerBalance,
+    // Project costs
+    supplierCosts,
+    extraPurchases,
+    labourCost,
+    otherExpenses,
+    totalProjectCost,
+    // Profit
+    grossProfit,
+    profitMargin,
+    // Cash
+    totalMoneyPaidOut,
+    cashFlow,
+    paidSupplierCosts,
+    paidExtraPurchases,
+    paidLabourCost,
+    paidOtherExpenses,
+    // Obligations
+    accountsPayable,
+    unpaidSupplierCosts,
+    unpaidExtraPurchases,
+    unpaidLabourCost,
+    unpaidOtherExpenses,
+    netReceivablePosition,
+    // Review queue
+    pendingReviewCount,
+    pendingReviewAmount,
+    // Deposit (display helper)
     depositAmount,
     depositStatus,
-    paidByCustomer,
-    totalDue,
-    paidToSuppliers,
-    extraPurchases,
-    totalCosts,
-    netPosition,
+    // Legacy / aliases (transition helpers for older UI)
+    legacySupplierPayments,
+    quoteAmount: contractValue,
+    paidByCustomer: customerPayments,
+    /** @deprecated use outstandingCustomerBalance (not clamped) */
+    totalDue: outstandingCustomerBalance,
+    paidToSuppliers: paidSupplierCosts,
+    totalCosts: totalProjectCost,
+    /** @deprecated use cashFlow */
+    netPosition: cashFlow,
   };
 }
 

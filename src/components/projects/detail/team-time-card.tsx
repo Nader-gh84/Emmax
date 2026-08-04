@@ -41,12 +41,19 @@ export function TeamTimeCard({
   projectId,
   assignedEmployees,
   initialEntries,
+  onEntriesChange,
 }: {
   projectId: string;
   assignedEmployees: Employee[];
   initialEntries: TimeEntry[];
+  onEntriesChange?: (entries: TimeEntry[]) => void;
 }) {
   const [entries, setEntries] = useState<TimeEntry[]>(initialEntries);
+
+  function syncEntries(next: TimeEntry[]) {
+    setEntries(next);
+    onEntriesChange?.(next);
+  }
   const [modalOpen, setModalOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState(
     assignedEmployees[0]?.id ?? ""
@@ -128,6 +135,7 @@ export function TeamTimeCard({
         hours: parsedHours,
         entry_date: entryDate,
         notes: notes.trim() || null,
+        payment_status: "unpaid",
       })
       .select("*")
       .single();
@@ -140,6 +148,8 @@ export function TeamTimeCard({
 
     const created: TimeEntry = {
       ...(data as TimeEntry),
+      payment_status:
+        (data as TimeEntry).payment_status === "paid" ? "paid" : "unpaid",
       employees: employee
         ? {
             id: employee.id,
@@ -151,7 +161,7 @@ export function TeamTimeCard({
         : null,
     };
 
-    setEntries((current) => [created, ...current]);
+    syncEntries([created, ...entries]);
 
     await logProjectActivity(supabase, {
       userId: user.id,
