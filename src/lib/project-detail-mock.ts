@@ -1,3 +1,9 @@
+import {
+  formatProjectDate,
+  projectStatusLabel,
+  type ProjectStatus,
+} from "@/types/project";
+
 export type ProjectDetailTab =
   | "overview"
   | "scope"
@@ -66,90 +72,186 @@ export const PROJECT_DETAIL_TABS: {
   { id: "activity", label: "Activity" },
 ];
 
-/** Kitchen renovation mock for visual review (Ali Tajdar). */
-export function getMockProjectDetail(
-  customerId = "mock-customer-ali",
-  projectId = "mock-project-kitchen"
-): ProjectDetailMock {
+const DEFAULT_NEXT_STEPS: ProjectDetailMock["nextSteps"] = [
+  {
+    id: "1",
+    label: "Set project start date",
+    tag: "Required",
+    tagTone: "required",
+  },
+  {
+    id: "2",
+    label: "Review and confirm scope",
+    tag: "Optional",
+    tagTone: "optional",
+  },
+  {
+    id: "3",
+    label: "Setup team members",
+    tag: "Optional",
+    tagTone: "optional",
+  },
+  {
+    id: "4",
+    label: "Order materials",
+    tag: "Optional",
+    tagTone: "optional",
+  },
+  {
+    id: "5",
+    label: "Start project",
+    tag: "After completing above",
+    tagTone: "locked",
+    disabled: true,
+  },
+];
+
+function readinessForStatus(status: ProjectStatus): {
+  statusLabel: string;
+  readinessLabel: string;
+  readinessSubtext: string;
+  progressPercent: number;
+} {
+  switch (status) {
+    case "in_progress":
+      return {
+        statusLabel: "In Progress",
+        readinessLabel: "In Progress",
+        readinessSubtext: "Project started",
+        progressPercent: 10,
+      };
+    case "completed":
+      return {
+        statusLabel: projectStatusLabel(status),
+        readinessLabel: "Completed",
+        readinessSubtext: "Project finished",
+        progressPercent: 100,
+      };
+    case "on_hold":
+      return {
+        statusLabel: projectStatusLabel(status),
+        readinessLabel: "On Hold",
+        readinessSubtext: "Paused",
+        progressPercent: 0,
+      };
+    case "active":
+    default:
+      return {
+        statusLabel: "Quote Accepted",
+        readinessLabel: "Ready to Start",
+        readinessSubtext: "Not started yet",
+        progressPercent: 0,
+      };
+  }
+}
+
+/** Build the Project Detail view model from live Supabase records (no mock customer/project). */
+export function buildProjectDetailViewModel(input: {
+  id: string;
+  customerId: string;
+  projectName: string;
+  customerName: string;
+  customerPhone?: string | null;
+  address?: string | null;
+  quoteAmount: number;
+  status: ProjectStatus;
+  startDateConfirmed: boolean;
+  startDate?: string | null;
+  description?: string | null;
+  scopeItems?: string[];
+  acceptedAt?: string | null;
+  quoteNumber?: string | null;
+  materialLineCount?: number;
+  materialsReceived?: boolean;
+  materialsOrdered?: boolean;
+}): ProjectDetailMock {
+  const readiness = readinessForStatus(input.status);
+  const materialCount = Math.max(0, input.materialLineCount ?? 0);
+  const materialsReceived = Boolean(input.materialsReceived);
+  const materialsOrdered = Boolean(input.materialsOrdered) || materialsReceived;
+
+  let materialStats: ProjectDetailMock["materialStats"];
+  if (materialCount === 0) {
+    materialStats = {
+      notOrdered: 0,
+      ordered: 0,
+      received: 0,
+      used: 0,
+      returned: 0,
+    };
+  } else if (materialsReceived) {
+    materialStats = {
+      notOrdered: 0,
+      ordered: 0,
+      received: materialCount,
+      used: 0,
+      returned: 0,
+    };
+  } else if (materialsOrdered) {
+    materialStats = {
+      notOrdered: 0,
+      ordered: materialCount,
+      received: 0,
+      used: 0,
+      returned: 0,
+    };
+  } else {
+    materialStats = {
+      notOrdered: materialCount,
+      ordered: 0,
+      received: 0,
+      used: 0,
+      returned: 0,
+    };
+  }
+
+  const startDate =
+    input.startDateConfirmed && input.startDate
+      ? formatProjectDate(input.startDate)
+      : null;
+
+  const acceptedDate = input.acceptedAt
+    ? formatProjectDate(input.acceptedAt)
+    : "—";
+
+  const shortId = input.id.replace(/-/g, "").slice(0, 8).toUpperCase();
+
   return {
-    id: projectId,
-    customerId,
-    projectName: "Kitchen Renovation",
-    statusLabel: "Quote Accepted",
-    readinessLabel: "Ready to Start",
-    readinessSubtext: "Not started yet",
-    customerName: "Ali Tajdar",
-    customerPhone: "(604) 555-0142",
-    address: "1847 Maple Ridge Ave, Vancouver, BC V6J 2N8",
-    acceptedDate: "Jul 28, 2026",
-    quoteAmount: 18450,
-    startDate: null,
-    progressPercent: 0,
-    description:
-      "Full kitchen renovation including cabinet replacement, quartz countertops, backsplash tile, plumbing fixture upgrades, and electrical rough-in for under-cabinet lighting. Customer requested a modern matte-black and white finish with soft-close hardware throughout.",
-    projectType: "Residential Renovation",
+    id: input.id,
+    customerId: input.customerId,
+    projectName: input.projectName.trim() || "Untitled project",
+    statusLabel: readiness.statusLabel,
+    readinessLabel: readiness.readinessLabel,
+    readinessSubtext: readiness.readinessSubtext,
+    customerName: input.customerName.trim() || "Customer",
+    customerPhone: input.customerPhone?.trim() || "—",
+    address: input.address?.trim() || "—",
+    acceptedDate,
+    quoteAmount: Number(input.quoteAmount) || 0,
+    startDate,
+    progressPercent: readiness.progressPercent,
+    description: input.description?.trim() || "",
+    projectType: "Project",
     projectManager: "Unassigned",
-    internalProjectNumber: "PRJ-2025-0056",
+    internalProjectNumber:
+      input.quoteNumber?.trim() || (shortId ? `PRJ-${shortId}` : "—"),
     quoteStatus: "Accepted",
-    depositRequired: 3690,
+    depositRequired: 0,
     depositStatus: "Not Paid",
-    scopeItems: [
-      "Remove existing cabinets, counters, and sink",
-      "Install new soft-close base and wall cabinets",
-      "Fabricate and install quartz countertops",
-      "Tile backsplash (subway, full height)",
-      "Rough-in and install under-cabinet LED lighting",
-      "Replace sink, faucet, and dishwasher shutoffs",
-      "Paint ceiling and adjacent walls to match",
-      "Final cleanup and walkthrough with customer",
-    ],
-    nextSteps: [
-      {
-        id: "1",
-        label: "Set project start date",
-        tag: "Required",
-        tagTone: "required",
-      },
-      {
-        id: "2",
-        label: "Review and confirm scope",
-        tag: "2 items",
-        tagTone: "info",
-      },
-      {
-        id: "3",
-        label: "Setup team members",
-        tag: "Optional",
-        tagTone: "optional",
-      },
-      {
-        id: "4",
-        label: "Order materials",
-        tag: "Optional",
-        tagTone: "optional",
-      },
-      {
-        id: "5",
-        label: "Start project",
-        tag: "After completing above",
-        tagTone: "locked",
-        disabled: true,
-      },
-    ],
+    scopeItems: (input.scopeItems ?? []).map((s) => s.trim()).filter(Boolean),
+    nextSteps: DEFAULT_NEXT_STEPS.map((step) => ({ ...step })),
     taskStats: {
-      toDo: 8,
+      toDo: 0,
       inProgress: 0,
       completed: 0,
       overdue: 0,
     },
-    materialStats: {
-      notOrdered: 4,
-      ordered: 2,
-      received: 2,
-      used: 0,
-      returned: 0,
-    },
-    materialsReceivedPercent: 25,
+    materialStats,
+    materialsReceivedPercent: materialsReceived
+      ? 100
+      : materialsOrdered
+        ? 50
+        : 0,
   };
 }
 
