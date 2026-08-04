@@ -210,9 +210,33 @@ export function UploadSupplierPricingModal({
         throw new Error("Select at least one matched price to apply.");
       }
 
-      // Best-effort audit upload — do not block applying prices if storage fails.
-      if (file) {
-        await uploadFileForAudit();
+      // Always stamp supplier_pricing_uploaded_at when applying (paste or file),
+      // so Pre-Invoice step 3 advances even without a storage upload.
+      if (quoteId) {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          if (file) {
+            await uploadFileForAudit();
+          } else {
+            const { error: stampError } = await supabase
+              .from("quotes")
+              .update({
+                supplier_pricing_uploaded_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", quoteId)
+              .eq("user_id", user.id);
+            if (stampError) {
+              console.error(
+                "[UploadSupplierPricing] stamp uploaded_at failed:",
+                stampError
+              );
+            }
+          }
+        }
       }
 
       onApply(updates);

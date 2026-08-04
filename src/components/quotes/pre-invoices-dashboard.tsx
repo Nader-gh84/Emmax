@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   IconCalendar,
   IconCheckCircle,
@@ -14,9 +15,19 @@ import {
   IconProjects,
   IconSend,
 } from "@/components/dashboard/workspace-icons";
+import { EnterSupplierPricesModal } from "@/components/quotes/enter-supplier-prices-modal";
 import { PreInvoiceVoiceCapture } from "@/components/quotes/pre-invoice-voice-capture";
+import { SetStartDateModal } from "@/components/quotes/set-start-date-modal";
+import {
+  SendQuoteModal,
+  SendToSupplierModal,
+} from "@/components/quotes/voice-quote-action-modals";
 import { touchBtnSecondary } from "@/components/quotes/ui";
-import { createClient } from "@/lib/supabase";
+import {
+  applySupplierPricesToQuote,
+  prepareCustomerQuote,
+  quoteToActionState,
+} from "@/lib/pre-invoice-actions";
 import {
   PRE_INVOICE_WORKFLOW_STEPS,
   buildPreInvoiceStats,
@@ -27,15 +38,24 @@ import {
   type WorkflowStepDefinition,
   type WorkflowStepId,
 } from "@/lib/pre-invoices";
+import {
+  sendMaterialsToSupplier,
+  sendQuoteEmailAndPersist,
+  type QuoteActionState,
+} from "@/lib/quote-actions";
+import { createClient } from "@/lib/supabase";
 import type { MaterialOrder } from "@/types/material-order";
 import type { Project } from "@/types/project";
 import type { Quote } from "@/types/quote";
+import type { Supplier } from "@/types/supplier";
+import type { CustomerSelectionMode } from "@/lib/quotes";
 
-function noop(label: string) {
-  return () => {
-    console.log(`[Pre-Invoices UI] ${label}`);
-  };
-}
+type ActiveModal =
+  | null
+  | { kind: "supplier"; quoteId: string }
+  | { kind: "upload_prices"; quoteId: string }
+  | { kind: "send_customer"; quoteId: string }
+  | { kind: "start_date"; projectId: string };
 
 function IconInfo({ className }: { className?: string }) {
   return (
@@ -201,28 +221,30 @@ function WorkflowGuideSteps() {
 function ProjectStepNode({
   definition,
   step,
-  projectId,
-  showDividerBefore,
+  busy,
+  onAction,
 }: {
   definition: WorkflowStepDefinition;
   step: ProjectWorkflowStep;
-  projectId: string;
-  showDividerBefore?: boolean;
+  busy: boolean;
+  onAction: () => void;
 }) {
+  const clickable = step.state === "active" || step.state === "completed";
+
   return (
     <div className="flex items-start">
-      {showDividerBefore ? (
-        <div className="mx-1 mt-2 h-10 w-px shrink-0 bg-white/20 sm:mx-2" aria-hidden="true" />
-      ) : null}
       <div className="flex w-[4.75rem] flex-col items-center px-0.5 text-center sm:w-[5.5rem]">
         <button
           type="button"
-          onClick={noop(`Step ${definition.number} · ${projectId}`)}
+          disabled={!clickable || busy || step.state === "locked"}
+          onClick={() => {
+            if (step.state === "active") onAction();
+          }}
           className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
             step.state === "completed"
-              ? "cursor-pointer border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+              ? "cursor-default border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
               : step.state === "active"
-                ? "cursor-pointer border-accent/50 bg-accent/20 text-accent shadow-md shadow-accent/20 hover:bg-accent/30"
+                ? "cursor-pointer border-accent/50 bg-accent/20 text-accent shadow-md shadow-accent/20 hover:bg-accent/30 disabled:opacity-50"
                 : "cursor-default border-white/10 bg-white/[0.03] text-slate-500"
           }`}
           aria-label={`${definition.title} (${step.state})`}
@@ -250,8 +272,9 @@ function ProjectStepNode({
         {step.state === "active" && step.actionLabel ? (
           <button
             type="button"
-            onClick={noop(`${step.actionLabel} · ${projectId}`)}
-            className="mt-1.5 inline-flex min-h-[28px] items-center justify-center rounded-lg bg-accent px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-blue-600"
+            disabled={busy}
+            onClick={onAction}
+            className="mt-1.5 inline-flex min-h-[28px] items-center justify-center rounded-lg bg-accent px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
           >
             {step.actionLabel}
           </button>
@@ -261,7 +284,17 @@ function ProjectStepNode({
   );
 }
 
-function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
+function ProjectCard({
+  project,
+  busy,
+  onStepAction,
+  onEdit,
+}: {
+  project: PreInvoiceProjectCard;
+  busy: boolean;
+  onStepAction: (stepId: WorkflowStepId) => void;
+  onEdit: () => void;
+}) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -278,7 +311,6 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
                 <h3 className="text-lg font-bold text-white">{project.title}</h3>
                 <button
                   type="button"
-                  onClick={noop(`Favorite ${project.id}`)}
                   className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition hover:bg-white/10 ${
                     project.favorited ? "text-amber-300" : "text-slate-500"
                   }`}
@@ -313,10 +345,7 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setDetailsOpen((open) => !open);
-                  noop(`View Details ${project.id}`)();
-                }}
+                onClick={() => setDetailsOpen((open) => !open)}
                 className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent transition hover:text-blue-400"
               >
                 View Details
@@ -345,23 +374,16 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
               </button>
               {moreOpen ? (
                 <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
-                  {["Edit", "Duplicate", "Delete"].map((action) => (
-                    <button
-                      key={action}
-                      type="button"
-                      onClick={() => {
-                        setMoreOpen(false);
-                        noop(`${action} ${project.id}`)();
-                      }}
-                      className={`block w-full px-4 py-2.5 text-left text-sm transition hover:bg-white/5 ${
-                        action === "Delete"
-                          ? "text-red-300 hover:text-red-200"
-                          : "text-slate-300 hover:text-white"
-                      }`}
-                    >
-                      {action}
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      onEdit();
+                    }}
+                    className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                  >
+                    Edit
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -378,11 +400,14 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
                   definition.number !== 9;
                 return (
                   <div key={definition.id} className="flex items-start">
+                    {definition.number === 10 ? (
+                      <div className="mx-1 mt-2 h-10 w-px shrink-0 bg-white/20 sm:mx-2" aria-hidden="true" />
+                    ) : null}
                     <ProjectStepNode
                       definition={definition}
                       step={step}
-                      projectId={project.id}
-                      showDividerBefore={definition.number === 10}
+                      busy={busy}
+                      onAction={() => onStepAction(definition.id)}
                     />
                     {showConnector ? (
                       <div
@@ -413,9 +438,21 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
 }
 
 export function PreInvoicesDashboard() {
+  const router = useRouter();
+  const voiceSectionRef = useRef<HTMLDivElement | null>(null);
   const [cards, setCards] = useState<PreInvoiceProjectCard[]>([]);
+  const [quotesById, setQuotesById] = useState<Record<string, Quote>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error" | "info";
+    message: string;
+  } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [activeModal, setActiveModal] = useState<ActiveModal>(null);
+  const [sendState, setSendState] = useState<QuoteActionState | null>(null);
+  const [customerMode, setCustomerMode] =
+    useState<CustomerSelectionMode>("existing");
 
   const loadCards = useCallback(async () => {
     setError(null);
@@ -426,6 +463,7 @@ export function PreInvoicesDashboard() {
 
     if (!user) {
       setCards([]);
+      setQuotesById({});
       setIsLoading(false);
       return;
     }
@@ -463,10 +501,9 @@ export function PreInvoicesDashboard() {
       }
     }
 
+    const quoteMap: Record<string, Quote> = {};
     const nextCards = ((quotes as Quote[]) ?? [])
       .filter((quote) => {
-        // Show quotes that have materials (real pre-invoice work) or any
-        // linked project / supplier send activity.
         const hasMaterials =
           Array.isArray(quote.materials) && quote.materials.length > 0;
         const hasProject = Boolean(quote.id && projectByQuoteId.has(quote.id));
@@ -474,6 +511,7 @@ export function PreInvoicesDashboard() {
         return hasMaterials || hasProject || sentSupplier || quote.status !== "draft";
       })
       .map((quote) => {
+        quoteMap[quote.id] = quote;
         const project = projectByQuoteId.get(quote.id) ?? null;
         const latestOrder = project?.id
           ? orderByProjectId.get(project.id) ?? null
@@ -481,6 +519,7 @@ export function PreInvoicesDashboard() {
         return mapQuoteToPreInvoiceCard(quote, project, latestOrder);
       });
 
+    setQuotesById(quoteMap);
     setCards(nextCards);
     setIsLoading(false);
   }, []);
@@ -491,6 +530,306 @@ export function PreInvoicesDashboard() {
 
   const stats = useMemo(() => buildPreInvoiceStats(cards), [cards]);
 
+  const modalQuote =
+    activeModal && "quoteId" in activeModal
+      ? quotesById[activeModal.quoteId] ?? null
+      : null;
+
+  const modalMaterials = useMemo(() => {
+    if (!modalQuote) return [];
+    return quoteToActionState(modalQuote).materials;
+  }, [modalQuote]);
+
+  function showFeedback(
+    type: "success" | "error" | "info",
+    message: string
+  ) {
+    setFeedback({ type, message });
+  }
+
+  async function refreshAfterAction(message: string) {
+    showFeedback("success", message);
+    setIsLoading(true);
+    await loadCards();
+  }
+
+  async function handleStepAction(
+    card: PreInvoiceProjectCard,
+    stepId: WorkflowStepId
+  ) {
+    if (actionBusy) return;
+    setFeedback(null);
+
+    const quote = card.quoteId ? quotesById[card.quoteId] : null;
+
+    switch (stepId) {
+      case "voice_materials": {
+        voiceSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        showFeedback(
+          "info",
+          "Use Record Your Voice above to extract or add materials."
+        );
+        break;
+      }
+      case "send_supplier": {
+        if (!quote) {
+          showFeedback("error", "Quote not found for this card.");
+          return;
+        }
+        setActiveModal({ kind: "supplier", quoteId: quote.id });
+        break;
+      }
+      case "upload_prices": {
+        if (!quote) {
+          showFeedback("error", "Quote not found for this card.");
+          return;
+        }
+        setActiveModal({ kind: "upload_prices", quoteId: quote.id });
+        break;
+      }
+      case "create_quote": {
+        if (!quote) {
+          showFeedback("error", "Quote not found for this card.");
+          return;
+        }
+        setActionBusy(true);
+        try {
+          await prepareCustomerQuote(quote);
+          setActiveModal(null);
+          await refreshAfterAction(
+            "Quote PDF created. Step 4 complete — ready to send to customer."
+          );
+        } catch (err) {
+          showFeedback(
+            "error",
+            err instanceof Error ? err.message : "Failed to create quote"
+          );
+        } finally {
+          setActionBusy(false);
+        }
+        break;
+      }
+      case "send_customer":
+      case "customer_accept": {
+        if (!quote) {
+          showFeedback("error", "Quote not found for this card.");
+          return;
+        }
+        const state = quoteToActionState(quote);
+        setSendState(state);
+        setCustomerMode(state.selectedCustomerId ? "existing" : "new");
+        setActiveModal({ kind: "send_customer", quoteId: quote.id });
+        break;
+      }
+      case "order_materials": {
+        if (!card.projectId) {
+          showFeedback(
+            "error",
+            "No project linked yet. Save/send the quote first so a project exists."
+          );
+          return;
+        }
+        if (!card.customerId) {
+          showFeedback(
+            "error",
+            "Assign a customer before ordering materials (Send Quote to a customer first)."
+          );
+          return;
+        }
+        router.push(
+          `/dashboard/customers/${card.customerId}/projects/${card.projectId}/order-materials`
+        );
+        break;
+      }
+      case "materials_ready": {
+        if (!card.materialOrderId) {
+          showFeedback("error", "No material order found for this project.");
+          return;
+        }
+        if (!card.orderConfirmed) {
+          showFeedback(
+            "info",
+            "Waiting for the supplier to confirm availability via their email link."
+          );
+          return;
+        }
+        setActionBusy(true);
+        try {
+          const response = await fetch(
+            `/api/material-orders/${card.materialOrderId}/mark-received`,
+            { method: "POST" }
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(
+              (data as { error?: string }).error ||
+                "Failed to mark materials received"
+            );
+          }
+          await refreshAfterAction(
+            "Materials marked received. Step 8 complete — set a start date next."
+          );
+        } catch (err) {
+          showFeedback(
+            "error",
+            err instanceof Error ? err.message : "Failed to mark materials received"
+          );
+        } finally {
+          setActionBusy(false);
+        }
+        break;
+      }
+      case "schedule_project": {
+        if (!card.projectId) {
+          showFeedback("error", "No project found to schedule.");
+          return;
+        }
+        setActiveModal({ kind: "start_date", projectId: card.projectId });
+        break;
+      }
+      case "start_project": {
+        if (!card.projectId) {
+          showFeedback("error", "No project found to start.");
+          return;
+        }
+        setActionBusy(true);
+        try {
+          const response = await fetch(
+            `/api/projects/${card.projectId}/start`,
+            { method: "POST" }
+          );
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(
+              (data as { error?: string }).error || "Failed to start project"
+            );
+          }
+          await refreshAfterAction("Project started. Workflow complete.");
+        } catch (err) {
+          showFeedback(
+            "error",
+            err instanceof Error ? err.message : "Failed to start project"
+          );
+        } finally {
+          setActionBusy(false);
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  async function handleSendToSupplier(payload: {
+    supplier: Supplier;
+    supplierEmail: string;
+    messageBody: string;
+  }) {
+    if (!modalQuote) return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      await sendMaterialsToSupplier(quoteToActionState(modalQuote), {
+        supplierName: payload.supplier.supplier_name,
+        supplierEmail: payload.supplierEmail,
+        messageBody: payload.messageBody,
+      });
+      setActiveModal(null);
+      await refreshAfterAction(
+        `Pricing request sent to ${payload.supplier.supplier_name}. Step 2 complete.`
+      );
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to send to supplier"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleSavePrices(
+    updates: { materialId: string; unitPrice: number }[]
+  ) {
+    if (!modalQuote) return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      await applySupplierPricesToQuote(modalQuote, modalMaterials, updates);
+      setActiveModal(null);
+      await refreshAfterAction(
+        "Supplier prices saved. Step 3 complete — create the customer quote next."
+      );
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to save prices"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleSendQuote() {
+    if (!sendState) return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      await sendQuoteEmailAndPersist({
+        ...sendState,
+        customerMode,
+      });
+      setActiveModal(null);
+      setSendState(null);
+      await refreshAfterAction(
+        `Quote sent to ${sendState.customerEmail.trim()}. Waiting for customer accept.`
+      );
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to send quote"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleSaveStartDate(startDate: string) {
+    if (!activeModal || activeModal.kind !== "start_date") return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(
+        `/api/projects/${activeModal.projectId}/start-date`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ startDate }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          (data as { error?: string }).error || "Failed to save start date"
+        );
+      }
+      setActiveModal(null);
+      await refreshAfterAction(
+        "Start date saved. Step 9 complete — you can start the project."
+      );
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to save start date"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   return (
     <main className="relative min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl pb-28">
@@ -499,14 +838,9 @@ export function PreInvoicesDashboard() {
             <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
               Pre-Invoices
             </h1>
-            <button
-              type="button"
-              onClick={noop("Help info")}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
-              aria-label="About Pre-Invoices"
-            >
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
               <IconInfo className="h-5 w-5" />
-            </button>
+            </span>
           </div>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
             Create pre-invoices with voice, get supplier prices, send quotes to
@@ -514,7 +848,7 @@ export function PreInvoicesDashboard() {
           </p>
         </header>
 
-        <div className="mt-6">
+        <div className="mt-6" ref={voiceSectionRef}>
           <PreInvoiceVoiceCapture
             onProjectCreated={() => {
               setIsLoading(true);
@@ -523,20 +857,32 @@ export function PreInvoicesDashboard() {
           />
         </div>
 
+        {(feedback || error) && (
+          <div
+            className={`mt-6 rounded-xl border px-4 py-3 text-sm ${
+              error || feedback?.type === "error"
+                ? "border-red-500/30 bg-red-500/10 text-red-200"
+                : feedback?.type === "success"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+            }`}
+          >
+            {error || feedback?.message}
+          </div>
+        )}
+
         <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {stats.map((stat) => (
-            <button
+            <div
               key={stat.id}
-              type="button"
-              onClick={noop(`Stat filter ${stat.id}`)}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-left transition hover:border-accent/30 hover:bg-white/[0.05]"
+              className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-left"
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/25">
                 {statIcon(stat.id)}
               </span>
               <p className="mt-3 text-2xl font-bold text-white">{stat.count}</p>
               <p className="mt-1 text-xs font-medium text-slate-400">{stat.label}</p>
-            </button>
+            </div>
           ))}
         </section>
 
@@ -551,12 +897,6 @@ export function PreInvoicesDashboard() {
             Click on any active step button to continue the workflow
           </p>
         </section>
-
-        {error ? (
-          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
 
         <section className="mt-6 space-y-4">
           {isLoading ? (
@@ -574,7 +914,18 @@ export function PreInvoicesDashboard() {
             </div>
           ) : (
             cards.map((project) => (
-              <ProjectCard key={project.id} project={project} />
+              <ProjectCard
+                key={project.id}
+                project={project}
+                busy={actionBusy}
+                onStepAction={(stepId) => void handleStepAction(project, stepId)}
+                onEdit={() => {
+                  if (!project.quoteId) return;
+                  router.push(
+                    `/dashboard/voice-quote-builder?quote=${project.quoteId}`
+                  );
+                }}
+              />
             ))
           )}
         </section>
@@ -587,35 +938,67 @@ export function PreInvoicesDashboard() {
               when the previous step is completed.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={noop("View Workflow Guide")}
-            className={`${touchBtnSecondary} shrink-0 px-4 text-sm`}
-          >
-            View Workflow Guide
-          </button>
         </section>
       </div>
 
-      <button
-        type="button"
-        onClick={noop("Ema AI speak")}
-        className="fixed bottom-24 left-4 z-40 flex items-center gap-3 rounded-2xl border border-accent/30 bg-[#0B1220]/95 px-3.5 py-3 shadow-xl shadow-black/40 backdrop-blur transition hover:border-accent/50 hover:bg-[#0B1220] lg:bottom-6 lg:left-[16.5rem]"
-      >
-        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent to-cyan-400 text-sm font-bold text-white shadow-md shadow-accent/30">
-          E
-        </span>
-        <span className="pr-1 text-left">
-          <span className="block text-sm font-semibold text-white">Ema AI</span>
-          <span className="block text-[11px] text-slate-400">Your AI Assistant</span>
-          <span className="mt-0.5 block text-[10px] font-medium text-accent">
-            Click to speak
-          </span>
-        </span>
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/15 text-accent ring-1 ring-accent/30">
-          <IconMicrophone className="h-4 w-4" />
-        </span>
-      </button>
+      {activeModal?.kind === "supplier" && modalQuote ? (
+        <SendToSupplierModal
+          materials={modalMaterials.map(({ item, brand, quantity, unit }) => ({
+            item,
+            brand,
+            quantity,
+            unit,
+          }))}
+          isSending={actionBusy}
+          onClose={() => setActiveModal(null)}
+          onSend={handleSendToSupplier}
+        />
+      ) : null}
+
+      {activeModal?.kind === "upload_prices" && modalQuote ? (
+        <EnterSupplierPricesModal
+          materials={modalMaterials}
+          isSaving={actionBusy}
+          onClose={() => setActiveModal(null)}
+          onSave={handleSavePrices}
+        />
+      ) : null}
+
+      {activeModal?.kind === "send_customer" && sendState ? (
+        <SendQuoteModal
+          mode={customerMode === "existing" ? "contact" : "new"}
+          customerMode={customerMode}
+          selectedCustomerId={sendState.selectedCustomerId}
+          customerName={sendState.customerName}
+          customerEmail={sendState.customerEmail}
+          customerPhone={sendState.customerPhone}
+          isSending={actionBusy}
+          onClose={() => {
+            setActiveModal(null);
+            setSendState(null);
+          }}
+          onModeChange={setCustomerMode}
+          onSelectCustomer={(customerId) =>
+            setSendState((current) =>
+              current ? { ...current, selectedCustomerId: customerId } : current
+            )
+          }
+          onChange={(field, value) =>
+            setSendState((current) =>
+              current ? { ...current, [field]: value } : current
+            )
+          }
+          onSend={handleSendQuote}
+        />
+      ) : null}
+
+      {activeModal?.kind === "start_date" ? (
+        <SetStartDateModal
+          isSaving={actionBusy}
+          onClose={() => setActiveModal(null)}
+          onSave={handleSaveStartDate}
+        />
+      ) : null}
     </main>
   );
 }
