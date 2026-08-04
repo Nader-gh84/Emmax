@@ -161,6 +161,8 @@ export function buildProjectDetailViewModel(input: {
   scopeItems?: string[];
   acceptedAt?: string | null;
   quoteNumber?: string | null;
+  projectType?: string | null;
+  projectManager?: string | null;
   materialLineCount?: number;
   materialsReceived?: boolean;
   materialsOrdered?: boolean;
@@ -231,8 +233,8 @@ export function buildProjectDetailViewModel(input: {
     startDate,
     progressPercent: readiness.progressPercent,
     description: input.description?.trim() || "",
-    projectType: "Project",
-    projectManager: "Unassigned",
+    projectType: input.projectType?.trim() || "Project",
+    projectManager: input.projectManager?.trim() || "Unassigned",
     internalProjectNumber:
       input.quoteNumber?.trim() || (shortId ? `PRJ-${shortId}` : "—"),
     quoteStatus: "Accepted",

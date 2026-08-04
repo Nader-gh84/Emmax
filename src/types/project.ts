@@ -16,6 +16,9 @@ export interface Project {
   materials: StoredMaterial[] | null;
   labour_items: StoredLabourItem[] | null;
   notes: string | null;
+  project_type: string | null;
+  project_manager: string | null;
+  address: string | null;
   created_at: string;
   updated_at: string;
 }
