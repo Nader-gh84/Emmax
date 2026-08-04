@@ -23,8 +23,8 @@ export const dashboardNavItems = [
     highlight: true,
   },
   {
-    label: "Quotes",
-    shortLabel: "Quotes",
+    label: "Pre-Invoices",
+    shortLabel: "Pre-Inv",
     href: "/dashboard/quotes",
     icon: IconDocument,
     highlight: false,
