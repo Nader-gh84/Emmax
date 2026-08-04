@@ -11,7 +11,6 @@ import {
 } from "@/components/dashboard/icons";
 import {
   IconLocation,
-  IconMore,
   IconProjects,
   IconSend,
 } from "@/components/dashboard/workspace-icons";
