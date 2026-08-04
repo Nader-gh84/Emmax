@@ -1,4 +1,5 @@
 import { fetchQuotePdfBlob } from "@/lib/quote-pdf-client";
+import { ensureProjectForQuote } from "@/lib/ensure-project-for-quote";
 import {
   buildNewCustomerPayload,
   buildQuoteInsertPayload,
@@ -501,7 +502,11 @@ export async function sendMaterialsToSupplier(
     supplierEmail: string;
     messageBody: string;
   }
-): Promise<{ quoteId: string; quoteNumber: string | null }> {
+): Promise<{
+  quoteId: string;
+  quoteNumber: string | null;
+  projectId: string | null;
+}> {
   if (state.materials.length === 0) {
     throw new Error("Add at least one material before sending to a supplier.");
   }
@@ -566,5 +571,26 @@ export async function sendMaterialsToSupplier(
     );
   }
 
-  return { quoteId, quoteNumber };
+  // Create (or refresh) a projects row so the Pre-Invoices dashboard can list
+  // this job before the customer accepts the quote.
+  const projectId = await ensureProjectForQuote({
+    userId: user.id,
+    quoteId,
+    projectName: state.projectName,
+    customerId: state.selectedCustomerId,
+    customerName: state.customerName,
+    materials: state.materials,
+    labourItems: state.labourItems,
+    grandTotal: calculateVoiceQuoteTotals({
+      materials: state.materials,
+      labourItems: state.labourItems,
+      gstRate: state.gstRate,
+      pstRate: state.pstRate,
+      discountMode: state.discountMode,
+      discountAmount: state.discountAmount,
+      discountPercent: state.discountPercent,
+    }).grandTotal,
+  });
+
+  return { quoteId, quoteNumber, projectId };
 }
