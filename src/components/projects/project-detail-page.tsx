@@ -21,6 +21,7 @@ import {
   EditProjectOverviewModal,
   type ProjectOverviewFormData,
 } from "@/components/projects/edit-project-overview-modal";
+import { ProjectAssignedEmployees } from "@/components/projects/project-assigned-employees";
 import {
   formatProjectDetailMoney,
   PROJECT_DETAIL_TABS,
@@ -407,6 +408,11 @@ export function ProjectDetailPage({
         return;
       }
       setLiveStatus("in_progress");
+      if (Array.isArray(data.emailErrors) && data.emailErrors.length > 0) {
+        setActionError(
+          `Project started. Employee email warning: ${data.emailErrors[0]}`
+        );
+      }
     } catch {
       setActionError("Failed to start project.");
     } finally {
@@ -1005,6 +1011,8 @@ function OverviewTab({
             />
           </dl>
         </section>
+
+        <ProjectAssignedEmployees projectId={project.id} />
 
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center justify-between gap-3">

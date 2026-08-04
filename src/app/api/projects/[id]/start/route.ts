@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
+import { buildEmployeeProjectStartedEmailHtml } from "@/lib/email/employee-assignment-email";
 import { createClient } from "@/lib/supabase/server";
 import { logSupabaseError } from "@/lib/supabase/errors";
+import { formatProjectDate } from "@/types/project";
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value
   );
+}
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 export async function POST(
@@ -29,7 +36,9 @@ export async function POST(
 
     const { data: project, error: projectError } = await supabase
       .from("projects")
-      .select("id, start_date_confirmed, status")
+      .select(
+        "id, project_name, customer_id, start_date, start_date_confirmed, status, address, notes"
+      )
       .eq("id", projectId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -53,6 +62,7 @@ export async function POST(
         success: true,
         alreadyStarted: true,
         status: "in_progress",
+        emailsSent: 0,
       });
     }
 
@@ -85,8 +95,7 @@ export async function POST(
     if (!order || order.status !== "confirmed" || !order.materials_received_at) {
       return NextResponse.json(
         {
-          error:
-            "Mark materials as received before starting the project",
+          error: "Mark materials as received before starting the project",
         },
         { status: 400 }
       );
@@ -122,12 +131,122 @@ export async function POST(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Notify assigned employees (best-effort — start still succeeds if email fails).
+    let emailsSent = 0;
+    const emailErrors: string[] = [];
+
+    try {
+      const [{ data: assignmentRows }, { data: customerRow }, { data: profile }] =
+        await Promise.all([
+          supabase
+            .from("project_employees")
+            .select("employee_id, employees(id, full_name, email)")
+            .eq("project_id", projectId)
+            .eq("user_id", user.id),
+          project.customer_id
+            ? supabase
+                .from("customers")
+                .select("first_name, last_name, address")
+                .eq("id", project.customer_id)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+          supabase
+            .from("business_profiles")
+            .select("company_name")
+            .eq("user_id", user.id)
+            .maybeSingle(),
+        ]);
+
+      type AssignmentRow = {
+        employee_id: string;
+        employees:
+          | { id: string; full_name: string; email: string | null }
+          | { id: string; full_name: string; email: string | null }[]
+          | null;
+      };
+
+      const recipients = ((assignmentRows as AssignmentRow[] | null) ?? [])
+        .map((row) => {
+          const employee = Array.isArray(row.employees)
+            ? row.employees[0]
+            : row.employees;
+          return employee;
+        })
+        .filter(
+          (
+            employee
+          ): employee is { id: string; full_name: string; email: string | null } =>
+            Boolean(employee?.email && isValidEmail(employee.email.trim()))
+        );
+
+      if (recipients.length > 0) {
+        const apiKey = process.env.RESEND_API_KEY;
+        if (!apiKey) {
+          emailErrors.push("RESEND_API_KEY is not configured");
+        } else {
+          const customerName = customerRow
+            ? `${customerRow.first_name ?? ""} ${customerRow.last_name ?? ""}`.trim()
+            : "Customer";
+          const address =
+            (typeof project.address === "string" && project.address.trim()) ||
+            (typeof customerRow?.address === "string" &&
+              customerRow.address.trim()) ||
+            "—";
+          const companyName =
+            profile?.company_name?.trim() || "EmaX Contractor";
+          const projectName =
+            project.project_name?.trim() || "Untitled project";
+          const startDate = formatProjectDate(
+            (data.start_date as string | null) || project.start_date
+          );
+
+          const resend = new Resend(apiKey);
+          const fromEmail =
+            process.env.RESEND_FROM_EMAIL ?? "EmaX <onboarding@resend.dev>";
+
+          for (const employee of recipients) {
+            const html = buildEmployeeProjectStartedEmailHtml({
+              companyName,
+              employeeName: employee.full_name,
+              projectName,
+              customerName: customerName || "Customer",
+              address,
+              startDate,
+            });
+
+            const { error: sendError } = await resend.emails.send({
+              from: fromEmail,
+              to: [employee.email!.trim()],
+              subject: `Project started: ${projectName}`,
+              html,
+            });
+
+            if (sendError) {
+              emailErrors.push(
+                sendError.message || `Failed to email ${employee.full_name}`
+              );
+            } else {
+              emailsSent += 1;
+            }
+          }
+        }
+      }
+    } catch (notifyError) {
+      console.error(
+        "[POST /api/projects/[id]/start.notifyEmployees]",
+        notifyError
+      );
+      emailErrors.push("Failed to notify assigned employees");
+    }
+
     return NextResponse.json({
       success: true,
       alreadyStarted: false,
       status: data.status,
       startDate: data.start_date,
       startDateConfirmed: data.start_date_confirmed,
+      emailsSent,
+      emailErrors: emailErrors.length > 0 ? emailErrors : undefined,
     });
   } catch (error) {
     console.error("[POST /api/projects/[id]/start]", error);

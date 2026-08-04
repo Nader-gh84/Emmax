@@ -80,7 +80,7 @@ const DETAIL_ROWS = [
   [
     {
       title: "Employee",
-      href: "/dashboard/employees",
+      href: "/dashboard/settings?section=employees",
       icon: IconEmployee,
       stats: [
         { label: "Team size", value: "9" },
