@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   IconCheckCircle,
@@ -11,15 +10,14 @@ import {
   IconTruck,
   IconXCircle,
 } from "@/components/dashboard/icons";
-import { SentQuotePreviewModal } from "@/components/quotes/sent-quote-preview-modal";
+import { NotificationSummaryModal } from "@/components/dashboard/notification-summary-modal";
 import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
 import { createClient } from "@/lib/supabase";
 import {
   type AppNotification,
   formatNotificationTime,
-  getNotificationHref,
   groupNotificationsByDay,
-  opensQuotePreviewModal,
+  notificationHasQuoteDetails,
 } from "@/types/notification";
 import type { Quote } from "@/types/quote";
 
@@ -72,7 +70,10 @@ export function InboxPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [activeNotification, setActiveNotification] =
+    useState<AppNotification | null>(null);
   const [previewQuote, setPreviewQuote] = useState<Quote | null>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     setError(null);
@@ -187,6 +188,12 @@ export function InboxPage() {
     });
   }
 
+  function closeNotificationModal() {
+    setActiveNotification(null);
+    setPreviewQuote(null);
+    setIsLoadingQuote(false);
+  }
+
   async function markAsRead(notification: AppNotification) {
     if (notification.read) return;
 
@@ -203,12 +210,18 @@ export function InboxPage() {
     );
   }
 
-  async function handleOpenQuotePreview(notification: AppNotification) {
+  async function handleOpenNotification(notification: AppNotification) {
     void markAsRead(notification);
-
-    if (!notification.quote_id) return;
-
     setError(null);
+    setActiveNotification(notification);
+    setPreviewQuote(null);
+
+    if (!notificationHasQuoteDetails(notification) || !notification.quote_id) {
+      setIsLoadingQuote(false);
+      return;
+    }
+
+    setIsLoadingQuote(true);
     const supabase = createClient();
     const { data, error: loadError } = await supabase
       .from("quotes")
@@ -217,11 +230,14 @@ export function InboxPage() {
       .maybeSingle();
 
     if (loadError || !data) {
-      setError("Failed to load quote preview. Please try again.");
+      // Fall back to metadata summary inside the modal — stay on Inbox.
+      setPreviewQuote(null);
+      setIsLoadingQuote(false);
       return;
     }
 
     setPreviewQuote(data as Quote);
+    setIsLoadingQuote(false);
   }
 
   async function markAllAsRead() {
@@ -417,10 +433,6 @@ export function InboxPage() {
               </h2>
               <ul className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
                 {group.items.map((notification) => {
-                  const opensPreview = opensQuotePreviewModal(notification);
-                  const href = opensPreview
-                    ? null
-                    : getNotificationHref(notification);
                   const isDeleting = deletingIds.has(notification.id);
                   const isSelected = selectedIds.has(notification.id);
                   const mainClass = `flex min-w-0 flex-1 items-start gap-3 px-4 py-4 text-left transition hover:bg-white/[0.04] ${
@@ -486,28 +498,12 @@ export function InboxPage() {
                         >
                           {body}
                         </button>
-                      ) : opensPreview ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void handleOpenQuotePreview(notification)
-                          }
-                          className={mainClass}
-                        >
-                          {body}
-                        </button>
-                      ) : href ? (
-                        <Link
-                          href={href}
-                          onClick={() => void markAsRead(notification)}
-                          className={mainClass}
-                        >
-                          {body}
-                        </Link>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => void markAsRead(notification)}
+                          onClick={() =>
+                            void handleOpenNotification(notification)
+                          }
                           className={mainClass}
                         >
                           {body}
@@ -540,10 +536,12 @@ export function InboxPage() {
         </div>
       )}
 
-      {previewQuote && (
-        <SentQuotePreviewModal
+      {activeNotification && (
+        <NotificationSummaryModal
+          notification={activeNotification}
           quote={previewQuote}
-          onClose={() => setPreviewQuote(null)}
+          isLoadingQuote={isLoadingQuote}
+          onClose={closeNotificationModal}
         />
       )}
     </main>

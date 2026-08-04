@@ -24,6 +24,12 @@ export interface NotificationMetadata {
   availability_time?: string | null;
   branch_location?: string | null;
   decline_reason?: string | null;
+  employee_name?: string | null;
+  employee?: string | null;
+  action?: string | null;
+  clock_action?: string | null;
+  clock_time?: string | null;
+  time?: string | null;
   [key: string]: unknown;
 }
 
@@ -42,52 +48,21 @@ export function isNotificationType(value: string): value is NotificationType {
   return (NOTIFICATION_TYPES as readonly string[]).includes(value);
 }
 
-export function getNotificationHref(notification: AppNotification): string | null {
-  if (notification.type === "materials_confirmed") {
-    const customerId = notification.metadata?.customer_id;
-    const projectId = notification.metadata?.project_id;
-    if (
-      typeof customerId === "string" &&
-      customerId &&
-      typeof projectId === "string" &&
-      projectId
-    ) {
-      return `/dashboard/customers/${customerId}/projects/${projectId}`;
-    }
-    return "/dashboard/inbox";
-  }
-
-  if (!notification.quote_id) return null;
-
-  if (notification.type === "draft_quote") {
-    return `/dashboard/voice-quote-builder?quote=${notification.quote_id}`;
-  }
-
-  if (notification.type === "supplier_price") {
-    return `/dashboard/voice-quote-builder?quote=${notification.quote_id}&uploadPricing=1`;
-  }
-
-  // Accepted/declined quotes open an in-place preview modal on Inbox
-  // (and mark-as-read elsewhere). Do not route to the Quotes page.
-  if (
-    notification.type === "quote_accepted" ||
-    notification.type === "quote_declined"
-  ) {
-    return null;
-  }
-
-  return `/dashboard/quotes?quote=${notification.quote_id}`;
+/**
+ * Inbox / bell notification clicks open an in-place summary modal.
+ * Navigation from notification rows is disabled — always returns null.
+ */
+export function getNotificationHref(
+  _notification: AppNotification
+): string | null {
+  return null;
 }
 
-/** Notifications that should open the quote summary modal without leaving Inbox. */
-export function opensQuotePreviewModal(
+/** True when a quote row can enrich the in-place summary modal. */
+export function notificationHasQuoteDetails(
   notification: AppNotification
 ): boolean {
-  return (
-    (notification.type === "quote_accepted" ||
-      notification.type === "quote_declined") &&
-    Boolean(notification.quote_id)
-  );
+  return Boolean(notification.quote_id);
 }
 
 export function formatNotificationTime(dateString: string): string {
