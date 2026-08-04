@@ -23,6 +23,7 @@ import {
   SendToSupplierModal,
   ValidUntilModal,
 } from "@/components/quotes/voice-quote-action-modals";
+import { InProgressQuoteSummaryModal } from "@/components/quotes/in-progress-quote-summary-modal";
 import { UploadSupplierPricingModal } from "@/components/quotes/upload-supplier-pricing-modal";
 import {
   touchBtnPrimary,
@@ -82,12 +83,15 @@ type ActiveModal =
   | "sendNew"
   | "supplier"
   | "notes"
-  | "uploadPricing";
+  | "uploadPricing"
+  | "summary";
 
 const ACTIONS = [
   { id: "download", label: "Download PDF", icon: IconDocument },
   { id: "draft", label: "Save to Draft", icon: IconBookmark },
   { id: "edit", label: "Edit", icon: IconPencil },
+  { id: "summary", label: "View Summary", icon: IconInfo },
+  { id: "delete", label: "Delete", icon: IconTrash },
   { id: "contact", label: "Send to Contact", icon: IconSend },
   { id: "new-customer", label: "Send to New Customer", icon: IconUserPlus },
   { id: "supplier", label: "Send to Supplier", icon: IconSuppliers },
@@ -280,6 +284,7 @@ function VoiceQuoteBuilderInner({
     defaultValidUntil(30)
   );
   const openedUploadPricingRef = useRef(false);
+  const preInvoiceSectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!quoteParam) {
@@ -815,12 +820,118 @@ function VoiceQuoteBuilderInner({
   }
 
   function handleEditAction() {
-    setIsEditingItems(true);
-    setIsEditingTranscript(true);
-    showFeedback(
-      "info",
-      "Editing enabled — update the transcript or item rows, then tap Done."
+    // Previously this only set flags to true (never toggled off) and did not
+    // scroll to the materials table — so on long pages it looked like a no-op.
+    const enabling = !isEditingItems;
+    setIsEditingItems(enabling);
+    setIsEditingTranscript(enabling);
+    if (enabling) {
+      window.requestAnimationFrame(() => {
+        preInvoiceSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+      showFeedback(
+        "info",
+        "Editing enabled — update the transcript or item rows, then tap Done Editing."
+      );
+    } else {
+      showFeedback("info", "Editing finished.");
+    }
+  }
+
+  async function handleDeleteInProgress() {
+    const hasContent =
+      Boolean(transcript.trim()) ||
+      materials.length > 0 ||
+      labourItems.length > 0 ||
+      Boolean(notes.trim()) ||
+      Boolean(customerName.trim()) ||
+      Boolean(projectName.trim()) ||
+      Boolean(quoteId);
+
+    if (!hasContent) {
+      showFeedback("info", "Nothing to delete — the form is already empty.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      quoteId && quoteStatus === "draft"
+        ? "Delete this in-progress pre-invoice? This clears the form and removes the saved draft."
+        : "Discard this in-progress pre-invoice? This clears the transcript, materials, and form fields."
     );
+    if (!confirmed) return;
+
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      if (quoteId && quoteStatus === "draft") {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) {
+          const { error } = await supabase
+            .from("quotes")
+            .delete()
+            .eq("id", quoteId)
+            .eq("user_id", user.id)
+            .eq("status", "draft");
+          if (error) {
+            throw new Error(error.message || "Failed to delete draft quote");
+          }
+        }
+      }
+
+      setQuoteId(null);
+      setQuoteNumber(null);
+      setQuoteStatus("draft");
+      setTranscript("");
+      setNotes("");
+      setMaterials([]);
+      setLabourItems([]);
+      setPhase("idle");
+      setPipelineError(null);
+      setIsEditingItems(false);
+      setIsEditingTranscript(false);
+      setPriceMode("detailed");
+      setDiscountMode("amount");
+      setDiscountAmount(0);
+      setDiscountPercent(0);
+      setGstRate(DEFAULT_GST_RATE);
+      setPstRate(DEFAULT_PST_RATE);
+      setCustomerMode("existing");
+      setSelectedCustomerId(null);
+      setCustomerName("");
+      setCustomerEmail("");
+      setCustomerPhone("");
+      setCustomerSecondary("");
+      setProjectName("");
+      setValidUntil(defaultValidUntil(30));
+      setMobileAction("");
+      setActiveModal(null);
+      showFeedback("success", "Pre-invoice discarded.");
+      onPersisted?.();
+    } catch (error) {
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "Failed to delete pre-invoice"
+      );
+    } finally {
+      setIsActionBusy(false);
+    }
+  }
+
+  function handleViewSummary() {
+    if (materials.length === 0 && labourItems.length === 0) {
+      showFeedback(
+        "error",
+        "Add at least one material or labour item to view a summary."
+      );
+      return;
+    }
+    setActiveModal("summary");
   }
 
   async function handleSendQuote() {
@@ -918,6 +1029,12 @@ function VoiceQuoteBuilderInner({
         break;
       case "edit":
         handleEditAction();
+        break;
+      case "summary":
+        handleViewSummary();
+        break;
+      case "delete":
+        await handleDeleteInProgress();
         break;
       case "contact":
         setCustomerMode("existing");
@@ -1290,7 +1407,10 @@ function VoiceQuoteBuilderInner({
               </div>
             </section>
 
-            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <section
+              ref={preInvoiceSectionRef}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold text-white">
                   <span className="mr-2 text-accent">4</span>
@@ -1299,7 +1419,7 @@ function VoiceQuoteBuilderInner({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setIsEditingItems((current) => !current)}
+                    onClick={handleEditAction}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-blue-400"
                   >
                     <IconPencil className="h-3.5 w-3.5" />
@@ -1757,19 +1877,35 @@ function VoiceQuoteBuilderInner({
               </div>
             </section>
 
-            <section className="hidden gap-2 md:grid md:grid-cols-3 lg:grid-cols-6">
+            <section className="hidden gap-2 md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
               {ACTIONS.map((action) => {
                 const Icon = action.icon;
+                const label =
+                  action.id === "edit"
+                    ? isEditingItems
+                      ? "Done Editing"
+                      : "Edit"
+                    : action.label;
                 return (
                   <button
                     key={action.id}
                     type="button"
                     disabled={isActionBusy}
                     onClick={() => void runAction(action.id)}
-                    className={`${touchBtnSecondary} flex-col gap-1.5 px-2 py-3 text-xs disabled:opacity-50`}
+                    className={`${touchBtnSecondary} flex-col gap-1.5 px-2 py-3 text-xs disabled:opacity-50 ${
+                      action.id === "edit" && isEditingItems
+                        ? "border-accent/40 bg-accent/10 text-white"
+                        : action.id === "delete"
+                          ? "hover:border-red-500/40 hover:text-red-200"
+                          : ""
+                    }`}
                   >
-                    <Icon className="h-4 w-4 text-cyan-400" />
-                    {action.label}
+                    <Icon
+                      className={`h-4 w-4 ${
+                        action.id === "delete" ? "text-red-400" : "text-cyan-400"
+                      }`}
+                    />
+                    {label}
                   </button>
                 );
               })}
@@ -1788,7 +1924,11 @@ function VoiceQuoteBuilderInner({
                 </option>
                 {ACTIONS.map((action) => (
                   <option key={action.id} value={action.id} className="bg-navy">
-                    {action.label}
+                    {action.id === "edit"
+                      ? isEditingItems
+                        ? "Done Editing"
+                        : "Edit"
+                      : action.label}
                   </option>
                 ))}
               </select>
@@ -1967,6 +2107,25 @@ function VoiceQuoteBuilderInner({
         <AddItemModal
           onClose={() => setShowAddItem(false)}
           onAdd={handleAddItem}
+        />
+      )}
+
+      {activeModal === "summary" && (
+        <InProgressQuoteSummaryModal
+          customerName={customerName}
+          customerEmail={customerEmail}
+          customerPhone={customerPhone}
+          projectName={projectName}
+          notes={notes}
+          validityDays={buildActionState().validityDays}
+          materials={materials}
+          labourItems={labourItems}
+          subtotal={totals.subtotal}
+          tax={totals.gst + totals.pst}
+          grandTotal={totals.grandTotal}
+          taxRate={gstRate + pstRate}
+          quoteNumber={quoteNumber}
+          onClose={() => setActiveModal(null)}
         />
       )}
 
