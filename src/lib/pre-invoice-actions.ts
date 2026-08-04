@@ -16,13 +16,18 @@ export function quoteToActionState(quote: Quote): QuoteActionState {
 }
 
 /**
- * Persist supplier unit prices onto quote materials and stamp
- * supplier_pricing_uploaded_at so Pre-Invoice step 3 completes.
+ * Persist supplier unit prices and/or an attached supplier quote file.
+ * Either prices or a file (new or existing) stamps supplier_pricing_uploaded_at
+ * so Pre-Invoice step 3 completes.
  */
 export async function applySupplierPricesToQuote(
   quote: Quote,
   materials: MaterialItem[],
-  updates: { materialId: string; unitPrice: number }[]
+  updates: { materialId: string; unitPrice: number }[],
+  options: {
+    file?: File | null;
+    removeExistingFile?: boolean;
+  } = {}
 ): Promise<void> {
   const supabase = createClient();
   const {
@@ -30,21 +35,33 @@ export async function applySupplierPricesToQuote(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("You must be logged in.");
 
-  if (updates.length === 0) {
-    throw new Error("Enter at least one supplier price.");
+  const file = options.file ?? null;
+  const removeExistingFile = Boolean(options.removeExistingFile);
+  const hasExistingFile =
+    Boolean(quote.supplier_pricing_file_path) && !removeExistingFile;
+  const willHaveFile = Boolean(file) || hasExistingFile;
+
+  if (updates.length === 0 && !willHaveFile) {
+    throw new Error("Enter at least one supplier price or attach a file.");
   }
 
   const priceById = new Map(
     updates.map((update) => [update.materialId, update.unitPrice])
   );
 
-  const nextMaterials = materials.map((item) => {
-    const nextPrice = priceById.get(item.id);
-    if (nextPrice == null) return item;
-    return { ...item, unitPrice: nextPrice };
-  });
+  const nextMaterials =
+    updates.length === 0
+      ? materials
+      : materials.map((item) => {
+          const nextPrice = priceById.get(item.id);
+          if (nextPrice == null) return item;
+          return { ...item, unitPrice: nextPrice };
+        });
 
-  const state = quoteToActionState({ ...quote, materials: materialsToStored(nextMaterials) });
+  const state = quoteToActionState({
+    ...quote,
+    materials: materialsToStored(nextMaterials),
+  });
   state.materials = nextMaterials;
 
   const totals = calculateVoiceQuoteTotals({
@@ -57,6 +74,32 @@ export async function applySupplierPricesToQuote(
     discountPercent: state.discountPercent,
   });
 
+  let filePath: string | null | undefined = quote.supplier_pricing_file_path ?? null;
+  if (removeExistingFile && !file) {
+    filePath = null;
+  }
+
+  if (file) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${user.id}/${quote.id}/${Date.now()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("supplier-pricing")
+      .upload(path, file, {
+        contentType: file.type || "application/octet-stream",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      const hint =
+        uploadError.message?.toLowerCase().includes("bucket") ||
+        uploadError.message?.toLowerCase().includes("mime")
+          ? " Run migration 017 (and 025 for spreadsheets) in Supabase if needed."
+          : "";
+      throw new Error(`Failed to upload pricing file.${hint}`);
+    }
+    filePath = path;
+  }
+
   const now = new Date().toISOString();
   const { error } = await supabase
     .from("quotes")
@@ -66,6 +109,7 @@ export async function applySupplierPricesToQuote(
       subtotal: totals.subtotal,
       tax: totals.gst + totals.pst,
       grand_total: totals.grandTotal,
+      supplier_pricing_file_path: filePath,
       supplier_pricing_uploaded_at: now,
       updated_at: now,
     })

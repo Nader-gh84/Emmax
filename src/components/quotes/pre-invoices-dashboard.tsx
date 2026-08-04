@@ -751,17 +751,29 @@ export function PreInvoicesDashboard() {
     }
   }
 
-  async function handleSavePrices(
-    updates: { materialId: string; unitPrice: number }[]
-  ) {
+  async function handleSavePrices(payload: {
+    updates: { materialId: string; unitPrice: number }[];
+    file: File | null;
+    removeExistingFile: boolean;
+  }) {
     if (!modalQuote) return;
     setActionBusy(true);
     setFeedback(null);
     try {
-      await applySupplierPricesToQuote(modalQuote, modalMaterials, updates);
+      await applySupplierPricesToQuote(
+        modalQuote,
+        modalMaterials,
+        payload.updates,
+        {
+          file: payload.file,
+          removeExistingFile: payload.removeExistingFile,
+        }
+      );
       setActiveModal(null);
       await refreshAfterAction(
-        "Supplier prices saved. Step 3 complete — create the customer quote next."
+        payload.updates.length > 0
+          ? "Supplier prices saved. Step 3 complete — create the customer quote next."
+          : "Supplier pricing file saved. Step 3 complete — enter unit prices before creating the quote if totals are still $0."
       );
     } catch (err) {
       showFeedback(
@@ -958,6 +970,7 @@ export function PreInvoicesDashboard() {
       {activeModal?.kind === "upload_prices" && modalQuote ? (
         <EnterSupplierPricesModal
           materials={modalMaterials}
+          existingFilePath={modalQuote.supplier_pricing_file_path}
           isSaving={actionBusy}
           onClose={() => setActiveModal(null)}
           onSave={handleSavePrices}
