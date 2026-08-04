@@ -17,6 +17,7 @@ import {
 } from "@/components/dashboard/workspace-icons";
 import { EnterSupplierPricesModal } from "@/components/quotes/enter-supplier-prices-modal";
 import { PreInvoiceVoiceCapture } from "@/components/quotes/pre-invoice-voice-capture";
+import { QuotePdfPreviewModal } from "@/components/quotes/quote-pdf-preview-modal";
 import { SetStartDateModal } from "@/components/quotes/set-start-date-modal";
 import {
   SendQuoteModal,
@@ -39,6 +40,7 @@ import {
   type WorkflowStepId,
 } from "@/lib/pre-invoices";
 import {
+  saveQuoteDraft,
   sendMaterialsToSupplier,
   sendQuoteEmailAndPersist,
   type QuoteActionState,
@@ -55,6 +57,7 @@ type ActiveModal =
   | { kind: "supplier"; quoteId: string }
   | { kind: "upload_prices"; quoteId: string }
   | { kind: "send_customer"; quoteId: string }
+  | { kind: "pdf_preview"; quoteId: string; pdfPath: string }
   | { kind: "start_date"; projectId: string };
 
 function IconInfo({ className }: { className?: string }) {
@@ -289,11 +292,13 @@ function ProjectCard({
   busy,
   onStepAction,
   onEdit,
+  onViewPdf,
 }: {
   project: PreInvoiceProjectCard;
   busy: boolean;
   onStepAction: (stepId: WorkflowStepId) => void;
   onEdit: () => void;
+  onViewPdf: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -343,16 +348,29 @@ function ProjectCard({
                   {project.createdLabel}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setDetailsOpen((open) => !open)}
-                className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-accent transition hover:text-blue-400"
-              >
-                View Details
-                <IconChevronDown
-                  className={`h-4 w-4 transition ${detailsOpen ? "rotate-180" : ""}`}
-                />
-              </button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDetailsOpen((open) => !open)}
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-accent transition hover:text-blue-400"
+                >
+                  View Details
+                  <IconChevronDown
+                    className={`h-4 w-4 transition ${detailsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {project.pdfPath ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={onViewPdf}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+                  >
+                    <IconDocument className="h-3.5 w-3.5 text-accent" />
+                    View PDF
+                  </button>
+                ) : null}
+              </div>
               {detailsOpen ? (
                 <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs leading-relaxed text-slate-400">
                   Quote ID: {project.quoteId || "—"}
@@ -373,7 +391,7 @@ function ProjectCard({
                 />
               </button>
               {moreOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-1 w-40 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
                   <button
                     type="button"
                     onClick={() => {
@@ -384,6 +402,18 @@ function ProjectCard({
                   >
                     Edit
                   </button>
+                  {project.pdfPath ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        onViewPdf();
+                      }}
+                      className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                    >
+                      View PDF
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -597,11 +627,15 @@ export function PreInvoicesDashboard() {
         }
         setActionBusy(true);
         try {
-          await prepareCustomerQuote(quote);
-          setActiveModal(null);
+          const result = await prepareCustomerQuote(quote);
           await refreshAfterAction(
-            "Quote PDF created. Step 4 complete — ready to send to customer."
+            "Quote PDF created. Preview ready — send, save draft, or download."
           );
+          setActiveModal({
+            kind: "pdf_preview",
+            quoteId: result.quoteId,
+            pdfPath: result.pdfPath,
+          });
         } catch (err) {
           showFeedback(
             "error",
@@ -618,10 +652,7 @@ export function PreInvoicesDashboard() {
           showFeedback("error", "Quote not found for this card.");
           return;
         }
-        const state = quoteToActionState(quote);
-        setSendState(state);
-        setCustomerMode(state.selectedCustomerId ? "existing" : "new");
-        setActiveModal({ kind: "send_customer", quoteId: quote.id });
+        openSendCustomerForQuote(quote);
         break;
       }
       case "order_materials": {
@@ -807,6 +838,33 @@ export function PreInvoicesDashboard() {
     }
   }
 
+  function openSendCustomerForQuote(quote: Quote) {
+    const state = quoteToActionState(quote);
+    setSendState(state);
+    setCustomerMode(state.selectedCustomerId ? "existing" : "new");
+    setActiveModal({ kind: "send_customer", quoteId: quote.id });
+  }
+
+  async function handlePreviewSaveDraft() {
+    if (!modalQuote) return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      await saveQuoteDraft(quoteToActionState(modalQuote));
+      setActiveModal(null);
+      await refreshAfterAction(
+        "Quote saved as draft. Open View PDF anytime to send or download."
+      );
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to save draft"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function handleSaveStartDate(startDate: string) {
     if (!activeModal || activeModal.kind !== "start_date") return;
     setActionBusy(true);
@@ -935,6 +993,20 @@ export function PreInvoicesDashboard() {
                     `/dashboard/voice-quote-builder?quote=${project.quoteId}`
                   );
                 }}
+                onViewPdf={() => {
+                  if (!project.quoteId || !project.pdfPath) {
+                    showFeedback(
+                      "error",
+                      "No quote PDF found yet. Create Quote first."
+                    );
+                    return;
+                  }
+                  setActiveModal({
+                    kind: "pdf_preview",
+                    quoteId: project.quoteId,
+                    pdfPath: project.pdfPath,
+                  });
+                }}
               />
             ))
           )}
@@ -975,6 +1047,23 @@ export function PreInvoicesDashboard() {
           isSaving={actionBusy}
           onClose={() => setActiveModal(null)}
           onSave={handleSavePrices}
+        />
+      ) : null}
+
+      {activeModal?.kind === "pdf_preview" && modalQuote ? (
+        <QuotePdfPreviewModal
+          title={
+            modalQuote.project_name?.trim() ||
+            modalQuote.quote_number?.trim() ||
+            "Quote PDF"
+          }
+          quoteNumber={modalQuote.quote_number}
+          pdfPath={activeModal.pdfPath || modalQuote.pdf_url || ""}
+          pdfFileName={`${modalQuote.quote_number || modalQuote.id}.pdf`}
+          busy={actionBusy}
+          onClose={() => setActiveModal(null)}
+          onSendToCustomer={() => openSendCustomerForQuote(modalQuote)}
+          onSaveToDraft={handlePreviewSaveDraft}
         />
       ) : null}
 
