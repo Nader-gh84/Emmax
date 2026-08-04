@@ -25,10 +25,12 @@ export function TasksOverviewCard({
   projectId,
   initialTasks,
   employees,
+  onTasksChange,
 }: {
   projectId: string;
   initialTasks: ProjectTask[];
   employees: EmployeeOption[];
+  onTasksChange?: (tasks: ProjectTask[]) => void;
 }) {
   const [tasks, setTasks] = useState<ProjectTask[]>(initialTasks);
   const [modalOpen, setModalOpen] = useState(false);
@@ -43,6 +45,11 @@ export function TasksOverviewCard({
   useEffect(() => {
     setTasks(initialTasks);
   }, [initialTasks]);
+
+  function syncTasks(next: ProjectTask[]) {
+    setTasks(next);
+    onTasksChange?.(next);
+  }
 
   const completedCount = useMemo(
     () => tasks.filter((task) => task.status === "completed").length,
@@ -89,11 +96,13 @@ export function TasksOverviewCard({
       return;
     }
 
-    setTasks((current) =>
-      current.map((row) =>
+    setTasks((current) => {
+      const next = current.map((row) =>
         row.id === task.id ? { ...row, ...payload } : row
-      )
-    );
+      );
+      onTasksChange?.(next);
+      return next;
+    });
 
     if (nextCompleted) {
       await logProjectActivity(supabase, {
@@ -124,7 +133,11 @@ export function TasksOverviewCard({
       return;
     }
 
-    setTasks((current) => current.filter((row) => row.id !== task.id));
+    setTasks((current) => {
+      const next = current.filter((row) => row.id !== task.id);
+      onTasksChange?.(next);
+      return next;
+    });
     setDeletingId(null);
   }
 
@@ -179,7 +192,11 @@ export function TasksOverviewCard({
         : null,
     };
 
-    setTasks((current) => [...current, created]);
+    setTasks((current) => {
+      const next = [...current, created];
+      onTasksChange?.(next);
+      return next;
+    });
 
     await logProjectActivity(supabase, {
       userId: user.id,

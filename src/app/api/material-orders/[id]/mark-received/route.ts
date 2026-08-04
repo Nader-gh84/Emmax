@@ -29,7 +29,7 @@ export async function POST(
 
     const { data: existing, error: loadError } = await supabase
       .from("material_orders")
-      .select("id, status, materials_received_at")
+      .select("id, status, materials_received_at, project_id")
       .eq("id", orderId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -99,6 +99,16 @@ export async function POST(
 
     if (!data) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    if (existing.project_id) {
+      const { logProjectActivity } = await import("@/lib/project-activity");
+      await logProjectActivity(supabase, {
+        userId: user.id,
+        projectId: existing.project_id,
+        activityType: "materials_received",
+        description: "Materials marked as received",
+      });
     }
 
     return NextResponse.json({

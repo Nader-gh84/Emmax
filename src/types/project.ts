@@ -19,6 +19,7 @@ export interface Project {
   project_type: string | null;
   project_manager: string | null;
   address: string | null;
+  deposit_amount?: number | null;
   created_at: string;
   updated_at: string;
 }
