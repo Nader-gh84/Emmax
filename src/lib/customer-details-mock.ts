@@ -151,7 +151,7 @@ export function buildMockCustomerDetails(input?: {
         id: "act-4",
         type: "quote_accepted",
         title: "Quote accepted",
-        description: "Pre-invoice PQ-1192",
+        description: "Project PQ-1192",
         amount: 6120,
         occurredAt: "2026-07-05T18:45:00.000Z",
       },

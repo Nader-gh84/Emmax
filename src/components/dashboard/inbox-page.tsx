@@ -386,7 +386,7 @@ export function InboxPage() {
             No notifications
           </h2>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-400 sm:text-base">
-            Save a draft pre-invoice or wait for a customer confirmation — updates
+            Save a draft project or wait for a customer confirmation — updates
             will show up here.
           </p>
         </div>

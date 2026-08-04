@@ -3,7 +3,6 @@ import {
   IconCalendar,
   IconDocument,
   IconEmployee,
-  IconInvoice,
   IconSettings,
   IconSuppliers,
   IconUsers,
@@ -68,9 +67,9 @@ const DETAIL_ROWS = [
       ],
     },
     {
-      title: "Pre Invoice",
+      title: "Projects",
       href: "/dashboard/quotes",
-      icon: IconInvoice,
+      icon: IconProjects,
       stats: [
         { label: "Draft", value: "11" },
         { label: "Sent", value: "29" },

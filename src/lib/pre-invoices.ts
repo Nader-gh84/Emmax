@@ -321,7 +321,7 @@ export function mapQuoteToPreInvoiceCard(
     project?.project_name?.trim() ||
     quote.project_name?.trim() ||
     quote.quote_number?.trim() ||
-    "Untitled pre-invoice";
+    "Untitled project";
 
   return {
     id: project?.id || quote.id,
@@ -353,7 +353,7 @@ export function buildPreInvoiceStats(cards: PreInvoiceProjectCard[]) {
   return [
     {
       id: "all",
-      label: "All Pre-Invoices",
+      label: "All Projects",
       count: cards.length,
       tone: "neutral" as const,
     },

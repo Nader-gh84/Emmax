@@ -38,7 +38,7 @@ export function StepQuoteTemplate({
     <div className="mx-auto max-w-3xl rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
       <h2 className="text-xl font-semibold text-white">Choose your quote look</h2>
       <p className="mt-2 text-sm text-slate-400">
-        Pick a Pre-Invoice PDF template. You can change this later in Advance
+        Pick a quote PDF template. You can change this later in Advance
         Settings.
       </p>
 

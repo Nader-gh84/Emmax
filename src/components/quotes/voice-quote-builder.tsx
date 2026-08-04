@@ -311,7 +311,7 @@ function VoiceQuoteBuilderInner({
         if (error || !data) {
           setActionFeedback({
             type: "error",
-            message: "Couldn't load that draft. Starting a fresh pre-invoice.",
+            message: "Couldn't load that draft. Starting a fresh project.",
           });
           setIsLoadingQuote(false);
           return;
@@ -358,7 +358,7 @@ function VoiceQuoteBuilderInner({
         if (!cancelled) {
           setActionFeedback({
             type: "error",
-            message: "Couldn't load that draft. Starting a fresh pre-invoice.",
+            message: "Couldn't load that draft. Starting a fresh project.",
           });
         }
       } finally {
@@ -858,8 +858,8 @@ function VoiceQuoteBuilderInner({
 
     const confirmed = window.confirm(
       quoteId && quoteStatus === "draft"
-        ? "Delete this in-progress pre-invoice? This clears the form and removes the saved draft."
-        : "Discard this in-progress pre-invoice? This clears the transcript, materials, and form fields."
+        ? "Delete this in-progress project? This clears the form and removes the saved draft."
+        : "Discard this in-progress project? This clears the transcript, materials, and form fields."
     );
     if (!confirmed) return;
 
@@ -900,12 +900,12 @@ function VoiceQuoteBuilderInner({
       setValidUntil(defaultValidUntil(30));
       setMobileAction("");
       setActiveModal(null);
-      showFeedback("success", "Pre-invoice discarded.");
+      showFeedback("success", "Project discarded.");
       onPersisted?.();
     } catch (error) {
       showFeedback(
         "error",
-        error instanceof Error ? error.message : "Failed to delete pre-invoice"
+        error instanceof Error ? error.message : "Failed to delete project"
       );
     } finally {
       setIsActionBusy(false);
@@ -1073,7 +1073,7 @@ function VoiceQuoteBuilderInner({
     }
     if (phase === "extracting") {
       return {
-        title: "Ema is building your pre-invoice",
+        title: "Ema is building your project",
         detail: "Extracting materials and labour with GPT-4o…",
         footer: null,
         footerTone: "cyan" as const,
@@ -1091,9 +1091,9 @@ function VoiceQuoteBuilderInner({
     }
     if (phase === "ready") {
       return {
-        title: "Ema has generated your pre-invoice",
+        title: "Ema has generated your project materials",
         detail: `${itemCount} item${itemCount === 1 ? "" : "s"} added`,
-        footer: "Pre-invoice generated successfully!",
+        footer: "Materials list ready!",
         footerTone: "emerald" as const,
       };
     }
@@ -1136,7 +1136,7 @@ function VoiceQuoteBuilderInner({
               </h2>
               <p className="mt-1 text-sm text-slate-400">
                 Speak the materials list. Ema extracts line items so you can
-                edit, price, save, or send — then a pre-invoice card appears
+                edit, price, save, or send — then a project card appears
                 below.
               </p>
             </div>
@@ -1160,7 +1160,7 @@ function VoiceQuoteBuilderInner({
                 </span>
               </div>
               <p className="mt-1 text-sm text-slate-400">
-                Speak naturally and Ema will build the pre-invoice for you.
+                Speak naturally and Ema will build the project materials list for you.
               </p>
             </div>
             <button
@@ -1403,7 +1403,7 @@ function VoiceQuoteBuilderInner({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <h2 className="text-sm font-semibold text-white">
                   <span className="mr-2 text-accent">4</span>
-                  Your Pre-Invoice
+                  Your Project
                 </h2>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
@@ -1976,7 +1976,7 @@ function VoiceQuoteBuilderInner({
                 onClick={() => setShowSidebar(true)}
                 className={`${touchBtnSecondary} hidden xl:inline-flex`}
               >
-                Show Pre-Invoice Details
+                Show Project Details
               </button>
             )}
 
@@ -1989,7 +1989,7 @@ function VoiceQuoteBuilderInner({
                 >
                   <div>
                     <h2 className="text-sm font-semibold text-white">
-                      Pre-Invoice Details
+                      Project Details
                     </h2>
                     <p className="mt-0.5 text-xs text-slate-400">
                       Customer, project, valid until, notes, and quick actions
@@ -2078,7 +2078,7 @@ function VoiceQuoteBuilderInner({
             <ol className="mt-4 space-y-3 text-sm text-slate-300">
               <li>1. Tap the mic and describe the job naturally.</li>
               <li>2. Ema transcribes your voice and extracts materials + labour.</li>
-              <li>3. Review the pre-invoice, edit items, then save or send.</li>
+              <li>3. Review the project materials, edit items, then save or send.</li>
               <li>4. Use Continue Speaking to add more details anytime.</li>
             </ol>
             <button
@@ -2251,7 +2251,7 @@ function VoiceQuoteDetailsPanel({
         <div>
           {showClose ? (
             <h2 className="text-base font-semibold text-white">
-              Pre-Invoice Details
+              Project Details
             </h2>
           ) : null}
           <div className={`${showClose ? "mt-2" : ""} flex flex-wrap gap-2`}>

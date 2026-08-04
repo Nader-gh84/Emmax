@@ -3,11 +3,11 @@ import {
   IconEmployee,
   IconHome,
   IconInbox,
-  IconInvoice,
   IconSettings,
   IconSuppliers,
   IconUsers,
 } from "@/components/dashboard/icons";
+import { IconProjects } from "@/components/dashboard/workspace-icons";
 
 export const workspaceNavItems = [
   {
@@ -31,9 +31,9 @@ export const workspaceNavItems = [
     icon: IconSuppliers,
   },
   {
-    label: "Pre Invoice",
+    label: "Projects",
     href: "/dashboard/quotes",
-    icon: IconInvoice,
+    icon: IconProjects,
   },
   {
     label: "Employee",
