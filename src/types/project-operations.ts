@@ -25,8 +25,25 @@ export interface ProjectExpense {
   description: string;
   amount: number;
   receipt_url: string | null;
+  /** How this expense relates to customer billing. Default: pending_review. */
+  billing_status: ExpenseBillingStatus;
+  /** Whether cash has been paid out. Default: unpaid. */
+  payment_status: CostPaymentStatus;
+  /** extra_purchase vs other_expense (permits, fuel, etc.). */
+  expense_kind: ExpenseKind;
   created_at: string;
 }
+
+export type ExpenseBillingStatus =
+  | "add_to_change_order"
+  | "included_in_customer_billing"
+  | "company_cost"
+  | "pending_review";
+
+export type ExpenseKind = "extra_purchase" | "other_expense";
+
+/** Paid/unpaid flag for costs (expenses, material orders, time entries). */
+export type CostPaymentStatus = "paid" | "unpaid";
 
 export type ProjectPaymentType = "customer_payment" | "supplier_payment";
 
@@ -49,11 +66,26 @@ export interface TimeEntry {
   hours: number;
   entry_date: string;
   notes: string | null;
+  /** Whether labour for this entry has been paid out. Default: unpaid. */
+  payment_status: CostPaymentStatus;
   created_at: string;
   employees?: Pick<
     Employee,
     "id" | "full_name" | "role" | "pay_rate" | "pay_type"
   > | null;
+}
+
+export type ChangeOrderStatus = "pending" | "approved" | "rejected";
+
+export interface ChangeOrder {
+  id: string;
+  user_id: string;
+  project_id: string;
+  description: string;
+  amount: number;
+  status: ChangeOrderStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProjectActivity {
@@ -71,6 +103,31 @@ export function isTaskStatus(value: string): value is TaskStatus {
     value === "in_progress" ||
     value === "completed" ||
     value === "overdue"
+  );
+}
+
+export function isExpenseBillingStatus(
+  value: string
+): value is ExpenseBillingStatus {
+  return (
+    value === "add_to_change_order" ||
+    value === "included_in_customer_billing" ||
+    value === "company_cost" ||
+    value === "pending_review"
+  );
+}
+
+export function isExpenseKind(value: string): value is ExpenseKind {
+  return value === "extra_purchase" || value === "other_expense";
+}
+
+export function isCostPaymentStatus(value: string): value is CostPaymentStatus {
+  return value === "paid" || value === "unpaid";
+}
+
+export function isChangeOrderStatus(value: string): value is ChangeOrderStatus {
+  return (
+    value === "pending" || value === "approved" || value === "rejected"
   );
 }
 

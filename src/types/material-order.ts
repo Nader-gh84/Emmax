@@ -1,5 +1,7 @@
 export type MaterialOrderStatus = "sent" | "confirmed";
 
+export type MaterialOrderPaymentStatus = "paid" | "unpaid";
+
 export interface MaterialOrderLine {
   id?: string;
   name: string;
@@ -35,6 +37,8 @@ export interface MaterialOrder {
   availability_time: string | null;
   branch_location: string | null;
   materials_received_at?: string | null;
+  /** Whether supplier order costs have been paid. Default: unpaid. */
+  payment_status?: MaterialOrderPaymentStatus;
   created_at: string;
   updated_at: string;
 }
