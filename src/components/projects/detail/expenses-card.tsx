@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
   touchInput,
   touchTextarea,
 } from "@/components/quotes/ui";
+import {
+  createExpenseReceiptSignedUrl,
+  deleteExpenseReceipt,
+  uploadExpenseReceipt,
+  validateExpenseReceiptFile,
+} from "@/lib/expense-receipt-storage";
 import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
 import type { ProjectExpense } from "@/types/project-operations";
@@ -14,6 +20,25 @@ import { formatProjectDate, formatProjectMoney } from "@/types/project";
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function IconReceipt({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 5H7a2 2 0 00-2 2v12l2.5-1.5L10 19l2.5-1.5L15 19l2.5-1.5L20 19V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 5h6m-5 5h4m-4 3h4m-4 3h2"
+      />
+    </svg>
+  );
 }
 
 export function ExpensesCard({
@@ -31,24 +56,96 @@ export function ExpensesCard({
   const [storeName, setStoreName] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(
+    null
+  );
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerLabel, setViewerLabel] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setExpenses(initialExpenses);
   }, [initialExpenses]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveSignedUrls() {
+      const next: Record<string, string> = {};
+      await Promise.all(
+        expenses.map(async (expense) => {
+          if (!expense.receipt_url) return;
+          const url = await createExpenseReceiptSignedUrl(expense.receipt_url);
+          if (url) next[expense.id] = url;
+        })
+      );
+      if (!cancelled) setSignedUrls(next);
+    }
+
+    void resolveSignedUrls();
+    return () => {
+      cancelled = true;
+    };
+  }, [expenses]);
+
+  useEffect(() => {
+    if (!receiptFile) {
+      setReceiptPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(receiptFile);
+    setReceiptPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [receiptFile]);
 
   function syncExpenses(next: ProjectExpense[]) {
     setExpenses(next);
     onExpensesChange?.(next);
   }
 
+  function resetForm() {
+    setStoreName("");
+    setDescription("");
+    setAmount("");
+    setExpenseDate(todayIsoDate());
+    setReceiptFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function closeModal() {
+    if (busy) return;
+    setModalOpen(false);
+    resetForm();
+    setError(null);
+  }
+
   const total = useMemo(
     () => expenses.reduce((sum, row) => sum + (Number(row.amount) || 0), 0),
     [expenses]
   );
+
+  function handleReceiptChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      setReceiptFile(null);
+      return;
+    }
+    const validationError = validateExpenseReceiptFile(file);
+    if (validationError) {
+      setError(validationError);
+      setReceiptFile(null);
+      event.target.value = "";
+      return;
+    }
+    setError(null);
+    setReceiptFile(file);
+  }
 
   async function handleDelete(expense: ProjectExpense) {
     setDeletingId(expense.id);
@@ -67,6 +164,7 @@ export function ExpensesCard({
       return;
     }
 
+    await deleteExpenseReceipt(expense.receipt_url);
     syncExpenses(expenses.filter((row) => row.id !== expense.id));
     setDeletingId(null);
   }
@@ -100,6 +198,21 @@ export function ExpensesCard({
       return;
     }
 
+    let receiptPath: string | null = null;
+    if (receiptFile) {
+      const uploadResult = await uploadExpenseReceipt({
+        userId: user.id,
+        projectId,
+        file: receiptFile,
+      });
+      if ("error" in uploadResult) {
+        setError(uploadResult.error);
+        setBusy(false);
+        return;
+      }
+      receiptPath = uploadResult.path;
+    }
+
     const { data, error: insertError } = await supabase
       .from("project_expenses")
       .insert({
@@ -109,12 +222,18 @@ export function ExpensesCard({
         store_name: storeName.trim(),
         description: description.trim(),
         amount: parsedAmount,
+        receipt_url: receiptPath,
       })
       .select("*")
       .single();
 
     if (insertError || !data) {
-      setError("Failed to add expense.");
+      if (receiptPath) await deleteExpenseReceipt(receiptPath);
+      setError(
+        insertError?.message?.includes("receipt_url")
+          ? "Failed to add expense. Run migration 031/032 so receipt_url exists."
+          : "Failed to add expense."
+      );
       setBusy(false);
       return;
     }
@@ -126,15 +245,21 @@ export function ExpensesCard({
       userId: user.id,
       projectId,
       activityType: "expense_added",
-      description: `Added expense at ${created.store_name} (${formatProjectMoney(parsedAmount)})`,
+      description: `Added expense at ${created.store_name} (${formatProjectMoney(parsedAmount)})${
+        receiptPath ? " with receipt" : ""
+      }`,
     });
 
-    setStoreName("");
-    setDescription("");
-    setAmount("");
-    setExpenseDate(todayIsoDate());
+    resetForm();
     setModalOpen(false);
     setBusy(false);
+  }
+
+  function openReceiptViewer(expense: ProjectExpense) {
+    const url = signedUrls[expense.id];
+    if (!url) return;
+    setViewerLabel(`${expense.store_name || "Expense"} receipt`);
+    setViewerUrl(url);
   }
 
   return (
@@ -169,7 +294,7 @@ export function ExpensesCard({
         </div>
       </div>
 
-      {error ? (
+      {error && !modalOpen ? (
         <p className="mt-3 text-sm text-red-300" role="alert">
           {error}
         </p>
@@ -179,36 +304,73 @@ export function ExpensesCard({
         <p className="mt-4 text-sm text-slate-500">No expenses yet.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {(showDetails ? expenses : expenses.slice(0, 3)).map((expense) => (
-            <li
-              key={expense.id}
-              className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white">
-                  {expense.store_name || "Store"}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {expense.description || "—"} ·{" "}
-                  {formatProjectDate(expense.expense_date)}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="text-sm font-semibold text-white">
-                  {formatProjectMoney(Number(expense.amount) || 0)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(expense)}
-                  disabled={deletingId === expense.id}
-                  className="rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
-                  aria-label={`Delete expense from ${expense.store_name}`}
-                >
-                  {deletingId === expense.id ? "…" : "Delete"}
-                </button>
-              </div>
-            </li>
-          ))}
+          {(showDetails ? expenses : expenses.slice(0, 3)).map((expense) => {
+            const thumbUrl = signedUrls[expense.id];
+            return (
+              <li
+                key={expense.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  {expense.receipt_url ? (
+                    thumbUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => openReceiptViewer(expense)}
+                        className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/15 bg-white/5 transition hover:ring-2 hover:ring-accent/50"
+                        aria-label={`View receipt for ${expense.store_name || "expense"}`}
+                        title="View receipt"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      </button>
+                    ) : (
+                      <span
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-slate-500"
+                        title="Loading receipt…"
+                      >
+                        <IconReceipt className="h-5 w-5" />
+                      </span>
+                    )
+                  ) : (
+                    <span
+                      className="flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-lg border border-dashed border-white/15 bg-transparent px-1 text-center text-[9px] leading-tight text-slate-600"
+                      title="No receipt"
+                    >
+                      No receipt
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white">
+                      {expense.store_name || "Store"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {expense.description || "—"} ·{" "}
+                      {formatProjectDate(expense.expense_date)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-sm font-semibold text-white">
+                    {formatProjectMoney(Number(expense.amount) || 0)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(expense)}
+                    disabled={deletingId === expense.id}
+                    className="rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
+                    aria-label={`Delete expense from ${expense.store_name}`}
+                  >
+                    {deletingId === expense.id ? "…" : "Delete"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -222,15 +384,13 @@ export function ExpensesCard({
           <div
             className="absolute inset-0"
             aria-hidden="true"
-            onClick={() => {
-              if (!busy) setModalOpen(false);
-            }}
+            onClick={closeModal}
           />
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-expense-title"
-            className="relative z-10 w-full max-w-md rounded-xl border border-white/10 bg-navy p-6 shadow-xl"
+            className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl"
           >
             <h3
               id="add-expense-title"
@@ -238,6 +398,11 @@ export function ExpensesCard({
             >
               Add Expense
             </h3>
+            {error ? (
+              <p className="mt-3 text-sm text-red-300" role="alert">
+                {error}
+              </p>
+            ) : null}
             <form onSubmit={(e) => void handleAdd(e)} className="mt-5 space-y-4">
               <div>
                 <label
@@ -306,11 +471,59 @@ export function ExpensesCard({
                   required
                 />
               </div>
+              <div>
+                <label
+                  htmlFor="expense-receipt"
+                  className="block text-sm font-medium text-slate-300"
+                >
+                  Receipt photo{" "}
+                  <span className="font-normal text-slate-500">(optional)</span>
+                </label>
+                <p className="mt-1 text-xs text-slate-500">
+                  Take a photo on site or choose an image from your gallery.
+                </p>
+                <input
+                  ref={fileInputRef}
+                  id="expense-receipt"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleReceiptChange}
+                  className="mt-2 block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-100 hover:file:bg-white/15"
+                />
+                {receiptPreviewUrl ? (
+                  <div className="mt-3 flex items-start gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={receiptPreviewUrl}
+                      alt="Receipt preview"
+                      className="h-20 w-20 rounded-lg border border-white/15 object-cover"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs text-slate-300">
+                        {receiptFile?.name}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReceiptFile(null);
+                          if (fileInputRef.current) {
+                            fileInputRef.current.value = "";
+                          }
+                        }}
+                        className="mt-1 text-xs font-semibold text-slate-400 transition hover:text-red-300"
+                      >
+                        Remove photo
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => setModalOpen(false)}
+                  onClick={closeModal}
                   className={`${touchBtnSecondary} w-full sm:w-auto`}
                 >
                   Cancel
@@ -324,6 +537,53 @@ export function ExpensesCard({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {viewerUrl ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+          <div
+            className="absolute inset-0"
+            aria-hidden="true"
+            onClick={() => setViewerUrl(null)}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={viewerLabel || "Receipt"}
+            className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-white/15 bg-navy shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <p className="truncate text-sm font-semibold text-white">
+                {viewerLabel || "Receipt"}
+              </p>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={viewerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-lg px-2 py-1 text-xs font-semibold text-accent transition hover:bg-white/10"
+                >
+                  Open in new tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setViewerUrl(null)}
+                  className="rounded-lg px-2 py-1 text-xs font-semibold text-slate-300 transition hover:bg-white/10"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-black/40 p-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={viewerUrl}
+                alt={viewerLabel || "Receipt"}
+                className="max-h-[75vh] w-auto max-w-full object-contain"
+              />
+            </div>
           </div>
         </div>
       ) : null}
