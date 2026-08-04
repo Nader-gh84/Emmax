@@ -13,14 +13,52 @@ import {
   resolveProjectDisplayName,
   type Project,
 } from "@/types/project";
-import type {
-  ProjectActivity,
-  ProjectExpense,
-  ProjectPayment,
-  ProjectTask,
-  TimeEntry,
+import {
+  isChangeOrderStatus,
+  isCostPaymentStatus,
+  isExpenseBillingStatus,
+  isExpenseKind,
+  type ChangeOrder,
+  type ProjectActivity,
+  type ProjectExpense,
+  type ProjectPayment,
+  type ProjectTask,
+  type TimeEntry,
 } from "@/types/project-operations";
 import type { Quote } from "@/types/quote";
+
+function normalizeExpense(row: ProjectExpense): ProjectExpense {
+  const billing = String(row.billing_status ?? "");
+  const kind = String(row.expense_kind ?? "");
+  const payment = String(row.payment_status ?? "");
+  return {
+    ...row,
+    amount: Number(row.amount) || 0,
+    billing_status: isExpenseBillingStatus(billing)
+      ? billing
+      : "pending_review",
+    expense_kind: isExpenseKind(kind) ? kind : "extra_purchase",
+    payment_status: isCostPaymentStatus(payment) ? payment : "unpaid",
+  };
+}
+
+function normalizeTimeEntry(row: TimeEntry): TimeEntry {
+  const payment = String(row.payment_status ?? "");
+  return {
+    ...row,
+    hours: Number(row.hours) || 0,
+    payment_status: isCostPaymentStatus(payment) ? payment : "unpaid",
+  };
+}
+
+function normalizeChangeOrder(row: ChangeOrder): ChangeOrder {
+  const status = row.status as string;
+  return {
+    ...row,
+    amount: Number(row.amount) || 0,
+    status: isChangeOrderStatus(status) ? status : "pending",
+  };
+}
 
 export const metadata: Metadata = {
   title: "Project Details",
@@ -41,7 +79,7 @@ export default async function ProjectDetailRoute({
 
   const [
     { data: projectData },
-    { data: orderRow },
+    { data: orderRows },
     { data: taskRows },
     { data: expenseRows },
     { data: paymentRows },
@@ -49,6 +87,7 @@ export default async function ProjectDetailRoute({
     { data: activityRows },
     { data: assignmentRows },
     { data: employeeRows },
+    { data: changeOrderRows },
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -59,9 +98,7 @@ export default async function ProjectDetailRoute({
       .from("material_orders")
       .select("*")
       .eq("project_id", projectId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order("created_at", { ascending: false }),
     supabase
       .from("tasks")
       .select("*, employees(id, full_name, role)")
@@ -96,6 +133,11 @@ export default async function ProjectDetailRoute({
       .from("employees")
       .select("id, full_name")
       .order("full_name", { ascending: true }),
+    supabase
+      .from("change_orders")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false }),
   ]);
 
   const projectRow = projectData as ProjectRow | null;
@@ -162,7 +204,8 @@ export default async function ProjectDetailRoute({
       ? projectRow.status
       : "active";
   const startDateConfirmed = Boolean(projectRow.start_date_confirmed);
-  const materialOrder = (orderRow as MaterialOrder | null) ?? null;
+  const materialOrders = (orderRows as MaterialOrder[] | null) ?? [];
+  const materialOrder = materialOrders[0] ?? null;
   const customerName = customerRow
     ? getCustomerDisplayName(customerRow)
     : "Customer";
@@ -258,6 +301,7 @@ export default async function ProjectDetailRoute({
       }
       rawEndDate={projectRow.end_date ? String(projectRow.end_date) : null}
       materialOrder={materialOrder}
+      materialOrders={materialOrders}
       projectMaterials={asProjectMaterials(projectRow.materials)}
       workflowSteps={workflowCard.steps}
       workflowActionLabel={
@@ -267,13 +311,16 @@ export default async function ProjectDetailRoute({
       workflowNextText={workflowCard.nextActionText}
       initialTasks={(taskRows as ProjectTask[] | null) ?? []}
       initialExpenses={((expenseRows as ProjectExpense[] | null) ?? []).map(
-        (row) => ({ ...row, amount: Number(row.amount) || 0 })
+        (row) => normalizeExpense(row)
       )}
       initialPayments={((paymentRows as ProjectPayment[] | null) ?? []).map(
         (row) => ({ ...row, amount: Number(row.amount) || 0 })
       )}
       initialTimeEntries={((timeRows as TimeEntry[] | null) ?? []).map(
-        (row) => ({ ...row, hours: Number(row.hours) || 0 })
+        (row) => normalizeTimeEntry(row)
+      )}
+      initialChangeOrders={((changeOrderRows as ChangeOrder[] | null) ?? []).map(
+        (row) => normalizeChangeOrder(row)
       )}
       initialActivities={(activityRows as ProjectActivity[] | null) ?? []}
       assignedEmployees={assignedEmployees}

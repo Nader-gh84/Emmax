@@ -11,10 +11,13 @@ import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
 import {
   computeFinancialSummary,
+  type ChangeOrder,
   type ProjectExpense,
   type ProjectPayment,
   type ProjectPaymentType,
+  type TimeEntry,
 } from "@/types/project-operations";
+import type { MaterialOrder } from "@/types/material-order";
 import { formatProjectMoney } from "@/types/project";
 
 function todayIsoDate() {
@@ -70,6 +73,9 @@ export function FinancialSummaryCard({
   depositAmount,
   payments,
   expenses,
+  materialOrders = [],
+  timeEntries = [],
+  changeOrders = [],
   onPaymentAdded,
 }: {
   projectId: string;
@@ -77,14 +83,19 @@ export function FinancialSummaryCard({
   depositAmount: number;
   payments: ProjectPayment[];
   expenses: ProjectExpense[];
+  materialOrders?: MaterialOrder[];
+  timeEntries?: TimeEntry[];
+  changeOrders?: ChangeOrder[];
   onPaymentAdded?: (payment: ProjectPayment) => void;
 }) {
-  // Net Position = Paid by Customer − Total Costs
   const summary = computeFinancialSummary({
     quoteAmount,
     depositAmount,
     payments,
     expenses,
+    materialOrders,
+    timeEntries,
+    changeOrders,
   });
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -163,10 +174,16 @@ export function FinancialSummaryCard({
     setBusy(false);
   }
 
-  const netTone =
-    summary.netPosition > 0
+  const cashTone =
+    summary.cashFlow > 0
       ? "positive"
-      : summary.netPosition < 0
+      : summary.cashFlow < 0
+        ? "negative"
+        : "default";
+  const profitTone =
+    summary.grossProfit > 0
+      ? "positive"
+      : summary.grossProfit < 0
         ? "negative"
         : "default";
 
@@ -180,6 +197,9 @@ export function FinancialSummaryCard({
           <p className="mt-1 text-sm text-slate-500">
             Deposit {formatProjectMoney(summary.depositAmount)} ·{" "}
             {summary.depositStatus}
+            {summary.pendingReviewCount > 0
+              ? ` · ${summary.pendingReviewCount} expense(s) pending review`
+              : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -209,40 +229,76 @@ export function FinancialSummaryCard({
         </p>
       ) : null}
 
+      {/* Interim flat list — Chunk 3 will regroup into Revenue / Costs / Profit / Cash sections. */}
       <dl className="mt-4 space-y-3">
         <SummaryRow
-          label="Quote Amount"
-          value={formatProjectMoney(summary.quoteAmount)}
+          label="Contract Value"
+          value={formatProjectMoney(summary.contractValue)}
         />
         <SummaryRow
-          label="Paid by Customer"
-          value={formatProjectMoney(summary.paidByCustomer)}
+          label="Change Orders (approved)"
+          value={formatProjectMoney(summary.changeOrdersAmount)}
         />
         <SummaryRow
-          label="Total Due"
-          value={formatProjectMoney(summary.totalDue)}
+          label="Revised Contract Value"
+          value={formatProjectMoney(summary.revisedContractValue)}
+          emphasize
         />
         <SummaryRow
-          label="Paid to Suppliers"
-          value={formatProjectMoney(summary.paidToSuppliers)}
+          label="Customer Payments"
+          value={formatProjectMoney(summary.customerPayments)}
+        />
+        <SummaryRow
+          label="Outstanding Customer Balance"
+          value={formatProjectMoney(summary.outstandingCustomerBalance)}
+        />
+        <SummaryRow
+          label="Supplier Costs"
+          value={formatProjectMoney(summary.supplierCosts)}
         />
         <SummaryRow
           label="Extra Purchases"
           value={formatProjectMoney(summary.extraPurchases)}
         />
         <SummaryRow
-          label="Total Costs"
-          value={formatProjectMoney(summary.totalCosts)}
+          label="Labour Cost"
+          value={formatProjectMoney(summary.labourCost)}
         />
         <SummaryRow
-          label="Net Position"
-          value={formatProjectMoney(summary.netPosition)}
+          label="Other Expenses"
+          value={formatProjectMoney(summary.otherExpenses)}
+        />
+        <SummaryRow
+          label="Total Project Cost"
+          value={formatProjectMoney(summary.totalProjectCost)}
+        />
+        <SummaryRow
+          label="Gross Profit"
+          value={formatProjectMoney(summary.grossProfit)}
+          tone={profitTone}
+        />
+        <SummaryRow
+          label="Profit Margin"
+          value={`${summary.profitMargin.toFixed(1)}%`}
+          tone={profitTone}
+        />
+        <SummaryRow
+          label="Total Money Paid Out"
+          value={formatProjectMoney(summary.totalMoneyPaidOut)}
+        />
+        <SummaryRow
+          label="Cash Flow"
+          value={formatProjectMoney(summary.cashFlow)}
           emphasize
-          tone={netTone}
+          tone={cashTone}
         />
         <SummaryRow
-          label="Deposit"
-          value={`${formatProjectMoney(summary.depositAmount)} · ${summary.depositStatus}`}
+          label="Accounts Payable"
+          value={formatProjectMoney(summary.accountsPayable)}
+        />
+        <SummaryRow
+          label="Net Receivable Position"
+          value={formatProjectMoney(summary.netReceivablePosition)}
         />
       </dl>
 
