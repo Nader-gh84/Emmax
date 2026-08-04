@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   IconCalendar,
   IconCheckCircle,
@@ -14,17 +14,22 @@ import {
   IconProjects,
   IconSend,
 } from "@/components/dashboard/workspace-icons";
-import { touchBtnPrimary, touchBtnSecondary } from "@/components/quotes/ui";
+import { PreInvoiceVoiceCapture } from "@/components/quotes/pre-invoice-voice-capture";
+import { touchBtnSecondary } from "@/components/quotes/ui";
+import { createClient } from "@/lib/supabase";
 import {
-  MOCK_PRE_INVOICE_PROJECTS,
-  PRE_INVOICE_STATS,
   PRE_INVOICE_WORKFLOW_STEPS,
+  buildPreInvoiceStats,
+  mapQuoteToPreInvoiceCard,
   type PreInvoiceProjectCard,
   type ProjectStatusTone,
   type ProjectWorkflowStep,
   type WorkflowStepDefinition,
   type WorkflowStepId,
-} from "@/lib/pre-invoices-mock";
+} from "@/lib/pre-invoices";
+import type { MaterialOrder } from "@/types/material-order";
+import type { Project } from "@/types/project";
+import type { Quote } from "@/types/quote";
 
 function noop(label: string) {
   return () => {
@@ -34,43 +39,15 @@ function noop(label: string) {
 
 function IconInfo({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
-    </svg>
-  );
-}
-
-function IconPlus({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }
 
 function IconStar({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="currentColor"
-      viewBox="0 0 24 24"
-    >
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
       <path d="M12 2.25l2.955 5.986 6.605.96-4.78 4.66 1.128 6.579L12 17.27l-5.908 3.165 1.128-6.579-4.78-4.66 6.605-.96L12 2.25z" />
     </svg>
   );
@@ -78,108 +55,48 @@ function IconStar({ className }: { className?: string }) {
 
 function IconStarOutline({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-      />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
     </svg>
   );
 }
 
 function IconLock({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-      />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
     </svg>
   );
 }
 
 function IconCart({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M3 3h2l.4 2M7 13h10l3-8H6.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
-      />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l3-8H6.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
     </svg>
   );
 }
 
 function IconPlay({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-      />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }
 
 function IconUpload({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-      />
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
     </svg>
   );
 }
 
 function IconChevronDown({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={1.75}
-    >
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
     </svg>
   );
@@ -295,10 +212,7 @@ function ProjectStepNode({
   return (
     <div className="flex items-start">
       {showDividerBefore ? (
-        <div
-          className="mx-1 mt-2 h-10 w-px shrink-0 bg-white/20 sm:mx-2"
-          aria-hidden="true"
-        />
+        <div className="mx-1 mt-2 h-10 w-px shrink-0 bg-white/20 sm:mx-2" aria-hidden="true" />
       ) : null}
       <div className="flex w-[4.75rem] flex-col items-center px-0.5 text-center sm:w-[5.5rem]">
         <button
@@ -354,7 +268,6 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
   return (
     <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-stretch xl:gap-6">
-        {/* Left */}
         <div className="min-w-0 flex-1 xl:max-w-sm xl:shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -369,9 +282,7 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
                   className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition hover:bg-white/10 ${
                     project.favorited ? "text-amber-300" : "text-slate-500"
                   }`}
-                  aria-label={
-                    project.favorited ? "Unfavorite project" : "Favorite project"
-                  }
+                  aria-label={project.favorited ? "Unfavorite" : "Favorite"}
                 >
                   {project.favorited ? (
                     <IconStar className="h-4 w-4" />
@@ -392,9 +303,7 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
                 <IconLocation className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
                 <span>{project.address}</span>
               </p>
-              <p className="mt-3 text-2xl font-bold text-accent">
-                {project.priceLabel}
-              </p>
+              <p className="mt-3 text-2xl font-bold text-accent">{project.priceLabel}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                 <span>{project.materialsCount} materials</span>
                 <span className="inline-flex items-center gap-1">
@@ -412,15 +321,13 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
               >
                 View Details
                 <IconChevronDown
-                  className={`h-4 w-4 transition ${
-                    detailsOpen ? "rotate-180" : ""
-                  }`}
+                  className={`h-4 w-4 transition ${detailsOpen ? "rotate-180" : ""}`}
                 />
               </button>
               {detailsOpen ? (
                 <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs leading-relaxed text-slate-400">
-                  Mock details for {project.title}. Real project data and actions
-                  will be wired in a later step.
+                  Quote ID: {project.quoteId || "—"}
+                  {project.projectId ? ` · Project ID: ${project.projectId}` : ""}
                 </p>
               ) : null}
             </div>
@@ -433,9 +340,7 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
               >
                 More
                 <IconChevronDown
-                  className={`h-3.5 w-3.5 transition ${
-                    moreOpen ? "rotate-180" : ""
-                  }`}
+                  className={`h-3.5 w-3.5 transition ${moreOpen ? "rotate-180" : ""}`}
                 />
               </button>
               {moreOpen ? (
@@ -463,7 +368,6 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
           </div>
         </div>
 
-        {/* Right: workflow chain */}
         <div className="min-w-0 flex-1 border-t border-white/10 pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
           <div className="overflow-x-auto pb-1">
             <div className="flex min-w-max items-start">
@@ -509,53 +413,118 @@ function ProjectCard({ project }: { project: PreInvoiceProjectCard }) {
 }
 
 export function PreInvoicesDashboard() {
+  const [cards, setCards] = useState<PreInvoiceProjectCard[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadCards = useCallback(async () => {
+    setError(null);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setCards([]);
+      setIsLoading(false);
+      return;
+    }
+
+    const [{ data: quotes, error: quotesError }, { data: projects }, { data: orders }] =
+      await Promise.all([
+        supabase
+          .from("quotes")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+        supabase.from("projects").select("*").eq("user_id", user.id),
+        supabase
+          .from("material_orders")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+
+    if (quotesError) {
+      setError("Failed to load pre-invoices. Please try again.");
+      setIsLoading(false);
+      return;
+    }
+
+    const projectByQuoteId = new Map<string, Project>();
+    for (const project of (projects as Project[]) ?? []) {
+      if (project.quote_id) projectByQuoteId.set(project.quote_id, project);
+    }
+
+    const orderByProjectId = new Map<string, MaterialOrder>();
+    for (const order of (orders as MaterialOrder[]) ?? []) {
+      if (order.project_id && !orderByProjectId.has(order.project_id)) {
+        orderByProjectId.set(order.project_id, order);
+      }
+    }
+
+    const nextCards = ((quotes as Quote[]) ?? [])
+      .filter((quote) => {
+        // Show quotes that have materials (real pre-invoice work) or any
+        // linked project / supplier send activity.
+        const hasMaterials =
+          Array.isArray(quote.materials) && quote.materials.length > 0;
+        const hasProject = Boolean(quote.id && projectByQuoteId.has(quote.id));
+        const sentSupplier = Boolean(quote.supplier_ack_token);
+        return hasMaterials || hasProject || sentSupplier || quote.status !== "draft";
+      })
+      .map((quote) => {
+        const project = projectByQuoteId.get(quote.id) ?? null;
+        const latestOrder = project?.id
+          ? orderByProjectId.get(project.id) ?? null
+          : null;
+        return mapQuoteToPreInvoiceCard(quote, project, latestOrder);
+      });
+
+    setCards(nextCards);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void loadCards();
+  }, [loadCards]);
+
+  const stats = useMemo(() => buildPreInvoiceStats(cards), [cards]);
+
   return (
     <main className="relative min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl pb-28">
-        {/* Header */}
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                Pre-Invoices
-              </h1>
-              <button
-                type="button"
-                onClick={noop("Help info")}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
-                aria-label="About Pre-Invoices"
-              >
-                <IconInfo className="h-5 w-5" />
-              </button>
-            </div>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
-              Create pre-invoices with voice, get supplier prices, send quotes to
-              customers, order materials and start projects - all in one place.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+        <header className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Pre-Invoices
+            </h1>
             <button
               type="button"
-              onClick={noop("Voice New Pre-Invoice")}
-              className={`${touchBtnSecondary} gap-2 px-4 text-sm`}
+              onClick={noop("Help info")}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
+              aria-label="About Pre-Invoices"
             >
-              <IconMicrophone className="h-4 w-4" />
-              Voice New Pre-Invoice
-            </button>
-            <button
-              type="button"
-              onClick={noop("New Pre-Invoice")}
-              className={`${touchBtnPrimary} gap-2 px-4 text-sm`}
-            >
-              <IconPlus className="h-4 w-4" />
-              New Pre-Invoice
+              <IconInfo className="h-5 w-5" />
             </button>
           </div>
+          <p className="max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
+            Create pre-invoices with voice, get supplier prices, send quotes to
+            customers, order materials and start projects - all in one place.
+          </p>
         </header>
 
-        {/* Stats */}
+        <div className="mt-6">
+          <PreInvoiceVoiceCapture
+            onProjectCreated={() => {
+              setIsLoading(true);
+              void loadCards();
+            }}
+          />
+        </div>
+
         <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {PRE_INVOICE_STATS.map((stat) => (
+          {stats.map((stat) => (
             <button
               key={stat.id}
               type="button"
@@ -566,18 +535,13 @@ export function PreInvoicesDashboard() {
                 {statIcon(stat.id)}
               </span>
               <p className="mt-3 text-2xl font-bold text-white">{stat.count}</p>
-              <p className="mt-1 text-xs font-medium text-slate-400">
-                {stat.label}
-              </p>
+              <p className="mt-1 text-xs font-medium text-slate-400">{stat.label}</p>
             </button>
           ))}
         </section>
 
-        {/* Workflow guide */}
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 sm:px-6">
-          <h2 className="text-lg font-semibold text-white">
-            Pre-Invoice Workflow
-          </h2>
+          <h2 className="text-lg font-semibold text-white">Pre-Invoice Workflow</h2>
           <p className="mt-1 text-sm text-slate-400">
             Each step unlocks when the previous step is completed.
           </p>
@@ -588,14 +552,33 @@ export function PreInvoicesDashboard() {
           </p>
         </section>
 
-        {/* Project cards */}
+        {error ? (
+          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
+        ) : null}
+
         <section className="mt-6 space-y-4">
-          {MOCK_PRE_INVOICE_PROJECTS.map((project) => (
-            <ProjectCard key={project.id} project={project} />
-          ))}
+          {isLoading ? (
+            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-10 text-sm text-slate-400">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+              Loading pre-invoices…
+            </div>
+          ) : cards.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-14 text-center">
+              <h2 className="text-lg font-semibold text-white">No pre-invoices yet</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Record materials above and send them to a supplier to create your
+                first pre-invoice card.
+              </p>
+            </div>
+          ) : (
+            cards.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))
+          )}
         </section>
 
-        {/* Bottom info bar */}
         <section className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-white">How it works</h2>
@@ -614,7 +597,6 @@ export function PreInvoicesDashboard() {
         </section>
       </div>
 
-      {/* Floating Ema AI */}
       <button
         type="button"
         onClick={noop("Ema AI speak")}
@@ -625,9 +607,7 @@ export function PreInvoicesDashboard() {
         </span>
         <span className="pr-1 text-left">
           <span className="block text-sm font-semibold text-white">Ema AI</span>
-          <span className="block text-[11px] text-slate-400">
-            Your AI Assistant
-          </span>
+          <span className="block text-[11px] text-slate-400">Your AI Assistant</span>
           <span className="mt-0.5 block text-[10px] font-medium text-accent">
             Click to speak
           </span>

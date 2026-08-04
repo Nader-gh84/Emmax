@@ -234,17 +234,21 @@ async function confirmQuoteWithAdmin(token: string) {
     );
   }
 
-  const { error: projectError } = await admin.from("projects").insert({
-    user_id: quote.user_id,
-    customer_id: quote.customer_id,
-    quote_id: quote.id,
-    project_name: projectName,
-    value: Number(quote.grand_total) || 0,
-    status: "active",
-    start_date: confirmedAt.slice(0, 10),
-    materials: quote.materials ?? [],
-    labour_items: quote.labour_items ?? [],
-  });
+  const { error: projectError } = await admin.from("projects").upsert(
+    {
+      user_id: quote.user_id,
+      customer_id: quote.customer_id,
+      quote_id: quote.id,
+      project_name: projectName,
+      value: Number(quote.grand_total) || 0,
+      status: "active",
+      start_date: confirmedAt.slice(0, 10),
+      materials: quote.materials ?? [],
+      labour_items: quote.labour_items ?? [],
+      updated_at: confirmedAt,
+    },
+    { onConflict: "quote_id" }
+  );
 
   if (projectError) {
     logSupabaseError("POST /api/quotes/confirm.admin.project", projectError, {

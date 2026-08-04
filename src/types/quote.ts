@@ -193,6 +193,12 @@ export interface Quote {
   confirmed_at: string | null;
   declined_at?: string | null;
   decline_reason?: string | null;
+  supplier_ack_token?: string | null;
+  supplier_acknowledged_at?: string | null;
+  supplier_ack_supplier_name?: string | null;
+  supplier_ack_supplier_email?: string | null;
+  supplier_pricing_file_path?: string | null;
+  supplier_pricing_uploaded_at?: string | null;
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
