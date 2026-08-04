@@ -34,6 +34,7 @@ export function ExpensesCard({
   const [busy, setBusy] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     setExpenses(initialExpenses);
@@ -147,16 +148,25 @@ export function ExpensesCard({
             Running total {formatProjectMoney(total)}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setModalOpen(true);
-          }}
-          className={`${touchBtnPrimary} px-4 text-sm`}
-        >
-          + Add Expense
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowDetails((open) => !open)}
+            className="text-xs font-semibold text-accent transition hover:text-blue-400"
+          >
+            {showDetails ? "Hide Details" : "View Details"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setModalOpen(true);
+            }}
+            className={`${touchBtnPrimary} px-4 text-sm`}
+          >
+            + Add Expense
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -169,7 +179,7 @@ export function ExpensesCard({
         <p className="mt-4 text-sm text-slate-500">No expenses yet.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {expenses.map((expense) => (
+          {(showDetails ? expenses : expenses.slice(0, 3)).map((expense) => (
             <li
               key={expense.id}
               className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"

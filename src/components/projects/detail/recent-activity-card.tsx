@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ProjectActivity } from "@/types/project-operations";
 
 function formatActivityTimestamp(value: string): string {
@@ -19,17 +20,31 @@ export function RecentActivityCard({
 }: {
   activities: ProjectActivity[];
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? activities : activities.slice(0, 5);
+
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Recent Activity
-      </h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Recent Activity
+        </h2>
+        {activities.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setShowAll((open) => !open)}
+            className="text-xs font-semibold text-accent transition hover:text-blue-400"
+          >
+            {showAll && activities.length > 5 ? "Show Less" : "View All"}
+          </button>
+        ) : null}
+      </div>
 
       {activities.length === 0 ? (
         <p className="mt-4 text-sm text-slate-500">No activity yet</p>
       ) : (
         <ul className="mt-4 space-y-3">
-          {activities.map((activity) => (
+          {visible.map((activity) => (
             <li
               key={activity.id}
               className="border-b border-white/5 pb-3 last:border-0 last:pb-0"

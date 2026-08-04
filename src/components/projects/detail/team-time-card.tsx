@@ -9,12 +9,32 @@ import {
 } from "@/components/quotes/ui";
 import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
+import { getUserInitials } from "@/lib/user-display";
 import type { Employee } from "@/types/employee";
 import type { TimeEntry } from "@/types/project-operations";
 import { formatProjectDate, formatProjectMoney } from "@/types/project";
 
+const AVATAR_COLORS = [
+  "bg-sky-600",
+  "bg-teal-600",
+  "bg-indigo-600",
+  "bg-rose-600",
+  "bg-amber-600",
+  "bg-cyan-700",
+  "bg-violet-600",
+  "bg-emerald-700",
+];
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash + name.charCodeAt(i) * (i + 1)) % AVATAR_COLORS.length;
+  }
+  return AVATAR_COLORS[hash] ?? AVATAR_COLORS[0];
 }
 
 export function TeamTimeCard({
@@ -36,6 +56,7 @@ export function TeamTimeCard({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showTimeDetails, setShowTimeDetails] = useState(false);
 
   useEffect(() => {
     setEntries(initialEntries);
@@ -157,17 +178,26 @@ export function TeamTimeCard({
             Hours and labor cost by assigned crew
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            setModalOpen(true);
-          }}
-          disabled={assignedEmployees.length === 0}
-          className={`${touchBtnPrimary} px-4 text-sm disabled:opacity-40`}
-        >
-          + Log Time
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setShowTimeDetails((open) => !open)}
+            className="text-xs font-semibold text-accent transition hover:text-blue-400"
+          >
+            {showTimeDetails ? "Hide Time Details" : "View Time Details"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              setModalOpen(true);
+            }}
+            disabled={assignedEmployees.length === 0}
+            className={`${touchBtnPrimary} px-4 text-sm disabled:opacity-40`}
+          >
+            + Log Time
+          </button>
+        </div>
       </div>
 
       {error && !modalOpen ? (
@@ -182,26 +212,75 @@ export function TeamTimeCard({
         </p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {perEmployee.map(({ employee, hours: hoursSum, cost }) => (
-            <li
-              key={employee.id}
-              className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-white">
-                  {employee.full_name}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {employee.role?.trim() || "No role"} · {hoursSum.toFixed(1)}h
-                </p>
-              </div>
-              <span className="shrink-0 text-sm font-semibold text-slate-200">
-                {formatProjectMoney(cost)}
-              </span>
-            </li>
-          ))}
+          {perEmployee.map(({ employee, hours: hoursSum, cost }) => {
+            const initials = getUserInitials(employee.full_name, "");
+            return (
+              <li
+                key={employee.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+              >
+                <div className="flex min-w-0 items-start gap-3">
+                  <span
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${avatarColor(
+                      employee.full_name
+                    )}`}
+                    aria-hidden="true"
+                  >
+                    {initials}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-white">
+                      {employee.full_name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {employee.role?.trim() || "No role"} · {hoursSum.toFixed(1)}h
+                    </p>
+                  </div>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-slate-200">
+                  {formatProjectMoney(cost)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      {showTimeDetails ? (
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Time entry details
+          </p>
+          {entries.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">No time logged yet.</p>
+          ) : (
+            <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+              {entries.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex items-start justify-between gap-2 border-b border-white/5 pb-2 text-sm last:border-0 last:pb-0"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-slate-200">
+                      {entry.employees?.full_name ||
+                        assignedEmployees.find((e) => e.id === entry.employee_id)
+                          ?.full_name ||
+                        "Employee"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {formatProjectDate(entry.entry_date)}
+                      {entry.notes ? ` · ${entry.notes}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 font-semibold text-slate-300">
+                    {Number(entry.hours).toFixed(1)}h
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <dl className="mt-4 space-y-2 border-t border-white/10 pt-4 text-sm">
         <div className="flex justify-between text-slate-400">
