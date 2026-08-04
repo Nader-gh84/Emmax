@@ -212,7 +212,29 @@ export async function prepareCustomerQuote(quote: Quote): Promise<{
     });
 
   if (uploadError) {
-    throw new Error("Failed to upload quote PDF.");
+    console.error("[prepareCustomerQuote] quote-pdfs upload failed:", {
+      path,
+      message: uploadError.message,
+      name: uploadError.name,
+      cause: uploadError.cause,
+      statusCode:
+        "statusCode" in uploadError
+          ? (uploadError as { statusCode?: string }).statusCode
+          : undefined,
+      error: uploadError,
+    });
+    const detail = uploadError.message?.trim() || "unknown storage error";
+    const hint =
+      detail.toLowerCase().includes("bucket") ||
+      detail.toLowerCase().includes("not found")
+        ? " Create the quote-pdfs bucket (run migration 009 or 026)."
+        : detail.toLowerCase().includes("row-level security") ||
+            detail.toLowerCase().includes("policy") ||
+            detail.toLowerCase().includes("unauthorized") ||
+            detail.toLowerCase().includes("permission")
+          ? " Check quote-pdfs storage RLS policies (migration 009/026)."
+          : "";
+    throw new Error(`Failed to upload quote PDF: ${detail}.${hint}`);
   }
 
   const now = new Date().toISOString();

@@ -66,7 +66,24 @@ async function uploadQuotePdf(
     });
 
   if (error) {
-    throw new Error("Failed to upload quote PDF.");
+    console.error("[uploadQuotePdf] quote-pdfs upload failed:", {
+      path,
+      message: error.message,
+      name: error.name,
+      error,
+    });
+    const detail = error.message?.trim() || "unknown storage error";
+    const hint =
+      detail.toLowerCase().includes("bucket") ||
+      detail.toLowerCase().includes("not found")
+        ? " Create the quote-pdfs bucket (run migration 009 or 026)."
+        : detail.toLowerCase().includes("row-level security") ||
+            detail.toLowerCase().includes("policy") ||
+            detail.toLowerCase().includes("unauthorized") ||
+            detail.toLowerCase().includes("permission")
+          ? " Check quote-pdfs storage RLS policies (migration 009/026)."
+          : "";
+    throw new Error(`Failed to upload quote PDF: ${detail}.${hint}`);
   }
 
   return path;
