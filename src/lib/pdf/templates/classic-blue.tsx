@@ -1,6 +1,6 @@
 import React from "react";
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import type { QuotePdfData } from "@/lib/pdf/quote-pdf";
+import type { QuotePdfData } from "@/lib/pdf/quote-pdf-types";
 import {
   EMPTY_COMPANY_BRANDING,
   buildPdfLineRows,
@@ -375,17 +375,19 @@ export function QuotePdfClassicBlue({ data }: { data: QuotePdfData }) {
               </View>
             ) : null}
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>GST ({gstRate}%)</Text>
+              <Text style={styles.summaryLabel}>GST/HST ({gstRate}%)</Text>
               <Text style={styles.summaryValue}>
                 {formatCurrency(totals.gst)}
               </Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>PST ({pstRate}%)</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(totals.pst)}
-              </Text>
-            </View>
+            {pstRate > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>PST ({pstRate}%)</Text>
+                <Text style={styles.summaryValue}>
+                  {formatCurrency(totals.pst)}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.grandBar}>
               <Text style={styles.grandLabel}>GRAND TOTAL</Text>
               <Text style={styles.grandValue}>

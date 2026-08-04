@@ -1,4 +1,8 @@
 import { DEFAULT_COUNTRY } from "@/lib/location";
+import {
+  DEFAULT_QUOTE_TEMPLATE,
+  type QuoteTemplateId,
+} from "@/lib/pdf/quote-templates";
 
 export type ProfileFieldKey =
   | "fullName"
@@ -7,7 +11,10 @@ export type ProfileFieldKey =
   | "country"
   | "city"
   | "email"
-  | "phone";
+  | "phone"
+  | "tagline"
+  | "website"
+  | "address";
 
 export interface ProfileData {
   fullName: string;
@@ -17,11 +24,15 @@ export interface ProfileData {
   city: string;
   email: string;
   phone: string;
+  tagline: string;
+  website: string;
+  address: string;
 }
 
 export interface QuoteDefaults {
   defaultTaxRate: number;
   defaultValidityDays: number;
+  quoteTemplate: QuoteTemplateId;
 }
 
 export interface BusinessProfile extends ProfileData, QuoteDefaults {
@@ -37,6 +48,9 @@ export const EMPTY_PROFILE: ProfileData = {
   city: "",
   email: "",
   phone: "",
+  tagline: "",
+  website: "",
+  address: "",
 };
 
 export interface ProfileFieldDefinition {
@@ -84,3 +98,23 @@ export const PROFILE_FIELDS: ProfileFieldDefinition[] = [
     optional: true,
   },
 ];
+
+export const BRANDING_FIELDS: ProfileFieldDefinition[] = [
+  {
+    key: "tagline",
+    label: "Company Tagline",
+    optional: true,
+  },
+  {
+    key: "address",
+    label: "Street Address",
+    optional: true,
+  },
+  {
+    key: "website",
+    label: "Website",
+    optional: true,
+  },
+];
+
+export { DEFAULT_QUOTE_TEMPLATE };

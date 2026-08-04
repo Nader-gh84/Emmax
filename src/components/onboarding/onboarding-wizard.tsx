@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { StepProfile } from "@/components/onboarding/step-profile";
 import { StepQuoteDefaults } from "@/components/onboarding/step-quote-defaults";
+import { StepQuoteTemplate } from "@/components/onboarding/step-quote-template";
+import type { QuoteTemplateId } from "@/lib/pdf/quote-templates";
 import type { ProfileData } from "@/types/onboarding";
 
 async function saveProfile(payload: Record<string, unknown>) {
@@ -23,14 +25,12 @@ async function saveProfile(payload: Record<string, unknown>) {
 export function OnboardingWizard() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
 
   async function handleProfileComplete(nextProfile: ProfileData) {
     await saveProfile({
       step: "profile",
       ...nextProfile,
     });
-    setProfile(nextProfile);
     setStep(2);
   }
 
@@ -43,10 +43,19 @@ export function OnboardingWizard() {
       defaultTaxRate: defaults.defaultTaxRate,
       defaultValidityDays: defaults.defaultValidityDays,
     });
+    setStep(3);
+  }
 
+  async function handleTemplateComplete(quoteTemplate: QuoteTemplateId) {
+    await saveProfile({
+      step: "template",
+      quoteTemplate,
+    });
     router.push("/dashboard");
     router.refresh();
   }
+
+  const titles = ["Profile setup", "Quote defaults", "Quote template"] as const;
 
   return (
     <div className="min-h-screen bg-navy text-white">
@@ -55,17 +64,22 @@ export function OnboardingWizard() {
       <div className="relative mx-auto max-w-4xl px-4 py-8">
         <div className="mb-8 text-center">
           <p className="text-sm font-medium uppercase tracking-wide text-slate-500">
-            Step {step} of 2
+            Step {step} of 3
           </p>
           <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">
-            {step === 1 ? "Profile setup" : "Quote defaults"}
+            {titles[step - 1]}
           </h1>
         </div>
 
         {step === 1 ? (
           <StepProfile onComplete={handleProfileComplete} />
-        ) : (
+        ) : step === 2 ? (
           <StepQuoteDefaults onComplete={handleDefaultsComplete} />
+        ) : (
+          <StepQuoteTemplate
+            onComplete={handleTemplateComplete}
+            onBack={() => setStep(2)}
+          />
         )}
       </div>
     </div>

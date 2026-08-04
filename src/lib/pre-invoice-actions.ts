@@ -3,6 +3,7 @@ import { fetchQuotePdfBlob } from "@/lib/quote-pdf-client";
 import { quoteToWizardState } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
 import { ensureProjectForQuote } from "@/lib/ensure-project-for-quote";
+import { loadCompanyBrandingForPdf } from "@/lib/pdf/load-company-branding";
 import {
   calculateVoiceQuoteTotals,
   materialsToStored,
@@ -182,6 +183,8 @@ export async function prepareCustomerQuote(quote: Quote): Promise<{
     );
   }
 
+  const company = await loadCompanyBrandingForPdf();
+
   const pdfBlob = await fetchQuotePdfBlob({
     materials: state.materials,
     labourItems: state.labourItems,
@@ -201,6 +204,8 @@ export async function prepareCustomerQuote(quote: Quote): Promise<{
     priceDisplayMode: state.priceDisplayMode,
     quoteNumber: state.quoteNumber,
     allowDraftPlaceholders: true,
+    company,
+    template: company.quoteTemplate,
   });
 
   const path = `${user.id}/${quote.id}.pdf`;

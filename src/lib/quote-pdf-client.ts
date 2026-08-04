@@ -1,5 +1,7 @@
 import type { DiscountMode, LabourItem, MaterialItem } from "@/types/quote";
 import type { PriceDisplayMode } from "@/lib/quotes";
+import type { CompanyBrandingForPdf } from "@/lib/pdf/quote-pdf-shared";
+import type { QuoteTemplateId } from "@/lib/pdf/quote-templates";
 
 export interface QuotePdfInput {
   materials: MaterialItem[];
@@ -20,6 +22,8 @@ export interface QuotePdfInput {
   priceDisplayMode?: PriceDisplayMode;
   quoteNumber?: string | null;
   allowDraftPlaceholders?: boolean;
+  company?: Partial<CompanyBrandingForPdf>;
+  template?: QuoteTemplateId;
 }
 
 function serializeMaterials(materials: MaterialItem[]) {
@@ -63,6 +67,8 @@ export async function fetchQuotePdfBlob(input: QuotePdfInput): Promise<Blob> {
       materials: serializeMaterials(input.materials),
       labourItems: serializeLabour(input.labourItems),
       allowDraftPlaceholders: input.allowDraftPlaceholders ?? false,
+      company: input.company ?? null,
+      template: input.template ?? input.company?.quoteTemplate ?? null,
     }),
   });
 

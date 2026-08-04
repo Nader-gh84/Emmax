@@ -748,6 +748,10 @@ function VoiceQuoteBuilderInner({
     setActionFeedback(null);
     try {
       const state = buildActionState();
+      const { loadCompanyBrandingForPdf } = await import(
+        "@/lib/pdf/load-company-branding"
+      );
+      const company = await loadCompanyBrandingForPdf();
       const blob = await fetchQuotePdfBlob({
         materials: state.materials,
         labourItems: state.labourItems,
@@ -767,6 +771,8 @@ function VoiceQuoteBuilderInner({
         priceDisplayMode: state.priceDisplayMode,
         quoteNumber: state.quoteNumber,
         allowDraftPlaceholders: true,
+        company,
+        template: company.quoteTemplate,
       });
       downloadPdfBlob(
         blob,

@@ -1,6 +1,6 @@
 import React from "react";
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
-import type { QuotePdfData } from "@/lib/pdf/quote-pdf";
+import type { QuotePdfData } from "@/lib/pdf/quote-pdf-types";
 import {
   EMPTY_COMPANY_BRANDING,
   buildPdfLineRows,
@@ -205,6 +205,21 @@ const styles = StyleSheet.create({
     borderBottomColor: NAVY,
     width: 180,
   },
+  footer: {
+    position: "absolute",
+    bottom: 44,
+    left: 40,
+    right: 40,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+    paddingTop: 8,
+  },
+  footerText: {
+    fontSize: 7,
+    color: TEAL,
+  },
   thankYou: {
     position: "absolute",
     bottom: 0,
@@ -356,19 +371,7 @@ export function QuotePdfModernTeal({ data }: { data: QuotePdfData }) {
           </View>
           <View style={styles.summaryCol}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Materials</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(totals.materialsTotal)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Labour</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(totals.labourTotal)}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryLabel}>Sub Total</Text>
               <Text style={styles.summaryValue}>
                 {formatCurrency(totals.subtotal)}
               </Text>
@@ -382,19 +385,15 @@ export function QuotePdfModernTeal({ data }: { data: QuotePdfData }) {
               </View>
             ) : null}
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>GST ({gstRate}%)</Text>
-              <Text style={styles.summaryValue}>
-                {formatCurrency(totals.gst)}
+              <Text style={styles.summaryLabel}>
+                Tax/VAT ({gstRate + pstRate}%)
               </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>PST ({pstRate}%)</Text>
               <Text style={styles.summaryValue}>
-                {formatCurrency(totals.pst)}
+                {formatCurrency(totals.gst + totals.pst)}
               </Text>
             </View>
             <View style={styles.grandRow}>
-              <Text style={styles.grandLabel}>TOTAL</Text>
+              <Text style={styles.grandLabel}>GRAND TOTAL</Text>
               <Text style={styles.grandValue}>
                 {formatCurrency(totals.grandTotal)}
               </Text>
@@ -407,8 +406,17 @@ export function QuotePdfModernTeal({ data }: { data: QuotePdfData }) {
           <View style={styles.signatureLine} />
         </View>
 
+        <View style={styles.footer} fixed>
+          <Text style={styles.footerText}>{company.address}</Text>
+          <Text style={styles.footerText}>{company.phone || "—"}</Text>
+          <Text style={styles.footerText}>{company.email || "—"}</Text>
+          <Text style={styles.footerText}>{company.website || "—"}</Text>
+        </View>
+
         <View style={styles.thankYou} fixed>
-          <Text style={styles.thankYouText}>THANK YOU FOR YOUR BUSINESS</Text>
+          <Text style={styles.thankYouText}>
+            THANK YOU FOR YOUR BUSINESS WITH US!
+          </Text>
         </View>
       </Page>
     </Document>

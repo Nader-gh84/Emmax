@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ProfileData, QuoteDefaults } from "@/types/onboarding";
+import { normalizeQuoteTemplate } from "@/lib/pdf/quote-templates";
 
 interface SaveProfileBody extends Partial<ProfileData>, Partial<QuoteDefaults> {
-  step?: "profile" | "defaults";
+  step?: "profile" | "defaults" | "template";
 }
 
 export async function POST(request: Request) {
@@ -36,14 +37,23 @@ export async function POST(request: Request) {
     if (body.phone !== undefined) {
       payload.phone = body.phone.trim() || null;
     }
+    if (body.tagline !== undefined) payload.tagline = body.tagline.trim();
+    if (body.website !== undefined) payload.website = body.website.trim();
+    if (body.address !== undefined) payload.address = body.address.trim();
     if (body.defaultTaxRate !== undefined) {
       payload.default_tax_rate = body.defaultTaxRate;
     }
     if (body.defaultValidityDays !== undefined) {
       payload.default_validity_days = body.defaultValidityDays;
     }
-    if (step === "defaults") {
-      payload.onboarding_completed = true;
+    if (body.quoteTemplate !== undefined) {
+      payload.quote_template = normalizeQuoteTemplate(body.quoteTemplate);
+    }
+    if (step === "defaults" || step === "template") {
+      // Complete onboarding on template step (final) or legacy defaults-only flow.
+      if (step === "template") {
+        payload.onboarding_completed = true;
+      }
     }
 
     const { data, error } = await supabase
@@ -54,8 +64,17 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("Save profile error:", error.message);
+      const hint =
+        error.message?.includes("quote_template") ||
+        error.message?.includes("tagline") ||
+        error.code === "42703"
+          ? " Run migration 027_quote_template_and_branding.sql in Supabase."
+          : "";
       return NextResponse.json(
-        { error: "Failed to save profile", details: error.message },
+        {
+          error: `Failed to save profile.${hint}`,
+          details: error.message,
+        },
         { status: 500 }
       );
     }
