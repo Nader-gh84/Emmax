@@ -235,6 +235,8 @@ export function FinancialSummaryCard({
     "debt"
   );
   const accountsPayableTone = moneyTone(summary.accountsPayable, "debt");
+  // Red when any supplier order cost is still unpaid (material_orders.payment_status).
+  const supplierCostsTone = moneyTone(summary.unpaidSupplierCosts, "debt");
   const cashTone = moneyTone(summary.cashFlow, "cash");
   const profitTone = moneyTone(summary.grossProfit, "profit");
   const netReceivableTone = moneyTone(summary.netReceivablePosition, "profit");
@@ -244,6 +246,12 @@ export function FinancialSummaryCard({
       : summary.outstandingCustomerBalance < 0
         ? "Negative means customer overpaid"
         : "Settled — no balance remaining";
+  const supplierCostsHint =
+    summary.supplierCosts <= 0
+      ? undefined
+      : summary.unpaidSupplierCosts > 0
+        ? `${formatProjectMoney(summary.unpaidSupplierCosts)} unpaid to suppliers`
+        : "Supplier orders fully paid";
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -322,6 +330,8 @@ export function FinancialSummaryCard({
           <SummaryRow
             label="Supplier Costs"
             value={formatProjectMoney(summary.supplierCosts)}
+            tone={supplierCostsTone}
+            hint={supplierCostsHint}
           />
           <SummaryRow
             label="Extra Purchases"
