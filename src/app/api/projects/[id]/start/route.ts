@@ -231,6 +231,14 @@ export async function POST(
           }
         }
       }
+
+      const { logProjectActivity } = await import("@/lib/project-activity");
+      await logProjectActivity(supabase, {
+        userId: user.id,
+        projectId,
+        activityType: "project_started",
+        description: "Project started",
+      });
     } catch (notifyError) {
       console.error(
         "[POST /api/projects/[id]/start.notifyEmployees]",
