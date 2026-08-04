@@ -199,6 +199,8 @@ export interface Quote {
   supplier_ack_supplier_email?: string | null;
   supplier_pricing_file_path?: string | null;
   supplier_pricing_uploaded_at?: string | null;
+  /** Set when the formal customer quote PDF is prepared (workflow step 4). */
+  quote_prepared_at?: string | null;
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {

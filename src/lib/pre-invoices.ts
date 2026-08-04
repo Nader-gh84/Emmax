@@ -46,6 +46,10 @@ export interface PreInvoiceProjectCard {
   id: string;
   projectId: string | null;
   quoteId: string | null;
+  customerId: string | null;
+  materialOrderId: string | null;
+  orderConfirmed: boolean;
+  materialsReceived: boolean;
   projectNumber: string;
   title: string;
   favorited: boolean;
@@ -180,19 +184,22 @@ export function mapQuoteToPreInvoiceCard(
     materialsCount(project?.materials) > 0;
   const sentToSupplier = Boolean(quote.supplier_ack_token);
   const pricesUploaded = Boolean(quote.supplier_pricing_uploaded_at);
-  const quoteCreated =
-    Number(quote.grand_total) > 0 ||
-    quote.status === "sent" ||
-    quote.status === "accepted";
+  // Step 4: formal quote prepared (PDF), or already past send/accept.
+  const quotePrepared = Boolean(
+    quote.quote_prepared_at ||
+      quote.status === "sent" ||
+      quote.status === "accepted"
+  );
   const quoteSentToCustomer =
     quote.status === "sent" ||
     quote.status === "accepted" ||
     Boolean(quote.sent_at);
   const customerAccepted = quote.status === "accepted";
   const orderSent = Boolean(latestOrder);
-  const materialsReady = Boolean(
-    latestOrder?.status === "confirmed" || latestOrder?.materials_received_at
-  );
+  const orderConfirmed = latestOrder?.status === "confirmed";
+  const materialsReceived = Boolean(latestOrder?.materials_received_at);
+  // Step 8 completes only when materials are marked received (Start Project requires this).
+  const materialsReady = materialsReceived;
   const scheduled = Boolean(project?.start_date_confirmed);
   const started = project?.status === "in_progress";
 
@@ -200,8 +207,7 @@ export function mapQuoteToPreInvoiceCard(
   if (hasMaterials) completedThrough = 1;
   if (sentToSupplier) completedThrough = 2;
   if (pricesUploaded) completedThrough = 3;
-  if (quoteCreated && (pricesUploaded || quoteSentToCustomer || customerAccepted))
-    completedThrough = Math.max(completedThrough, 4);
+  if (quotePrepared) completedThrough = Math.max(completedThrough, 4);
   if (quoteSentToCustomer) completedThrough = Math.max(completedThrough, 5);
   if (customerAccepted) completedThrough = 6;
   if (orderSent) completedThrough = 7;
@@ -209,9 +215,6 @@ export function mapQuoteToPreInvoiceCard(
   if (scheduled) completedThrough = 9;
   if (started) completedThrough = 10;
 
-  // User-facing: after voice + send-to-supplier, step 1 done and step 2 active
-  // until we treat send as complete. Once supplier_ack_token exists, step 2 is
-  // complete and step 3 (upload prices) becomes active.
   let activeStep = Math.min(completedThrough + 1, 10);
   let actionLabel: string | null = null;
   let statusLabel = "Draft";
@@ -234,9 +237,7 @@ export function mapQuoteToPreInvoiceCard(
   } else if (completedThrough === 2) {
     activeStep = 3;
     actionLabel = "Upload Prices";
-    statusLabel = quote.supplier_acknowledged_at
-      ? "Waiting for Price"
-      : "Waiting for Price";
+    statusLabel = "Waiting for Price";
     statusTone = "waiting";
     nextActionText = quote.supplier_acknowledged_at
       ? "Supplier received the list. Next Action: Upload supplier pricing"
@@ -268,10 +269,18 @@ export function mapQuoteToPreInvoiceCard(
       "Customer accepted the quote. Next step: Order materials from suppliers";
   } else if (completedThrough === 7) {
     activeStep = 8;
-    actionLabel = null;
-    statusLabel = "Order Sent";
-    statusTone = "ready";
-    nextActionText = "Waiting for supplier to confirm materials availability";
+    if (orderConfirmed && !materialsReceived) {
+      actionLabel = "Mark Received";
+      statusLabel = "Order Confirmed";
+      statusTone = "ready";
+      nextActionText =
+        "Supplier confirmed availability. Mark materials as received when they arrive.";
+    } else {
+      actionLabel = null;
+      statusLabel = "Order Sent";
+      statusTone = "ready";
+      nextActionText = "Waiting for supplier to confirm materials availability";
+    }
   } else if (completedThrough === 8) {
     activeStep = 9;
     actionLabel = "Set Start Date";
@@ -298,12 +307,11 @@ export function mapQuoteToPreInvoiceCard(
       ? shortDate(quote.updated_at) || shortDate(quote.created_at)
       : null,
     3: shortDate(quote.supplier_pricing_uploaded_at),
+    4: shortDate(quote.quote_prepared_at) || shortDate(quote.sent_at),
     5: shortDate(quote.sent_at),
     6: shortDate(quote.confirmed_at),
     7: shortDate(latestOrder?.sent_at),
-    8: shortDate(
-      latestOrder?.materials_received_at || latestOrder?.confirmed_at
-    ),
+    8: shortDate(latestOrder?.materials_received_at),
     9: scheduled ? shortDate(project?.start_date) : null,
   };
 
@@ -317,6 +325,10 @@ export function mapQuoteToPreInvoiceCard(
     id: project?.id || quote.id,
     projectId: project?.id ?? null,
     quoteId: quote.id,
+    customerId: project?.customer_id ?? quote.customer_id ?? null,
+    materialOrderId: latestOrder?.id ?? null,
+    orderConfirmed: Boolean(orderConfirmed),
+    materialsReceived,
     projectNumber: quote.quote_number?.trim() || `Q-${quote.id.slice(0, 6)}`,
     title,
     favorited: false,
