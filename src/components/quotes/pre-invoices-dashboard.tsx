@@ -557,11 +557,19 @@ export function PreInvoicesDashboard() {
     const quoteMap: Record<string, Quote> = {};
     const nextCards = ((quotes as Quote[]) ?? [])
       .filter((quote) => {
+        const linkedProject = projectByQuoteId.get(quote.id) ?? null;
+        // Started projects leave this pipeline list — they live under Customer → Projects.
+        if (linkedProject?.status === "in_progress") {
+          return false;
+        }
+
         const hasMaterials =
           Array.isArray(quote.materials) && quote.materials.length > 0;
-        const hasProject = Boolean(quote.id && projectByQuoteId.has(quote.id));
+        const hasProject = Boolean(linkedProject);
         const sentSupplier = Boolean(quote.supplier_ack_token);
-        return hasMaterials || hasProject || sentSupplier || quote.status !== "draft";
+        return (
+          hasMaterials || hasProject || sentSupplier || quote.status !== "draft"
+        );
       })
       .map((quote) => {
         quoteMap[quote.id] = quote;
@@ -761,7 +769,20 @@ export function PreInvoicesDashboard() {
               (data as { error?: string }).error || "Failed to start project"
             );
           }
-          await refreshAfterAction("Project started. Workflow complete.");
+
+          // Leave the pre-start pipeline immediately; record stays under Customer → Projects.
+          setCards((current) => current.filter((item) => item.id !== card.id));
+          if (card.quoteId) {
+            setQuotesById((current) => {
+              const next = { ...current };
+              delete next[card.quoteId as string];
+              return next;
+            });
+          }
+
+          await refreshAfterAction(
+            "Project started. It now appears under the customer's Projects tab."
+          );
         } catch (err) {
           showFeedback(
             "error",
@@ -981,7 +1002,8 @@ export function PreInvoicesDashboard() {
           </div>
           <p className="max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
             Create projects with voice, get supplier prices, send quotes, order
-            materials and start projects - all in one place.
+            materials and start projects - all in one place. Started projects
+            move to the customer&apos;s Projects tab.
           </p>
         </header>
 
@@ -1045,8 +1067,8 @@ export function PreInvoicesDashboard() {
             <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-14 text-center">
               <h2 className="text-lg font-semibold text-white">No projects yet</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Record materials above and send them to a supplier to create your
-                first project card.
+                Record materials above to start a project in this pipeline.
+                After Start Project, it moves to the customer&apos;s Projects tab.
               </p>
             </div>
           ) : (
