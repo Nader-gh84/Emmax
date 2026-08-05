@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { SuppliersEmptyState } from "@/components/dashboard/suppliers-empty-state";
 import {
   touchBtnPrimary,
@@ -238,7 +239,12 @@ function SupplierCard({
   return (
     <article className="rounded-xl border border-white/10 bg-white/5 p-5">
       <h3 className="text-lg font-semibold text-white">
-        {supplier.supplier_name}
+        <Link
+          href={`/dashboard/suppliers/${supplier.id}`}
+          className="transition hover:text-accent"
+        >
+          {supplier.supplier_name}
+        </Link>
       </h3>
 
       {details.length > 0 ? (
