@@ -26,6 +26,10 @@ import {
   type CustomerDetailsTab,
   type CustomerDetailsViewModel,
 } from "@/lib/customer-details-mock";
+import type {
+  CustomerPaymentListItem,
+  CustomerProjectFinancial,
+} from "@/lib/customer-financials";
 import {
   asProjectLabour,
   asProjectMaterials,
@@ -98,10 +102,14 @@ function activityAccent(type: CustomerActivityItem["type"]) {
 export function CustomerDetailsPage({
   customer,
   projects = [],
+  projectFinancials = [],
+  customerPayments = [],
   addressPlaceholder = null,
 }: {
   customer: CustomerDetailsViewModel;
   projects?: Project[];
+  projectFinancials?: CustomerProjectFinancial[];
+  customerPayments?: CustomerPaymentListItem[];
   addressPlaceholder?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<CustomerDetailsTab>("overview");
@@ -117,9 +125,11 @@ export function CustomerDetailsPage({
       counts: {
         ...customer.counts,
         projects: projects.length,
+        financial: projectFinancials.length,
+        payments: customerPayments.length,
       },
     }),
-    [customer, projects.length]
+    [customer, projects.length, projectFinancials.length, customerPayments.length]
   );
 
   return (
@@ -240,7 +250,9 @@ export function CustomerDetailsPage({
         </div>
       </div>
 
-      {customer.outstanding && customer.outstanding.overdueInvoiceCount > 0 ? (
+      {customer.outstanding &&
+      customer.outstanding.totalOutstanding > 0 &&
+      customer.outstanding.projectCount > 0 ? (
         <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -248,14 +260,14 @@ export function CustomerDetailsPage({
                 Outstanding Balance
               </p>
               <p className="mt-1 text-sm text-red-100/90">
-                This customer has {customer.outstanding.overdueInvoiceCount}{" "}
-                overdue invoice
-                {customer.outstanding.overdueInvoiceCount === 1 ? "" : "s"}.
+                {customer.outstanding.projectCount} project
+                {customer.outstanding.projectCount === 1 ? "" : "s"} with
+                outstanding balance
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-2xl font-bold text-white">
-                {formatCustomerMoney(customer.outstanding.totalOverdue)}
+                {formatCustomerMoney(customer.outstanding.totalOutstanding)}
               </p>
               <button
                 type="button"
@@ -314,6 +326,8 @@ export function CustomerDetailsPage({
               customerId={customer.id}
               customerName={customer.fullName}
               projects={projects}
+              projectFinancials={projectFinancials}
+              customerPayments={customerPayments}
               addressPlaceholder={addressPlaceholder}
               onOpenProjects={() => setActiveTab("projects")}
             />
@@ -424,6 +438,8 @@ function TabPanel({
   customerId,
   customerName,
   projects,
+  projectFinancials,
+  customerPayments,
   addressPlaceholder,
   onOpenProjects,
 }: {
@@ -431,6 +447,8 @@ function TabPanel({
   customerId: string;
   customerName: string;
   projects: Project[];
+  projectFinancials: CustomerProjectFinancial[];
+  customerPayments: CustomerPaymentListItem[];
   addressPlaceholder: string | null;
   onOpenProjects: () => void;
 }) {
@@ -446,8 +464,9 @@ function TabPanel({
             {customerName}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
-            Financial cards, invoices, payments, and charts come in a later
-            stage. Recent projects below use live data from accepted quotes.
+            Recent projects use live data. Open Financial or Payments for
+            real balances and payment history across this customer&apos;s
+            projects.
           </p>
         </div>
 
@@ -497,6 +516,24 @@ function TabPanel({
     );
   }
 
+  if (tab === "financial") {
+    return (
+      <FinancialTab
+        customerId={customerId}
+        financials={projectFinancials}
+      />
+    );
+  }
+
+  if (tab === "payments") {
+    return (
+      <PaymentsTab
+        customerId={customerId}
+        payments={customerPayments}
+      />
+    );
+  }
+
   const label =
     CUSTOMER_DETAILS_TABS.find((item) => item.id === tab)?.label ?? tab;
 
@@ -506,6 +543,276 @@ function TabPanel({
       <p className="mt-2 text-sm text-slate-400">
         Coming in a later stage — placeholder content only.
       </p>
+    </div>
+  );
+}
+
+function FinancialTab({
+  customerId,
+  financials,
+}: {
+  customerId: string;
+  financials: CustomerProjectFinancial[];
+}) {
+  if (financials.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Financial</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          No projects yet — financial summaries appear once this customer has
+          projects.
+        </p>
+      </div>
+    );
+  }
+
+  const rollup = financials.reduce(
+    (acc, row) => ({
+      contractValue: acc.contractValue + row.contractValue,
+      customerPayments: acc.customerPayments + row.customerPayments,
+      outstanding: acc.outstanding + Math.max(0, row.outstandingCustomerBalance),
+      totalCost: acc.totalCost + row.totalProjectCost,
+      grossProfit: acc.grossProfit + row.grossProfit,
+    }),
+    {
+      contractValue: 0,
+      customerPayments: 0,
+      outstanding: 0,
+      totalCost: 0,
+      grossProfit: 0,
+    }
+  );
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <h2 className="text-lg font-semibold text-white">
+          Financial summary
+        </h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Rollup across {financials.length} project
+          {financials.length === 1 ? "" : "s"}. Outstanding sums only amounts
+          still owed (overpayments excluded).
+        </p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <FinancialMetric
+            label="Contract Value"
+            value={formatCustomerMoney(rollup.contractValue)}
+          />
+          <FinancialMetric
+            label="Customer Payments"
+            value={formatCustomerMoney(rollup.customerPayments)}
+          />
+          <FinancialMetric
+            label="Outstanding"
+            value={formatCustomerMoney(rollup.outstanding)}
+            tone={rollup.outstanding > 0 ? "negative" : "default"}
+          />
+          <FinancialMetric
+            label="Total Costs"
+            value={formatCustomerMoney(rollup.totalCost)}
+          />
+          <FinancialMetric
+            label="Gross Profit"
+            value={formatCustomerMoney(rollup.grossProfit)}
+            tone={
+              rollup.grossProfit > 0
+                ? "positive"
+                : rollup.grossProfit < 0
+                  ? "negative"
+                  : "default"
+            }
+          />
+        </dl>
+      </section>
+
+      <ul className="space-y-3">
+        {financials.map((row) => {
+          const owed = row.outstandingCustomerBalance > 0;
+          const overpaid = row.outstandingCustomerBalance < 0;
+          return (
+            <li
+              key={row.projectId}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold text-white">{row.projectName}</p>
+                    <ProjectStatusBadge status={row.status} />
+                  </div>
+                  <Link
+                    href={`/dashboard/customers/${customerId}/projects/${row.projectId}`}
+                    className="mt-1 inline-block text-xs font-semibold text-accent hover:text-blue-400"
+                  >
+                    Open project →
+                  </Link>
+                </div>
+                <p
+                  className={`shrink-0 text-sm font-semibold ${
+                    owed
+                      ? "text-red-300"
+                      : overpaid
+                        ? "text-emerald-300"
+                        : "text-slate-200"
+                  }`}
+                >
+                  {owed
+                    ? `Owes ${formatCustomerMoney(row.outstandingCustomerBalance)}`
+                    : overpaid
+                      ? `Overpaid ${formatCustomerMoney(
+                          Math.abs(row.outstandingCustomerBalance)
+                        )}`
+                      : "Paid in full"}
+                </p>
+              </div>
+
+              <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                <FinancialMetric
+                  label="Contract Value"
+                  value={formatCustomerMoney(row.contractValue)}
+                  compact
+                />
+                <FinancialMetric
+                  label="Payments"
+                  value={formatCustomerMoney(row.customerPayments)}
+                  compact
+                />
+                <FinancialMetric
+                  label="Outstanding"
+                  value={formatCustomerMoney(row.outstandingCustomerBalance)}
+                  compact
+                  tone={
+                    owed ? "negative" : overpaid ? "positive" : "default"
+                  }
+                />
+                <FinancialMetric
+                  label="Total Costs"
+                  value={formatCustomerMoney(row.totalProjectCost)}
+                  compact
+                />
+                <FinancialMetric
+                  label="Gross Profit"
+                  value={formatCustomerMoney(row.grossProfit)}
+                  compact
+                  tone={
+                    row.grossProfit > 0
+                      ? "positive"
+                      : row.grossProfit < 0
+                        ? "negative"
+                        : "default"
+                  }
+                />
+              </dl>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function FinancialMetric({
+  label,
+  value,
+  compact,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  compact?: boolean;
+  tone?: "default" | "positive" | "negative";
+}) {
+  const valueClass =
+    tone === "positive"
+      ? "text-emerald-300"
+      : tone === "negative"
+        ? "text-red-300"
+        : "text-white";
+
+  return (
+    <div
+      className={
+        compact
+          ? ""
+          : "rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+      }
+    >
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </dt>
+      <dd className={`mt-1 font-semibold ${valueClass} ${compact ? "text-sm" : "text-base"}`}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function PaymentsTab({
+  customerId,
+  payments,
+}: {
+  customerId: string;
+  payments: CustomerPaymentListItem[];
+}) {
+  if (payments.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Payments</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          No payments recorded yet across this customer&apos;s projects.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-white">
+        Payments ({payments.length})
+      </h2>
+      <ul className="divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+        {payments.map((payment) => {
+          const isCustomer = payment.paymentType === "customer_payment";
+          return (
+            <li
+              key={payment.id}
+              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${
+                      isCustomer
+                        ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                        : "bg-amber-500/15 text-amber-200 ring-amber-500/30"
+                    }`}
+                  >
+                    {isCustomer ? "Customer" : "Supplier"}
+                  </span>
+                  <p className="text-sm font-medium text-white">
+                    {formatCustomerDate(payment.paymentDate)}
+                  </p>
+                </div>
+                <p className="mt-1 truncate text-sm text-slate-400">
+                  <Link
+                    href={`/dashboard/customers/${customerId}/projects/${payment.projectId}`}
+                    className="font-medium text-slate-300 hover:text-accent"
+                  >
+                    {payment.projectName}
+                  </Link>
+                  {payment.notes ? (
+                    <span className="text-slate-500"> · {payment.notes}</span>
+                  ) : null}
+                </p>
+              </div>
+              <p className="shrink-0 text-sm font-semibold text-white">
+                {formatCustomerMoney(payment.amount)}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
