@@ -45,12 +45,14 @@ export function MaterialsPricingCard({
   materialOrder,
   projectMaterials,
   taxRate = 0.05,
+  readOnly = false,
 }: {
   customerId: string;
   projectId: string;
   materialOrder: MaterialOrder | null;
   projectMaterials: StoredMaterial[];
   taxRate?: number;
+  readOnly?: boolean;
 }) {
   const defaultSupplier = materialOrder?.supplier_name?.trim() || "";
   const lines =
@@ -110,7 +112,11 @@ export function MaterialsPricingCard({
             href={orderHref}
             className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
           >
-            {materialOrder ? "View / Edit Order" : "Order Materials"}
+            {readOnly
+              ? "View Order"
+              : materialOrder
+                ? "View / Edit Order"
+                : "Order Materials"}
           </Link>
         </div>
       </div>

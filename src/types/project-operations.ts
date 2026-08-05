@@ -155,7 +155,7 @@ function normalizeExpenseKind(value: string | null | undefined): ExpenseKind {
   return isExpenseKind(candidate) ? candidate : "extra_purchase";
 }
 
-function normalizePaymentStatus(
+export function normalizePaymentStatus(
   value: string | null | undefined
 ): CostPaymentStatus {
   const candidate = value ?? "";

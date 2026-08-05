@@ -81,10 +81,12 @@ export function ExpensesCard({
   projectId,
   initialExpenses,
   onExpensesChange,
+  readOnly = false,
 }: {
   projectId: string;
   initialExpenses: ProjectExpense[];
   onExpensesChange?: (expenses: ProjectExpense[]) => void;
+  readOnly?: boolean;
 }) {
   const [expenses, setExpenses] = useState<ProjectExpense[]>(initialExpenses);
   const [modalOpen, setModalOpen] = useState(false);
@@ -199,6 +201,7 @@ export function ExpensesCard({
     expense: ProjectExpense,
     nextStatus: ExpenseBillingStatus
   ) {
+    if (readOnly) return;
     if (expense.billing_status === nextStatus) return;
 
     setUpdatingBillingId(expense.id);
@@ -243,6 +246,7 @@ export function ExpensesCard({
   }
 
   async function handleDelete(expense: ProjectExpense) {
+    if (readOnly) return;
     setDeletingId(expense.id);
     setError(null);
 
@@ -266,6 +270,7 @@ export function ExpensesCard({
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     const parsedAmount = Number.parseFloat(amount);
     if (!expenseDate) {
       setError("Date is required.");
@@ -395,16 +400,18 @@ export function ExpensesCard({
           >
             {showDetails ? "Hide Details" : "View Details"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setModalOpen(true);
-            }}
-            className={`${touchBtnPrimary} px-4 text-sm`}
-          >
-            + Add Expense
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setModalOpen(true);
+              }}
+              className={`${touchBtnPrimary} px-4 text-sm`}
+            >
+              + Add Expense
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -476,7 +483,9 @@ export function ExpensesCard({
                             ? expense.billing_status
                             : "pending_review"
                         }
-                        disabled={updatingBillingId === expense.id}
+                        disabled={
+                          readOnly || updatingBillingId === expense.id
+                        }
                         onChange={(event) => {
                           const next = event.target.value;
                           if (!isExpenseBillingStatus(next)) return;
@@ -501,15 +510,17 @@ export function ExpensesCard({
                   <span className="text-sm font-semibold text-white">
                     {formatProjectMoney(Number(expense.amount) || 0)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(expense)}
-                    disabled={deletingId === expense.id}
-                    className="rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
-                    aria-label={`Delete expense from ${expense.store_name}`}
-                  >
-                    {deletingId === expense.id ? "…" : "Delete"}
-                  </button>
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(expense)}
+                      disabled={deletingId === expense.id}
+                      className="rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
+                      aria-label={`Delete expense from ${expense.store_name}`}
+                    >
+                      {deletingId === expense.id ? "…" : "Delete"}
+                    </button>
+                  ) : null}
                 </div>
               </li>
             );
@@ -522,7 +533,7 @@ export function ExpensesCard({
         <span>{formatProjectMoney(total)}</span>
       </div>
 
-      {modalOpen ? (
+      {modalOpen && !readOnly ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
           <div
             className="absolute inset-0"

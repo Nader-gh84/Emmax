@@ -133,6 +133,7 @@ export function FinancialSummaryCard({
   timeEntries = [],
   changeOrders = [],
   onPaymentAdded,
+  readOnly = false,
 }: {
   projectId: string;
   quoteAmount: number;
@@ -143,6 +144,7 @@ export function FinancialSummaryCard({
   timeEntries?: TimeEntry[];
   changeOrders?: ChangeOrder[];
   onPaymentAdded?: (payment: ProjectPayment) => void;
+  readOnly?: boolean;
 }) {
   const summary = computeFinancialSummary({
     quoteAmount,
@@ -166,6 +168,7 @@ export function FinancialSummaryCard({
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     const parsedAmount = Number.parseFloat(amount);
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       setError("Enter a valid amount greater than zero.");
@@ -276,16 +279,18 @@ export function FinancialSummaryCard({
           >
             {showDetails ? "Hide Details" : "View Details"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setModalOpen(true);
-            }}
-            className={`${touchBtnPrimary} px-4 text-sm`}
-          >
-            + Record Payment
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setModalOpen(true);
+              }}
+              className={`${touchBtnPrimary} px-4 text-sm`}
+            >
+              + Record Payment
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -438,7 +443,7 @@ export function FinancialSummaryCard({
         </div>
       ) : null}
 
-      {modalOpen ? (
+      {modalOpen && !readOnly ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
           <div
             className="absolute inset-0"

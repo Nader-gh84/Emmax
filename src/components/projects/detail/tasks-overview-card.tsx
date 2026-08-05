@@ -26,11 +26,13 @@ export function TasksOverviewCard({
   initialTasks,
   employees,
   onTasksChange,
+  readOnly = false,
 }: {
   projectId: string;
   initialTasks: ProjectTask[];
   employees: EmployeeOption[];
   onTasksChange?: (tasks: ProjectTask[]) => void;
+  readOnly?: boolean;
 }) {
   const [tasks, setTasks] = useState<ProjectTask[]>(initialTasks);
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,6 +68,7 @@ export function TasksOverviewCard({
   }
 
   async function toggleCompleted(task: ProjectTask) {
+    if (readOnly) return;
     const nextCompleted = task.status !== "completed";
     setTogglingId(task.id);
     setError(null);
@@ -119,6 +122,7 @@ export function TasksOverviewCard({
   }
 
   async function handleDelete(task: ProjectTask) {
+    if (readOnly) return;
     setDeletingId(task.id);
     setError(null);
 
@@ -145,6 +149,7 @@ export function TasksOverviewCard({
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     const trimmed = title.trim();
     if (!trimmed) {
       setError("Title is required.");
@@ -237,16 +242,18 @@ export function TasksOverviewCard({
                 : "View All Tasks"}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setModalOpen(true);
-            }}
-            className={`${touchBtnPrimary} px-4 text-sm`}
-          >
-            + Add Task
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setModalOpen(true);
+              }}
+              className={`${touchBtnPrimary} px-4 text-sm`}
+            >
+              + Add Task
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -277,7 +284,7 @@ export function TasksOverviewCard({
                 <input
                   type="checkbox"
                   checked={done}
-                  disabled={togglingId === task.id}
+                  disabled={readOnly || togglingId === task.id}
                   onChange={() => void toggleCompleted(task)}
                   aria-label={`Mark “${task.title}” ${done ? "incomplete" : "complete"}`}
                   className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-accent focus:ring-accent"
@@ -297,22 +304,24 @@ export function TasksOverviewCard({
                       : ""}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(task)}
-                  disabled={deletingId === task.id}
-                  className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
-                  aria-label={`Delete task “${task.title}”`}
-                >
-                  {deletingId === task.id ? "…" : "Delete"}
-                </button>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete(task)}
+                    disabled={deletingId === task.id}
+                    className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-500 transition hover:bg-white/10 hover:text-red-300 disabled:opacity-40"
+                    aria-label={`Delete task “${task.title}”`}
+                  >
+                    {deletingId === task.id ? "…" : "Delete"}
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ul>
       )}
 
-      {modalOpen ? (
+      {modalOpen && !readOnly ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
           <div
             className="absolute inset-0"

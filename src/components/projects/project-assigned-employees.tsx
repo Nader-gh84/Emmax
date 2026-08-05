@@ -11,8 +11,10 @@ import type { Employee } from "@/types/employee";
 
 export function ProjectAssignedEmployees({
   projectId,
+  readOnly = false,
 }: {
   projectId: string;
+  readOnly?: boolean;
 }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -78,6 +80,7 @@ export function ProjectAssignedEmployees({
   }, [load]);
 
   function toggleEmployee(id: string) {
+    if (readOnly) return;
     setSelectedIds((current) =>
       current.includes(id)
         ? current.filter((value) => value !== id)
@@ -88,6 +91,7 @@ export function ProjectAssignedEmployees({
   }
 
   async function handleSave() {
+    if (readOnly) return;
     setIsSaving(true);
     setError(null);
     setSuccess(null);
@@ -159,12 +163,19 @@ export function ProjectAssignedEmployees({
             const checked = selectedIds.includes(employee.id);
             return (
               <li key={employee.id}>
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 transition hover:bg-white/[0.04]">
+                <label
+                  className={`flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3 transition ${
+                    readOnly
+                      ? "cursor-default"
+                      : "cursor-pointer hover:bg-white/[0.04]"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     checked={checked}
+                    disabled={readOnly}
                     onChange={() => toggleEmployee(employee.id)}
-                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-accent focus:ring-accent"
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-transparent text-accent focus:ring-accent disabled:opacity-50"
                   />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-white">
@@ -190,7 +201,7 @@ export function ProjectAssignedEmployees({
         <p className="mt-3 text-sm text-emerald-300">{success}</p>
       ) : null}
 
-      {employees.length > 0 && !loadFailedMissingTable ? (
+      {employees.length > 0 && !loadFailedMissingTable && !readOnly ? (
         <div className="mt-4 flex justify-end">
           <button
             type="button"

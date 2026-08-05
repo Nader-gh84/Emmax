@@ -42,11 +42,13 @@ export function TeamTimeCard({
   assignedEmployees,
   initialEntries,
   onEntriesChange,
+  readOnly = false,
 }: {
   projectId: string;
   assignedEmployees: Employee[];
   initialEntries: TimeEntry[];
   onEntriesChange?: (entries: TimeEntry[]) => void;
+  readOnly?: boolean;
 }) {
   const [entries, setEntries] = useState<TimeEntry[]>(initialEntries);
 
@@ -97,6 +99,7 @@ export function TeamTimeCard({
 
   async function handleAdd(event: React.FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     const parsedHours = Number.parseFloat(hours);
     if (!employeeId) {
       setError("Select an employee.");
@@ -196,17 +199,19 @@ export function TeamTimeCard({
           >
             {showTimeDetails ? "Hide Time Details" : "View Time Details"}
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              setError(null);
-              setModalOpen(true);
-            }}
-            disabled={assignedEmployees.length === 0}
-            className={`${touchBtnPrimary} px-4 text-sm disabled:opacity-40`}
-          >
-            + Log Time
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setModalOpen(true);
+              }}
+              disabled={assignedEmployees.length === 0}
+              className={`${touchBtnPrimary} px-4 text-sm disabled:opacity-40`}
+            >
+              + Log Time
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -305,7 +310,7 @@ export function TeamTimeCard({
         </div>
       </dl>
 
-      {modalOpen ? (
+      {modalOpen && !readOnly ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
           <div
             className="absolute inset-0"
