@@ -1,7 +1,6 @@
 import type { MaterialOrder } from "@/types/material-order";
 import {
   computeFinancialSummary,
-  normalizePaymentStatus,
   type ChangeOrder,
   type ProjectExpense,
   type ProjectPayment,
@@ -13,8 +12,6 @@ export type ProjectCompletionItemId =
   | "tasks"
   | "materials"
   | "customer_paid"
-  | "suppliers_paid"
-  | "labour_paid"
   | "expenses_reviewed";
 
 export type ProjectCompletionItem = {
@@ -30,11 +27,12 @@ export type ProjectCompletionChecklist = {
 };
 
 /**
- * Live project completion checklist (6 conditions; documents deferred).
+ * Live project completion checklist (4 conditions).
+ * Supplier invoice + labour payment checks deferred until those accounting
+ * flows are designed. Documents check also deferred.
  *
- * Empty collections: tasks / supplier orders / time entries / expenses pass
- * vacuously when there is nothing incomplete. Materials Ready requires at
- * least one order with materials_received_at. Customer balance passes when
+ * Empty tasks / expenses pass vacuously. Materials Ready requires at least
+ * one order with materials_received_at. Customer balance passes when
  * outstandingCustomerBalance <= 0 (paid or overpaid).
  */
 export function computeProjectCompletionChecklist(input: {
@@ -43,7 +41,8 @@ export function computeProjectCompletionChecklist(input: {
   payments: ProjectPayment[];
   expenses: ProjectExpense[];
   changeOrders?: ChangeOrder[];
-  timeEntries: TimeEntry[];
+  /** Optional — still passed through for financial summary consistency. */
+  timeEntries?: TimeEntry[];
   quoteAmount: number;
   depositAmount?: number;
 }): ProjectCompletionChecklist {
@@ -66,19 +65,6 @@ export function computeProjectCompletionChecklist(input: {
   });
 
   const customerPaid = summary.outstandingCustomerBalance <= 0;
-
-  const suppliersPaid =
-    input.materialOrders.length === 0 ||
-    input.materialOrders.every(
-      (order) => normalizePaymentStatus(order.payment_status) === "paid"
-    );
-
-  const labourPaid =
-    input.timeEntries.length === 0 ||
-    input.timeEntries.every(
-      (entry) => normalizePaymentStatus(entry.payment_status) === "paid"
-    );
-
   const expensesReviewed = summary.pendingReviewCount === 0;
 
   const items: ProjectCompletionItem[] = [
@@ -96,16 +82,6 @@ export function computeProjectCompletionChecklist(input: {
       id: "customer_paid",
       label: "Customer has paid the full project balance",
       complete: customerPaid,
-    },
-    {
-      id: "suppliers_paid",
-      label: "All supplier invoices have been paid",
-      complete: suppliersPaid,
-    },
-    {
-      id: "labour_paid",
-      label: "All employee labour costs have been paid",
-      complete: labourPaid,
     },
     {
       id: "expenses_reviewed",
