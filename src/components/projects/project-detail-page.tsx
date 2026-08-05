@@ -17,6 +17,7 @@ import { AddEndDateControl } from "@/components/projects/detail/add-end-date-con
 import { ExpensesCard } from "@/components/projects/detail/expenses-card";
 import { FinancialSummaryCard } from "@/components/projects/detail/financial-summary-card";
 import { MaterialsPricingCard } from "@/components/projects/detail/materials-pricing-card";
+import { ProjectCompletionChecklistCard } from "@/components/projects/detail/project-completion-checklist-card";
 import { ProjectProgressCard } from "@/components/projects/detail/project-progress-card";
 import { RecentActivityCard } from "@/components/projects/detail/recent-activity-card";
 import { TasksOverviewCard } from "@/components/projects/detail/tasks-overview-card";
@@ -28,6 +29,9 @@ import {
   type ProjectOverviewFormData,
 } from "@/components/projects/edit-project-overview-modal";
 import { formatProjectDetailMoney } from "@/lib/project-detail-mock";
+import { computeProjectCompletionChecklist } from "@/lib/project-completion";
+import { logProjectActivity } from "@/lib/project-activity";
+import { createClient } from "@/lib/supabase";
 import {
   PRE_INVOICE_WORKFLOW_STEPS,
   type ProjectWorkflowStep,
@@ -188,6 +192,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
   const startDateInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -228,6 +233,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
 
   const projectStarted =
     liveStatus === "in_progress" || liveStatus === "completed";
+  const projectClosed = liveStatus === "completed";
   const materialsReceived = Boolean(liveOrder?.materials_received_at);
   const canStartProject =
     liveStartConfirmed &&
@@ -236,6 +242,29 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     liveStatus !== "completed";
 
   const completionPercent = computeTaskCompletionPercent(tasks);
+  const completionChecklist = useMemo(
+    () =>
+      computeProjectCompletionChecklist({
+        tasks,
+        materialOrders,
+        payments,
+        expenses,
+        changeOrders,
+        timeEntries,
+        quoteAmount,
+        depositAmount,
+      }),
+    [
+      tasks,
+      materialOrders,
+      payments,
+      expenses,
+      changeOrders,
+      timeEntries,
+      quoteAmount,
+      depositAmount,
+    ]
+  );
   const orderMaterialsHref = `/dashboard/customers/${customerId}/projects/${projectId}/order-materials`;
   const projectsListHref = "/dashboard/quotes";
   const statusBadgeLabel = projectStarted
@@ -581,6 +610,56 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     setActionSuccess("Saved as draft.");
   }
 
+  async function handleCloseProject() {
+    if (projectClosed || !completionChecklist.allComplete) return;
+
+    setActionBusy("close_project");
+    setCloseError(null);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const completedAt = new Date().toISOString();
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setCloseError("You must be logged in.");
+      setActionBusy(null);
+      return;
+    }
+
+    const { error: updateError } = await supabase
+      .from("projects")
+      .update({
+        status: "completed",
+        completed_at: completedAt,
+        updated_at: completedAt,
+      })
+      .eq("id", projectId);
+
+    if (updateError) {
+      const hint =
+        updateError.message?.includes("completed_at") ||
+        updateError.message?.includes("column")
+          ? " Run migration 035_project_completed_at.sql in Supabase."
+          : "";
+      setCloseError(`Failed to close project.${hint}`);
+      setActionBusy(null);
+      return;
+    }
+
+    setLiveStatus("completed");
+    await logProjectActivity(supabase, {
+      userId: user.id,
+      projectId,
+      activityType: "project_completed",
+      description: "Project closed — all completion checklist items satisfied",
+    });
+    setActionSuccess("Project closed. Records are now read-only.");
+    setActionBusy(null);
+  }
+
   function handleNextStep() {
     if (!nextActiveStep) return;
     const stepId: WorkflowStepId = nextActiveStep.id;
@@ -647,9 +726,11 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               </h1>
               <span
                 className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ring-1 ${
-                  projectStarted
-                    ? "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30"
-                    : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                  liveStatus === "completed"
+                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                    : projectStarted
+                      ? "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30"
+                      : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
                 }`}
               >
                 {statusBadgeLabel}
@@ -702,7 +783,8 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                       setMoreOpen(false);
                       setOverviewEditOpen(true);
                     }}
-                    className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                    disabled={projectClosed}
+                    className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Edit overview
                   </button>
@@ -770,13 +852,15 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                     Project Overview
                   </h2>
-                  <button
-                    type="button"
-                    onClick={() => setOverviewEditOpen(true)}
-                    className="text-xs font-semibold text-accent hover:text-blue-400"
-                  >
-                    Edit
-                  </button>
+                  {!projectClosed ? (
+                    <button
+                      type="button"
+                      onClick={() => setOverviewEditOpen(true)}
+                      className="text-xs font-semibold text-accent hover:text-blue-400"
+                    >
+                      Edit
+                    </button>
+                  ) : null}
                 </div>
                 <p className="mt-3 text-sm leading-relaxed text-slate-300">
                   {liveDescription || "No description yet."}
@@ -817,23 +901,27 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                 projectId={projectId}
                 materialOrder={liveOrder}
                 projectMaterials={projectMaterials}
+                readOnly={projectClosed}
               />
               <TasksOverviewCard
                 projectId={projectId}
                 initialTasks={tasks}
                 employees={allEmployees}
                 onTasksChange={setTasks}
+                readOnly={projectClosed}
               />
               <ExpensesCard
                 projectId={projectId}
                 initialExpenses={expenses}
                 onExpensesChange={setExpenses}
+                readOnly={projectClosed}
               />
               <TeamTimeCard
                 projectId={projectId}
                 assignedEmployees={props.assignedEmployees}
                 initialEntries={timeEntries}
                 onEntriesChange={setTimeEntries}
+                readOnly={projectClosed}
               />
             </div>
             <div className="space-y-5 xl:col-span-4">
@@ -847,6 +935,16 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                 projectId={projectId}
                 endDate={liveEndDate}
                 onEndDateSaved={setLiveEndDate}
+                readOnly={projectClosed}
+              />
+              <ProjectCompletionChecklistCard
+                items={completionChecklist.items}
+                remainingCount={completionChecklist.remainingCount}
+                allComplete={completionChecklist.allComplete}
+                projectClosed={projectClosed}
+                closing={actionBusy === "close_project"}
+                error={closeError}
+                onCloseProject={() => void handleCloseProject()}
               />
               <FinancialSummaryCard
                 projectId={projectId}
@@ -860,8 +958,12 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
                 onPaymentAdded={(payment) =>
                   setPayments((current) => [payment, ...current])
                 }
+                readOnly={projectClosed}
               />
-              <ProjectAssignedEmployees projectId={projectId} />
+              <ProjectAssignedEmployees
+                projectId={projectId}
+                readOnly={projectClosed}
+              />
               <RecentActivityCard activities={activities} />
             </div>
           </div>
@@ -876,14 +978,20 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               Back to Projects
             </Link>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={handleSaveAsDraft}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
-              >
-                Save as Draft
-              </button>
-              {nextStepLabel ? (
+              {!projectClosed ? (
+                <button
+                  type="button"
+                  onClick={handleSaveAsDraft}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-slate-200 transition hover:bg-white/10"
+                >
+                  Save as Draft
+                </button>
+              ) : null}
+              {projectClosed ? (
+                <span className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-500/15 px-4 text-sm font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+                  Project Closed
+                </span>
+              ) : nextStepLabel ? (
                 <button
                   type="button"
                   disabled={Boolean(actionBusy)}

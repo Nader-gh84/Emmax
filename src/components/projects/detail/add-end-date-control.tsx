@@ -14,10 +14,12 @@ export function AddEndDateControl({
   projectId,
   endDate,
   onEndDateSaved,
+  readOnly = false,
 }: {
   projectId: string;
   endDate: string | null;
   onEndDateSaved?: (endDate: string) => void;
+  readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(endDate ?? "");
@@ -26,6 +28,7 @@ export function AddEndDateControl({
 
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     if (!value) {
       setError("Choose an end date.");
       return;
@@ -49,6 +52,14 @@ export function AddEndDateControl({
     onEndDateSaved?.(value);
     setOpen(false);
     setBusy(false);
+  }
+
+  if (readOnly) {
+    return (
+      <p className="text-xs text-slate-500">
+        {endDate ? `End ${formatProjectDate(endDate)}` : "No end date set"}
+      </p>
+    );
   }
 
   if (!open) {

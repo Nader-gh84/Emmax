@@ -20,6 +20,8 @@ export interface Project {
   project_manager: string | null;
   address: string | null;
   deposit_amount?: number | null;
+  /** Set when closed via the completion checklist. */
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
 }
