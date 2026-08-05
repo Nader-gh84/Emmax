@@ -51,12 +51,14 @@ export interface CustomerDetailsViewModel {
     projects: number;
     documents: number;
     financial: number;
+    payments: number;
     locations: number;
     notes: number;
   };
+  /** Real rollup when wired; null hides the banner. */
   outstanding: {
-    overdueInvoiceCount: number;
-    totalOverdue: number;
+    projectCount: number;
+    totalOutstanding: number;
   } | null;
   locations: CustomerLocation[];
   recentActivity: CustomerActivityItem[];
@@ -102,14 +104,13 @@ export function buildMockCustomerDetails(input?: {
     counts: {
       projects: 4,
       documents: 12,
-      financial: 7,
+      financial: 0,
+      payments: 0,
       locations: 2,
       notes: 3,
     },
-    outstanding: {
-      overdueInvoiceCount: 2,
-      totalOverdue: 4280,
-    },
+    // Banner is wired from real project financials on the route — stay hidden in mock.
+    outstanding: null,
     locations: [
       {
         id: "loc-1",
@@ -168,7 +169,7 @@ export const CUSTOMER_DETAILS_TABS: {
   { id: "projects", label: "Projects", countKey: "projects" },
   { id: "documents", label: "Documents", countKey: "documents" },
   { id: "financial", label: "Financial", countKey: "financial" },
-  { id: "payments", label: "Payments" },
+  { id: "payments", label: "Payments", countKey: "payments" },
   { id: "locations", label: "Locations", countKey: "locations" },
   { id: "timeline", label: "Timeline" },
   { id: "notes", label: "Notes", countKey: "notes" },
