@@ -12,11 +12,15 @@ import { createClient } from "@/lib/supabase";
 import {
   EMPTY_SUPPLIER_FORM,
   ORDER_METHODS,
+  PAYMENT_TERMS_OPTIONS,
+  isSupplierPaymentTermsType,
   type Supplier,
   type SupplierFormData,
+  type SupplierPaymentTermsType,
 } from "@/types/supplier";
 
 function supplierToForm(supplier: Supplier): SupplierFormData {
+  const terms = supplier.payment_terms_type;
   return {
     supplier_name: supplier.supplier_name,
     contact_person: supplier.contact_person ?? "",
@@ -24,7 +28,28 @@ function supplierToForm(supplier: Supplier): SupplierFormData {
     phone: supplier.phone ?? "",
     location: supplier.location ?? "",
     preferred_order_method: supplier.preferred_order_method ?? "",
+    credit_limit:
+      supplier.credit_limit != null && !Number.isNaN(Number(supplier.credit_limit))
+        ? String(supplier.credit_limit)
+        : "",
+    minimum_monthly_payment:
+      supplier.minimum_monthly_payment != null &&
+      !Number.isNaN(Number(supplier.minimum_monthly_payment))
+        ? String(supplier.minimum_monthly_payment)
+        : "",
+    payment_terms_type: isSupplierPaymentTermsType(String(terms ?? ""))
+      ? (terms as SupplierPaymentTermsType)
+      : "net_30",
+    default_account_number: supplier.default_account_number ?? "",
   };
+}
+
+function parseOptionalMoney(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number.parseFloat(trimmed);
+  if (Number.isNaN(parsed) || parsed < 0) return null;
+  return parsed;
 }
 
 function formToPayload(form: SupplierFormData) {
@@ -35,6 +60,12 @@ function formToPayload(form: SupplierFormData) {
     phone: form.phone.trim() || null,
     location: form.location.trim() || null,
     preferred_order_method: form.preferred_order_method.trim() || null,
+    credit_limit: parseOptionalMoney(form.credit_limit),
+    minimum_monthly_payment: parseOptionalMoney(form.minimum_monthly_payment),
+    payment_terms_type: isSupplierPaymentTermsType(form.payment_terms_type)
+      ? form.payment_terms_type
+      : "net_30",
+    default_account_number: form.default_account_number.trim() || null,
   };
 }
 
@@ -192,6 +223,95 @@ function SupplierFormModal({
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="supplier-payment-terms"
+              className="block text-base font-medium text-slate-300"
+            >
+              Payment Terms
+            </label>
+            <select
+              id="supplier-payment-terms"
+              value={form.payment_terms_type}
+              onChange={(event) =>
+                updateField("payment_terms_type", event.target.value)
+              }
+              className={`${touchInput} mt-1.5 appearance-none`}
+            >
+              {PAYMENT_TERMS_OPTIONS.map((option) => (
+                <option
+                  key={option.id}
+                  value={option.id}
+                  className="bg-navy text-white"
+                >
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="supplier-account-number"
+              className="block text-base font-medium text-slate-300"
+            >
+              Default Account #
+            </label>
+            <input
+              id="supplier-account-number"
+              type="text"
+              value={form.default_account_number}
+              onChange={(event) =>
+                updateField("default_account_number", event.target.value)
+              }
+              className={`${touchInput} mt-1.5`}
+              placeholder="Optional"
+            />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="supplier-credit-limit"
+                className="block text-base font-medium text-slate-300"
+              >
+                Credit Limit
+              </label>
+              <input
+                id="supplier-credit-limit"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.credit_limit}
+                onChange={(event) =>
+                  updateField("credit_limit", event.target.value)
+                }
+                className={`${touchInput} mt-1.5`}
+                placeholder="Optional"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="supplier-min-monthly"
+                className="block text-base font-medium text-slate-300"
+              >
+                Min. Monthly Payment
+              </label>
+              <input
+                id="supplier-min-monthly"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.minimum_monthly_payment}
+                onChange={(event) =>
+                  updateField("minimum_monthly_payment", event.target.value)
+                }
+                className={`${touchInput} mt-1.5`}
+                placeholder="Optional"
+              />
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
@@ -366,7 +486,13 @@ export default function SuppliersPage() {
         .eq("user_id", user.id);
 
       if (updateError) {
-        setError("Failed to update supplier. Please try again.");
+        const hint =
+          updateError.message?.includes("credit_limit") ||
+          updateError.message?.includes("payment_terms_type") ||
+          updateError.message?.includes("column")
+            ? " Run migration 036_supplier_accounting.sql in Supabase."
+            : "";
+        setError(`Failed to update supplier.${hint}`);
         setIsSaving(false);
         return;
       }
@@ -379,7 +505,13 @@ export default function SuppliersPage() {
       });
 
       if (insertError) {
-        setError("Failed to add supplier. Please try again.");
+        const hint =
+          insertError.message?.includes("credit_limit") ||
+          insertError.message?.includes("payment_terms_type") ||
+          insertError.message?.includes("column")
+            ? " Run migration 036_supplier_accounting.sql in Supabase."
+            : "";
+        setError(`Failed to add supplier.${hint}`);
         setIsSaving(false);
         return;
       }
