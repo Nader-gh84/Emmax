@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EmployeeDetailsPage } from "@/components/employees/employee-details-page";
 import { buildEmployeeDetailsViewModel } from "@/lib/employee-details";
-import { ensureLabourInvoiceForTimeEntry } from "@/lib/labour-invoice";
+import { backfillLabourInvoicesForEmployee } from "@/lib/labour-invoice";
 import type {
   LabourInvoiceRow,
   LabourPaymentAllocationRow,
@@ -16,11 +16,8 @@ export const metadata: Metadata = {
   title: "Employee Details",
 };
 
-type InvoiceQueryRow = LabourInvoiceRow & {
-  projects?: {
-    project_name?: string | null;
-  } | null;
-};
+/** Always run backfill on load — do not cache a pre-invoice empty state. */
+export const dynamic = "force-dynamic";
 
 function normalizeEmployee(row: Record<string, unknown>): Employee {
   const payType = String(row.pay_type ?? "hourly");
@@ -88,56 +85,61 @@ export default async function EmployeeDetailsRoute({
     );
   }
 
-  // Backfill: attach unlinked hourly time entries to pay-period invoices.
-  const { data: timeEntries, error: timeEntriesError } = await supabase
-    .from("time_entries")
-    .select("id")
-    .eq("employee_id", employeeRow.id);
-
-  if (timeEntriesError) {
-    console.error(
-      "[EmployeeDetails] time_entries query failed:",
-      timeEntriesError.message
-    );
-  }
-
-  const entryIds = ((timeEntries as { id: string }[] | null) ?? []).map(
-    (row) => row.id
+  // Backfill: attach every unlinked hourly time entry to a pay-period invoice
+  // (same idea as supplier detail backfill for confirmed material orders).
+  const backfill = await backfillLabourInvoicesForEmployee(
+    supabase,
+    employeeRow.id
   );
 
-  if (entryIds.length > 0) {
-    const { data: linkedRows } = await supabase
-      .from("labour_invoice_time_entries")
-      .select("time_entry_id")
-      .in("time_entry_id", entryIds);
-
-    const linked = new Set(
-      (
-        (linkedRows as { time_entry_id: string }[] | null) ?? []
-      ).map((row) => row.time_entry_id)
+  if (!backfill.ok) {
+    console.error(
+      "[EmployeeDetails] labour invoice backfill failed:",
+      backfill.error
     );
-
-    const missing = entryIds.filter((id) => !linked.has(id));
-    for (const entryId of missing) {
-      await ensureLabourInvoiceForTimeEntry(supabase, entryId);
-    }
+  } else if (backfill.attached > 0) {
+    console.info(
+      `[EmployeeDetails] backfilled ${backfill.attached} time entr${
+        backfill.attached === 1 ? "y" : "ies"
+      } for employee ${employeeRow.id}`
+    );
+  } else if (backfill.reason) {
+    console.info(
+      `[EmployeeDetails] backfill skipped (${backfill.reason}) for employee ${employeeRow.id}`
+    );
   }
 
-  const [
-    { data: invoiceData, error: invoicesError },
-    { data: paymentData, error: paymentsError },
-  ] = await Promise.all([
-    supabase
-      .from("labour_invoices")
-      .select("*, projects(project_name)")
-      .eq("employee_id", employeeRow.id)
-      .order("invoice_date", { ascending: false }),
-    supabase
-      .from("labour_payments")
-      .select("*")
-      .eq("employee_id", employeeRow.id)
-      .order("payment_date", { ascending: false }),
-  ]);
+  let backfillNotice: string | null = null;
+  if (backfill.reason === "missing_pay_rate") {
+    backfillNotice =
+      "Set an hourly pay rate for this employee to generate labour invoices from logged time.";
+  } else if (backfill.reason === "salary_employee_skipped") {
+    backfillNotice =
+      "Labour invoices are created for hourly employees only (salary payroll comes later).";
+  } else if (!backfill.ok && backfill.error) {
+    backfillNotice = backfill.error.includes(
+      "backfill_labour_invoices_for_employee"
+    )
+      ? "Could not backfill labour invoices. Run migration 038_labour_invoice_backfill.sql in Supabase."
+      : `Labour invoice backfill failed: ${backfill.error}`;
+  }
+
+  // Prefer a plain select — avoid failing the whole list if the projects embed
+  // is missing from the PostgREST schema cache after migration.
+  const {
+    data: invoiceData,
+    error: invoicesError,
+  } = await supabase
+    .from("labour_invoices")
+    .select("*")
+    .eq("employee_id", employeeRow.id)
+    .order("invoice_date", { ascending: false });
+
+  const { data: paymentData, error: paymentsError } = await supabase
+    .from("labour_payments")
+    .select("*")
+    .eq("employee_id", employeeRow.id)
+    .order("payment_date", { ascending: false });
 
   if (invoicesError) {
     console.error(
@@ -152,10 +154,32 @@ export default async function EmployeeDetailsRoute({
     );
   }
 
-  const invoiceRows = (invoiceData as InvoiceQueryRow[] | null) ?? [];
+  const invoiceRows = (invoiceData as LabourInvoiceRow[] | null) ?? [];
   const paymentRows = ((paymentData as LabourPaymentRow[] | null) ?? []).map(
     (row) => ({ ...row, amount: Number(row.amount) || 0 })
   );
+
+  const projectIds = Array.from(
+    new Set(
+      invoiceRows
+        .map((row) => row.project_id)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const projectNames: Record<string, string> = {};
+  if (projectIds.length > 0) {
+    const { data: projectData } = await supabase
+      .from("projects")
+      .select("id, project_name")
+      .in("id", projectIds);
+    for (const project of (projectData as
+      | { id: string; project_name: string | null }[]
+      | null) ?? []) {
+      projectNames[project.id] =
+        project.project_name?.trim() || "Untitled project";
+    }
+  }
 
   const invoiceIds = invoiceRows.map((row) => row.id);
   let allocationRows: LabourPaymentAllocationRow[] = [];
@@ -179,22 +203,12 @@ export default async function EmployeeDetailsRoute({
     }));
   }
 
-  const projectNames: Record<string, string> = {};
-  for (const row of invoiceRows) {
-    if (!row.project_id) continue;
-    const name = row.projects?.project_name?.trim();
-    projectNames[row.project_id] = name || "Untitled project";
-  }
-
-  const invoices: LabourInvoiceRow[] = invoiceRows.map((row) => {
-    const { projects: _projects, ...invoice } = row;
-    return {
-      ...invoice,
-      amount: Number(invoice.amount) || 0,
-      status:
-        invoice.status === "confirmed" ? "confirmed" : "pending_confirmation",
-    };
-  });
+  const invoices: LabourInvoiceRow[] = invoiceRows.map((row) => ({
+    ...row,
+    amount: Number(row.amount) || 0,
+    status:
+      row.status === "confirmed" ? "confirmed" : "pending_confirmation",
+  }));
 
   const details = buildEmployeeDetailsViewModel({
     employee: employeeRow,
@@ -204,5 +218,7 @@ export default async function EmployeeDetailsRoute({
     projectNames,
   });
 
-  return <EmployeeDetailsPage employee={details} />;
+  return (
+    <EmployeeDetailsPage employee={details} backfillNotice={backfillNotice} />
+  );
 }
