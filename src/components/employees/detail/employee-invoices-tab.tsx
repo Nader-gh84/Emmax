@@ -1,0 +1,269 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { touchInput } from "@/components/quotes/ui";
+import {
+  formatEmployeeDate,
+  formatEmployeeMoney,
+  labourInvoiceStatusClass,
+  labourInvoiceStatusLabel,
+  type LabourInvoice,
+  type LabourInvoiceStatus,
+} from "@/lib/employee-details";
+
+const STATUS_FILTERS: { id: "all" | LabourInvoiceStatus; label: string }[] = [
+  { id: "all", label: "All statuses" },
+  { id: "pending_confirmation", label: "Pending review" },
+  { id: "paid", label: "Paid" },
+  { id: "partial", label: "Partial" },
+  { id: "unpaid", label: "Unpaid" },
+  { id: "overdue", label: "Overdue" },
+];
+
+const PAGE_SIZE = 5;
+
+export function EmployeeInvoicesTab({
+  invoices,
+}: {
+  invoices: LabourInvoice[];
+}) {
+  const [statusFilter, setStatusFilter] = useState<"all" | LabourInvoiceStatus>(
+    "all"
+  );
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    return invoices.filter((invoice) => {
+      if (statusFilter !== "all" && invoice.status !== statusFilter) {
+        return false;
+      }
+      if (dateFrom && invoice.invoiceDate < dateFrom) return false;
+      if (dateTo && invoice.invoiceDate > dateTo) return false;
+      if (!query) return true;
+      return (
+        invoice.invoiceNumber.toLowerCase().includes(query) ||
+        invoice.projectName.toLowerCase().includes(query) ||
+        `${invoice.periodStart} ${invoice.periodEnd}`.includes(query)
+      );
+    });
+  }, [invoices, statusFilter, dateFrom, dateTo, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(
+    safePage * PAGE_SIZE,
+    safePage * PAGE_SIZE + PAGE_SIZE
+  );
+
+  const totals = useMemo(
+    () =>
+      filtered.reduce(
+        (acc, row) => ({
+          amount: acc.amount + row.amount,
+          paid: acc.paid + row.paid,
+          balance: acc.balance + row.balance,
+        }),
+        { amount: 0, paid: 0, balance: 0 }
+      ),
+    [filtered]
+  );
+
+  function resetPageOnFilter() {
+    setPage(0);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
+        <label className="min-w-[10rem] flex-1">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Status
+          </span>
+          <select
+            value={statusFilter}
+            onChange={(event) => {
+              setStatusFilter(event.target.value as "all" | LabourInvoiceStatus);
+              resetPageOnFilter();
+            }}
+            className={`${touchInput} w-full`}
+          >
+            {STATUS_FILTERS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="min-w-[9rem] flex-1">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            From
+          </span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(event) => {
+              setDateFrom(event.target.value);
+              resetPageOnFilter();
+            }}
+            className={`${touchInput} w-full`}
+          />
+        </label>
+        <label className="min-w-[9rem] flex-1">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            To
+          </span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(event) => {
+              setDateTo(event.target.value);
+              resetPageOnFilter();
+            }}
+            className={`${touchInput} w-full`}
+          />
+        </label>
+        <label className="min-w-[12rem] flex-[1.4]">
+          <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            Search
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              resetPageOnFilter();
+            }}
+            placeholder="Invoice, project, period…"
+            className={`${touchInput} w-full`}
+          />
+        </label>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.02]">
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 font-semibold">Invoice #</th>
+              <th className="px-3 py-3 font-semibold">Pay period</th>
+              <th className="px-3 py-3 font-semibold">Project</th>
+              <th className="px-3 py-3 font-semibold">Date</th>
+              <th className="px-3 py-3 font-semibold">Due Date</th>
+              <th className="px-3 py-3 text-right font-semibold">Amount</th>
+              <th className="px-3 py-3 text-right font-semibold">Paid</th>
+              <th className="px-3 py-3 text-right font-semibold">Balance</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="px-4 py-8 text-center text-sm text-slate-500"
+                >
+                  No labour invoices yet. Log hourly time with a pay rate to
+                  create a pending pay-period invoice.
+                </td>
+              </tr>
+            ) : (
+              pageRows.map((invoice) => (
+                <tr
+                  key={invoice.id}
+                  className="border-b border-white/5 text-slate-300"
+                >
+                  <td className="px-4 py-3 font-medium text-white">
+                    {invoice.invoiceNumber}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    {formatEmployeeDate(invoice.periodStart)} –{" "}
+                    {formatEmployeeDate(invoice.periodEnd)}
+                  </td>
+                  <td className="max-w-[10rem] truncate px-3 py-3">
+                    {invoice.projectName}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    {formatEmployeeDate(invoice.invoiceDate)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3">
+                    {formatEmployeeDate(invoice.dueDate)}
+                  </td>
+                  <td className="px-3 py-3 text-right text-white">
+                    {formatEmployeeMoney(invoice.amount)}
+                  </td>
+                  <td className="px-3 py-3 text-right">
+                    {formatEmployeeMoney(invoice.paid)}
+                  </td>
+                  <td className="px-3 py-3 text-right font-medium text-white">
+                    {formatEmployeeMoney(invoice.balance)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${labourInvoiceStatusClass(
+                        invoice.status
+                      )}`}
+                    >
+                      {labourInvoiceStatusLabel(invoice.status)}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-white/10 bg-white/[0.03] text-sm font-semibold text-white">
+              <td className="px-4 py-3" colSpan={5}>
+                Totals ({filtered.length} invoice
+                {filtered.length === 1 ? "" : "s"})
+              </td>
+              <td className="px-3 py-3 text-right">
+                {formatEmployeeMoney(totals.amount)}
+              </td>
+              <td className="px-3 py-3 text-right">
+                {formatEmployeeMoney(totals.paid)}
+              </td>
+              <td className="px-3 py-3 text-right">
+                {formatEmployeeMoney(totals.balance)}
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">
+          Showing {filtered.length === 0 ? 0 : safePage * PAGE_SIZE + 1}–
+          {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of{" "}
+          {filtered.length}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={safePage <= 0}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+            className="inline-flex min-h-[36px] items-center rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-slate-400">
+            Page {safePage + 1} / {pageCount}
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= pageCount - 1}
+            onClick={() =>
+              setPage((current) => Math.min(pageCount - 1, current + 1))
+            }
+            className="inline-flex min-h-[36px] items-center rounded-xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-slate-300 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
