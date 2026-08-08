@@ -74,8 +74,10 @@ function ContactChip({
 
 export function EmployeeDetailsPage({
   employee,
+  backfillNotice = null,
 }: {
   employee: EmployeeDetailsViewModel;
+  backfillNotice?: string | null;
 }) {
   const [activeTab, setActiveTab] = useState<EmployeeDetailsTab>("invoices");
 
@@ -191,6 +193,17 @@ export function EmployeeDetailsPage({
           </div>
         </div>
       </div>
+
+      {backfillNotice ? (
+        <div className="px-4 pt-4 sm:px-6 lg:px-8">
+          <p
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+            role="status"
+          >
+            {backfillNotice}
+          </p>
+        </div>
+      ) : null}
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <EmployeeSummaryCards summary={employee.summary} />
