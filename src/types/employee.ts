@@ -1,5 +1,7 @@
 export type EmployeePayType = "hourly" | "salary";
 
+export type EmployeePayPeriodType = "weekly" | "biweekly" | "monthly";
+
 export interface Employee {
   id: string;
   user_id: string;
@@ -10,6 +12,7 @@ export interface Employee {
   hire_date: string | null;
   pay_rate: number | null;
   pay_type: EmployeePayType;
+  pay_period_type: EmployeePayPeriodType;
   address_street: string | null;
   address_city: string | null;
   address_province: string | null;
@@ -26,6 +29,7 @@ export interface EmployeeFormData {
   hire_date: string;
   pay_rate: string;
   pay_type: EmployeePayType;
+  pay_period_type: EmployeePayPeriodType;
   address_street: string;
   address_city: string;
   address_province: string;
@@ -40,6 +44,7 @@ export const EMPTY_EMPLOYEE_FORM: EmployeeFormData = {
   hire_date: "",
   pay_rate: "",
   pay_type: "hourly",
+  pay_period_type: "biweekly",
   address_street: "",
   address_city: "",
   address_province: "",
@@ -54,8 +59,38 @@ export const EMPLOYEE_PAY_TYPES: {
   { id: "salary", label: "Fixed / Salary" },
 ];
 
+export const EMPLOYEE_PAY_PERIOD_TYPES: {
+  id: EmployeePayPeriodType;
+  label: string;
+}[] = [
+  { id: "weekly", label: "Weekly" },
+  { id: "biweekly", label: "Biweekly" },
+  { id: "monthly", label: "Monthly" },
+];
+
 export function isEmployeePayType(value: string): value is EmployeePayType {
   return value === "hourly" || value === "salary";
+}
+
+export function isEmployeePayPeriodType(
+  value: string
+): value is EmployeePayPeriodType {
+  return value === "weekly" || value === "biweekly" || value === "monthly";
+}
+
+export function formatPayPeriodType(
+  value: EmployeePayPeriodType | string | null | undefined
+): string {
+  switch (value) {
+    case "weekly":
+      return "Weekly";
+    case "biweekly":
+      return "Biweekly";
+    case "monthly":
+      return "Monthly";
+    default:
+      return "Biweekly";
+  }
 }
 
 export function formatEmployeeAddress(employee: {
@@ -101,6 +136,9 @@ export function employeeToForm(employee: Employee): EmployeeFormData {
     pay_type: isEmployeePayType(employee.pay_type)
       ? employee.pay_type
       : "hourly",
+    pay_period_type: isEmployeePayPeriodType(employee.pay_period_type)
+      ? employee.pay_period_type
+      : "biweekly",
     address_street: employee.address_street ?? "",
     address_city: employee.address_city ?? "",
     address_province: employee.address_province ?? "",
@@ -122,6 +160,7 @@ export function employeeFormToPayload(form: EmployeeFormData) {
     pay_rate:
       payRate == null || Number.isNaN(payRate) ? null : payRate,
     pay_type: form.pay_type,
+    pay_period_type: form.pay_period_type,
     address_street: form.address_street.trim() || null,
     address_city: form.address_city.trim() || null,
     address_province: form.address_province.trim() || null,
