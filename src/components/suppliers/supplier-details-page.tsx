@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   IconMail,
@@ -12,6 +13,7 @@ import {
 } from "@/components/suppliers/detail/supplier-account-sidebar";
 import { SupplierDocumentsSection } from "@/components/suppliers/detail/supplier-documents-section";
 import { SupplierInvoicesTab } from "@/components/suppliers/detail/supplier-invoices-tab";
+import { RecordSupplierPaymentModal } from "@/components/suppliers/detail/record-supplier-payment-modal";
 import { SupplierSummaryCards } from "@/components/suppliers/detail/supplier-summary-cards";
 import {
   touchBtnPrimary,
@@ -22,7 +24,13 @@ import {
   getSupplierInitials,
   type SupplierDetailsTab,
   type SupplierDetailsViewModel,
+  type SupplierInvoice,
 } from "@/lib/supplier-details-mock";
+import {
+  confirmSupplierInvoice,
+  recordSupplierPayment,
+} from "@/lib/supplier-payment-actions";
+import { createClient } from "@/lib/supabase";
 
 function IconMapPin({ className }: { className?: string }) {
   return (
@@ -80,11 +88,100 @@ export function SupplierDetailsPage({
 }: {
   supplier: SupplierDetailsViewModel;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<SupplierDetailsTab>("invoices");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [preselectedInvoiceIds, setPreselectedInvoiceIds] = useState<string[]>(
+    []
+  );
+
   const initials = useMemo(
     () => getSupplierInitials(supplier.name),
     [supplier.name]
   );
+
+  function openPaymentModal(invoice?: SupplierInvoice) {
+    setPaymentError(null);
+    setActionError(null);
+    setPreselectedInvoiceIds(invoice ? [invoice.id] : []);
+    setPaymentModalOpen(true);
+  }
+
+  async function handleConfirmInvoice(invoice: SupplierInvoice) {
+    if (invoice.dbStatus !== "pending_confirmation") return;
+    setConfirmingId(invoice.id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const supabase = createClient();
+    const result = await confirmSupplierInvoice(supabase, {
+      invoiceId: invoice.id,
+      supplierId: supplier.id,
+    });
+
+    setConfirmingId(null);
+
+    if (!result.ok) {
+      setActionError(result.error);
+      return;
+    }
+
+    setActionSuccess(`Invoice ${invoice.invoiceNumber} confirmed.`);
+    router.refresh();
+  }
+
+  async function handleRecordPayment(input: {
+    amount: number;
+    paymentDate: string;
+    paymentMethod: string;
+    referenceNumber: string;
+    notes: string;
+    selectedInvoiceIds: string[];
+  }) {
+    setPaymentBusy(true);
+    setPaymentError(null);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setPaymentError("You must be logged in.");
+      setPaymentBusy(false);
+      return;
+    }
+
+    const result = await recordSupplierPayment(supabase, {
+      supplierId: supplier.id,
+      userId: user.id,
+      amount: input.amount,
+      paymentDate: input.paymentDate,
+      paymentMethod: input.paymentMethod,
+      referenceNumber: input.referenceNumber,
+      notes: input.notes,
+      selectedInvoiceIds: input.selectedInvoiceIds,
+      invoices: supplier.invoices,
+    });
+
+    setPaymentBusy(false);
+
+    if (!result.ok) {
+      setPaymentError(result.error);
+      return;
+    }
+
+    setPaymentModalOpen(false);
+    setActionSuccess("Payment recorded.");
+    router.refresh();
+  }
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -193,12 +290,34 @@ export function SupplierDetailsPage({
             <button type="button" className={touchBtnSecondary}>
               Edit Supplier
             </button>
-            <button type="button" className={touchBtnPrimary}>
+            <button
+              type="button"
+              onClick={() => openPaymentModal()}
+              className={touchBtnPrimary}
+            >
               + Record Payment
             </button>
           </div>
         </div>
       </div>
+
+      {(actionError || actionSuccess) && (
+        <div className="px-4 pt-4 sm:px-6 lg:px-8">
+          {actionError ? (
+            <p
+              className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+              role="alert"
+            >
+              {actionError}
+            </p>
+          ) : null}
+          {actionSuccess ? (
+            <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              {actionSuccess}
+            </p>
+          ) : null}
+        </div>
+      )}
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <SupplierSummaryCards summary={supplier.summary} />
@@ -229,10 +348,20 @@ export function SupplierDetailsPage({
 
             <div>
               {activeTab === "invoices" ? (
-                <SupplierInvoicesTab invoices={supplier.invoices} />
+                <SupplierInvoicesTab
+                  invoices={supplier.invoices}
+                  confirmingId={confirmingId}
+                  onConfirmInvoice={(invoice) =>
+                    void handleConfirmInvoice(invoice)
+                  }
+                  onRecordPayment={(invoice) => openPaymentModal(invoice)}
+                />
               ) : null}
               {activeTab === "payments" ? (
-                <SupplierPaymentsPlaceholder payments={supplier.payments} />
+                <SupplierPaymentsPlaceholder
+                  payments={supplier.payments}
+                  onRecordPayment={() => openPaymentModal()}
+                />
               ) : null}
               {activeTab === "statements" ||
               activeTab === "documents" ||
@@ -259,13 +388,25 @@ export function SupplierDetailsPage({
               summary={supplier.summary}
               payments={supplier.payments}
               onViewAllPayments={() => setActiveTab("payments")}
-              onRecordPayment={() => setActiveTab("payments")}
+              onRecordPayment={() => openPaymentModal()}
             />
           </div>
         </div>
 
         <SupplierDocumentsSection documents={supplier.documents} />
       </div>
+
+      <RecordSupplierPaymentModal
+        open={paymentModalOpen}
+        invoices={supplier.invoices}
+        initialSelectedInvoiceIds={preselectedInvoiceIds}
+        busy={paymentBusy}
+        error={paymentError}
+        onClose={() => {
+          if (!paymentBusy) setPaymentModalOpen(false);
+        }}
+        onSubmit={handleRecordPayment}
+      />
     </div>
   );
 }

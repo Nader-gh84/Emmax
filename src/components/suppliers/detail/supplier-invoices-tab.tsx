@@ -25,8 +25,14 @@ const PAGE_SIZE = 5;
 
 export function SupplierInvoicesTab({
   invoices,
+  confirmingId = null,
+  onConfirmInvoice,
+  onRecordPayment,
 }: {
   invoices: SupplierInvoice[];
+  confirmingId?: string | null;
+  onConfirmInvoice?: (invoice: SupplierInvoice) => void;
+  onRecordPayment?: (invoice?: SupplierInvoice) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"all" | SupplierInvoiceStatus>(
     "all"
@@ -211,30 +217,65 @@ export function SupplierInvoicesTab({
                     </span>
                   </td>
                   <td className="relative px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOpenMenuId((current) =>
-                          current === invoice.id ? null : invoice.id
-                        )
-                      }
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"
-                      aria-label={`Actions for ${invoice.invoiceNumber}`}
-                    >
-                      <IconMore className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      {invoice.dbStatus === "pending_confirmation" ? (
+                        <button
+                          type="button"
+                          disabled={confirmingId === invoice.id}
+                          onClick={() => onConfirmInvoice?.(invoice)}
+                          className="inline-flex min-h-[32px] items-center rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-40"
+                        >
+                          {confirmingId === invoice.id ? "…" : "Confirm"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenMenuId((current) =>
+                            current === invoice.id ? null : invoice.id
+                          )
+                        }
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"
+                        aria-label={`Actions for ${invoice.invoiceNumber}`}
+                      >
+                        <IconMore className="h-4 w-4" />
+                      </button>
+                    </div>
                     {openMenuId === invoice.id ? (
-                      <div className="absolute right-4 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
-                        {["View", "Record payment", "Download"].map((item) => (
+                      <div className="absolute right-4 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+                        {invoice.dbStatus === "pending_confirmation" ? (
                           <button
-                            key={item}
                             type="button"
-                            onClick={() => setOpenMenuId(null)}
+                            disabled={confirmingId === invoice.id}
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              onConfirmInvoice?.(invoice);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+                          >
+                            Confirm invoice
+                          </button>
+                        ) : null}
+                        {invoice.dbStatus === "confirmed" &&
+                        invoice.balance > 0.009 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              onRecordPayment?.(invoice);
+                            }}
                             className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
                           >
-                            {item}
+                            Record payment
                           </button>
-                        ))}
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenuId(null)}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-500"
+                        >
+                          View details
+                        </button>
                       </div>
                     ) : null}
                   </td>
