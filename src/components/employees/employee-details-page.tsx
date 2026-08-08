@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   IconMail,
@@ -12,14 +13,24 @@ import {
 } from "@/components/employees/detail/employee-account-sidebar";
 import { EmployeeInvoicesTab } from "@/components/employees/detail/employee-invoices-tab";
 import { EmployeeSummaryCards } from "@/components/employees/detail/employee-summary-cards";
-import { touchBtnSecondary } from "@/components/quotes/ui";
+import { RecordLabourPaymentModal } from "@/components/employees/detail/record-labour-payment-modal";
+import {
+  touchBtnPrimary,
+  touchBtnSecondary,
+} from "@/components/quotes/ui";
 import {
   EMPLOYEE_DETAILS_TABS,
   formatEmployeeDate,
   getEmployeeInitials,
   type EmployeeDetailsTab,
   type EmployeeDetailsViewModel,
+  type LabourInvoice,
 } from "@/lib/employee-details";
+import {
+  confirmLabourInvoice,
+  recordLabourPayment,
+} from "@/lib/labour-payment-actions";
+import { createClient } from "@/lib/supabase";
 
 function IconMapPin({ className }: { className?: string }) {
   return (
@@ -79,12 +90,100 @@ export function EmployeeDetailsPage({
   employee: EmployeeDetailsViewModel;
   backfillNotice?: string | null;
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<EmployeeDetailsTab>("invoices");
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [preselectedInvoiceIds, setPreselectedInvoiceIds] = useState<string[]>(
+    []
+  );
 
   const initials = useMemo(
     () => getEmployeeInitials(employee.name),
     [employee.name]
   );
+
+  function openPaymentModal(invoice?: LabourInvoice) {
+    setPaymentError(null);
+    setActionError(null);
+    setPreselectedInvoiceIds(invoice ? [invoice.id] : []);
+    setPaymentModalOpen(true);
+  }
+
+  async function handleConfirmInvoice(invoice: LabourInvoice) {
+    if (invoice.dbStatus !== "pending_confirmation") return;
+    setConfirmingId(invoice.id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const supabase = createClient();
+    const result = await confirmLabourInvoice(supabase, {
+      invoiceId: invoice.id,
+      employeeId: employee.id,
+    });
+
+    setConfirmingId(null);
+
+    if (!result.ok) {
+      setActionError(result.error);
+      return;
+    }
+
+    setActionSuccess(`Invoice ${invoice.invoiceNumber} confirmed.`);
+    router.refresh();
+  }
+
+  async function handleRecordPayment(input: {
+    amount: number;
+    paymentDate: string;
+    paymentMethod: string;
+    referenceNumber: string;
+    notes: string;
+    selectedInvoiceIds: string[];
+  }) {
+    setPaymentBusy(true);
+    setPaymentError(null);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setPaymentError("You must be logged in.");
+      setPaymentBusy(false);
+      return;
+    }
+
+    const result = await recordLabourPayment(supabase, {
+      employeeId: employee.id,
+      userId: user.id,
+      amount: input.amount,
+      paymentDate: input.paymentDate,
+      paymentMethod: input.paymentMethod,
+      referenceNumber: input.referenceNumber,
+      notes: input.notes,
+      selectedInvoiceIds: input.selectedInvoiceIds,
+      invoices: employee.invoices,
+    });
+
+    setPaymentBusy(false);
+
+    if (!result.ok) {
+      setPaymentError(result.error);
+      return;
+    }
+
+    setPaymentModalOpen(false);
+    setActionSuccess("Payment recorded.");
+    router.refresh();
+  }
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -184,9 +283,8 @@ export function EmployeeDetailsPage({
             </Link>
             <button
               type="button"
-              disabled
-              title="Coming in the next payroll chunk"
-              className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-accent px-6 text-base font-semibold text-white opacity-50"
+              onClick={() => openPaymentModal()}
+              className={touchBtnPrimary}
             >
               + Record Payment
             </button>
@@ -194,16 +292,31 @@ export function EmployeeDetailsPage({
         </div>
       </div>
 
-      {backfillNotice ? (
-        <div className="px-4 pt-4 sm:px-6 lg:px-8">
-          <p
-            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
-            role="status"
-          >
-            {backfillNotice}
-          </p>
+      {(backfillNotice || actionError || actionSuccess) && (
+        <div className="space-y-2 px-4 pt-4 sm:px-6 lg:px-8">
+          {backfillNotice ? (
+            <p
+              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
+              role="status"
+            >
+              {backfillNotice}
+            </p>
+          ) : null}
+          {actionError ? (
+            <p
+              className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+              role="alert"
+            >
+              {actionError}
+            </p>
+          ) : null}
+          {actionSuccess ? (
+            <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              {actionSuccess}
+            </p>
+          ) : null}
         </div>
-      ) : null}
+      )}
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
         <EmployeeSummaryCards summary={employee.summary} />
@@ -234,10 +347,20 @@ export function EmployeeDetailsPage({
 
             <div>
               {activeTab === "invoices" ? (
-                <EmployeeInvoicesTab invoices={employee.invoices} />
+                <EmployeeInvoicesTab
+                  invoices={employee.invoices}
+                  confirmingId={confirmingId}
+                  onConfirmInvoice={(invoice) =>
+                    void handleConfirmInvoice(invoice)
+                  }
+                  onRecordPayment={(invoice) => openPaymentModal(invoice)}
+                />
               ) : null}
               {activeTab === "payments" ? (
-                <EmployeePaymentsPlaceholder payments={employee.payments} />
+                <EmployeePaymentsPlaceholder
+                  payments={employee.payments}
+                  onRecordPayment={() => openPaymentModal()}
+                />
               ) : null}
               {activeTab === "notes" ? (
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
@@ -253,10 +376,23 @@ export function EmployeeDetailsPage({
               summary={employee.summary}
               payments={employee.payments}
               onViewAllPayments={() => setActiveTab("payments")}
+              onRecordPayment={() => openPaymentModal()}
             />
           </div>
         </div>
       </div>
+
+      <RecordLabourPaymentModal
+        open={paymentModalOpen}
+        invoices={employee.invoices}
+        initialSelectedInvoiceIds={preselectedInvoiceIds}
+        busy={paymentBusy}
+        error={paymentError}
+        onClose={() => {
+          if (!paymentBusy) setPaymentModalOpen(false);
+        }}
+        onSubmit={handleRecordPayment}
+      />
     </div>
   );
 }
