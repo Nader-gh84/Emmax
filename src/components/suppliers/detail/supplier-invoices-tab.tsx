@@ -14,6 +14,7 @@ import {
 
 const STATUS_FILTERS: { id: "all" | SupplierInvoiceStatus; label: string }[] = [
   { id: "all", label: "All statuses" },
+  { id: "pending_confirmation", label: "Pending review" },
   { id: "paid", label: "Paid" },
   { id: "partial", label: "Partial" },
   { id: "unpaid", label: "Unpaid" },

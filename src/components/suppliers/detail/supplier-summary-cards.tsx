@@ -53,12 +53,22 @@ export function SupplierSummaryCards({
 }: {
   summary: SupplierDetailsViewModel["summary"];
 }) {
+  const outstandingTone =
+    summary.outstandingBalance > 0
+      ? "text-red-300"
+      : summary.outstandingBalance < 0
+        ? "text-emerald-300"
+        : "text-white";
+
   const cards = [
     {
       id: "purchases",
       label: "Total Purchases",
       value: formatSupplierMoney(summary.totalPurchases),
-      hint: "All-time invoice volume",
+      hint:
+        summary.pendingReviewCount > 0
+          ? `${summary.pendingReviewCount} pending review (excluded)`
+          : "Confirmed invoices only",
       icon: <IconCart className="h-5 w-5" />,
       valueClass: "text-white",
       iconClass: "bg-accent/15 text-accent ring-accent/30",
@@ -67,7 +77,7 @@ export function SupplierSummaryCards({
       id: "paid",
       label: "Total Paid",
       value: formatSupplierMoney(summary.totalPaid),
-      hint: "Payments recorded",
+      hint: "Account-level payments",
       icon: <IconCheck className="h-5 w-5" />,
       valueClass: "text-emerald-300",
       iconClass: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
@@ -76,18 +86,28 @@ export function SupplierSummaryCards({
       id: "outstanding",
       label: "Outstanding Balance",
       value: formatSupplierMoney(summary.outstandingBalance),
-      hint: `Overdue: ${formatSupplierMoney(summary.overdueAmount)}`,
+      hint:
+        summary.overdueAmount > 0
+          ? `Overdue: ${formatSupplierMoney(summary.overdueAmount)}`
+          : summary.outstandingBalance < 0
+            ? "Credit balance (overpaid)"
+            : "No overdue amount",
       icon: <IconBalance className="h-5 w-5" />,
-      valueClass: "text-red-300",
-      iconClass: "bg-red-500/15 text-red-300 ring-red-500/30",
-      hintClass: "text-red-300/80",
+      valueClass: outstandingTone,
+      iconClass:
+        summary.outstandingBalance > 0
+          ? "bg-red-500/15 text-red-300 ring-red-500/30"
+          : "bg-white/10 text-slate-300 ring-white/15",
+      hintClass:
+        summary.overdueAmount > 0 ? "text-red-300/80" : "text-slate-500",
     },
     {
       id: "last",
       label: "Last Payment",
-      value: summary.lastPaymentAmount
-        ? formatSupplierMoney(summary.lastPaymentAmount)
-        : "—",
+      value:
+        summary.lastPaymentAmount != null
+          ? formatSupplierMoney(summary.lastPaymentAmount)
+          : "—",
       hint: formatDate(summary.lastPaymentDate),
       icon: <IconCalendar className="h-5 w-5" />,
       valueClass: "text-white",

@@ -120,6 +120,21 @@ export function SupplierDetailsPage({
                   >
                     {supplier.status === "active" ? "Active" : "Inactive"}
                   </span>
+                  {supplier.summary.creditStatus === "over" ? (
+                    <span className="inline-flex rounded-full bg-red-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-red-300 ring-1 ring-red-500/30">
+                      Over credit limit
+                    </span>
+                  ) : null}
+                  {supplier.summary.creditStatus === "approaching" ? (
+                    <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200 ring-1 ring-amber-500/30">
+                      Approaching limit
+                    </span>
+                  ) : null}
+                  {supplier.summary.pendingReviewCount > 0 ? (
+                    <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-amber-200 ring-1 ring-amber-500/30">
+                      {supplier.summary.pendingReviewCount} pending review
+                    </span>
+                  ) : null}
                 </div>
                 {supplier.contactPerson ? (
                   <p className="mt-1 text-sm text-slate-400">
