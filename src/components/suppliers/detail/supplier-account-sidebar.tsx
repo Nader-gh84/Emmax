@@ -292,14 +292,15 @@ export function SupplierAccountSidebar({
 /** Thin list used when Payments tab is selected. */
 export function SupplierPaymentsPlaceholder({
   payments,
+  onRecordPayment,
 }: {
   payments: SupplierPayment[];
+  onRecordPayment?: () => void;
 }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-400">
-        Account-level payments for this supplier. Record Payment wiring comes
-        in the next chunk.
+        Account-level payments for this supplier.
       </p>
       {payments.length === 0 ? (
         <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-500">
@@ -327,7 +328,11 @@ export function SupplierPaymentsPlaceholder({
           ))}
         </ul>
       )}
-      <button type="button" className={`${touchBtnSecondary} text-sm`}>
+      <button
+        type="button"
+        onClick={onRecordPayment}
+        className={`${touchBtnSecondary} text-sm`}
+      >
         + Record Payment
       </button>
     </div>
