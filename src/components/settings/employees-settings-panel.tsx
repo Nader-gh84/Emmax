@@ -8,6 +8,7 @@
  * sibling cards/panels under this file or in `src/components/settings/employees/`.
  */
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmployeeFormModal } from "@/components/settings/employee-form-modal";
 import { EmployeesEmptyState } from "@/components/settings/employees-empty-state";
@@ -63,7 +64,14 @@ function EmployeeCard({
 
   return (
     <article className="rounded-xl border border-white/10 bg-white/5 p-5">
-      <h3 className="text-lg font-semibold text-white">{employee.full_name}</h3>
+      <h3 className="text-lg font-semibold text-white">
+        <Link
+          href={`/dashboard/employees/${employee.id}`}
+          className="transition hover:text-accent"
+        >
+          {employee.full_name}
+        </Link>
+      </h3>
       {employee.role ? (
         <p className="mt-1 text-sm text-slate-400">{employee.role}</p>
       ) : null}
