@@ -6,7 +6,10 @@ import {
   type EmployeeDetailsViewModel,
   type LabourPayment,
 } from "@/lib/employee-details";
-import { touchBtnSecondary } from "@/components/quotes/ui";
+import {
+  touchBtnPrimary,
+  touchBtnSecondary,
+} from "@/components/quotes/ui";
 
 function IconReceipt({ className }: { className?: string }) {
   return (
@@ -81,10 +84,12 @@ export function EmployeeAccountSidebar({
   summary,
   payments,
   onViewAllPayments,
+  onRecordPayment,
 }: {
   summary: EmployeeDetailsViewModel["summary"];
   payments: LabourPayment[];
   onViewAllPayments: () => void;
+  onRecordPayment: () => void;
 }) {
   const recent = payments.slice(0, 4);
 
@@ -223,9 +228,13 @@ export function EmployeeAccountSidebar({
             ))}
           </ul>
         )}
-        <p className="mt-4 text-xs text-slate-500">
-          Record Payment arrives in the next payroll chunk.
-        </p>
+        <button
+          type="button"
+          onClick={onRecordPayment}
+          className={`${touchBtnPrimary} mt-4 w-full text-sm`}
+        >
+          + Record Payment
+        </button>
       </section>
     </aside>
   );
@@ -233,8 +242,10 @@ export function EmployeeAccountSidebar({
 
 export function EmployeePaymentsPlaceholder({
   payments,
+  onRecordPayment,
 }: {
   payments: LabourPayment[];
+  onRecordPayment?: () => void;
 }) {
   return (
     <div className="space-y-3">
@@ -267,10 +278,11 @@ export function EmployeePaymentsPlaceholder({
           ))}
         </ul>
       )}
-      <p className="text-xs text-slate-500">
-        Confirm invoice + Record Payment (FIFO/manual) comes next.
-      </p>
-      <button type="button" disabled className={`${touchBtnSecondary} text-sm opacity-50`}>
+      <button
+        type="button"
+        onClick={onRecordPayment}
+        className={`${touchBtnSecondary} text-sm`}
+      >
         + Record Payment
       </button>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { IconMore } from "@/components/dashboard/workspace-icons";
 import { touchInput } from "@/components/quotes/ui";
 import {
   formatEmployeeDate,
@@ -24,8 +25,14 @@ const PAGE_SIZE = 5;
 
 export function EmployeeInvoicesTab({
   invoices,
+  confirmingId = null,
+  onConfirmInvoice,
+  onRecordPayment,
 }: {
   invoices: LabourInvoice[];
+  confirmingId?: string | null;
+  onConfirmInvoice?: (invoice: LabourInvoice) => void;
+  onRecordPayment?: (invoice?: LabourInvoice) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"all" | LabourInvoiceStatus>(
     "all"
@@ -34,6 +41,7 @@ export function EmployeeInvoicesTab({
   const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -144,7 +152,7 @@ export function EmployeeInvoicesTab({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.02]">
-        <table className="w-full min-w-[920px] text-left text-sm">
+        <table className="w-full min-w-[980px] text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 text-[11px] uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3 font-semibold">Invoice #</th>
@@ -155,14 +163,15 @@ export function EmployeeInvoicesTab({
               <th className="px-3 py-3 text-right font-semibold">Amount</th>
               <th className="px-3 py-3 text-right font-semibold">Paid</th>
               <th className="px-3 py-3 text-right font-semibold">Balance</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-3 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 text-right font-semibold">Actions</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-4 py-8 text-center text-sm text-slate-500"
                 >
                   No labour invoices yet. Log hourly time with a pay rate to
@@ -200,7 +209,7 @@ export function EmployeeInvoicesTab({
                   <td className="px-3 py-3 text-right font-medium text-white">
                     {formatEmployeeMoney(invoice.balance)}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${labourInvoiceStatusClass(
                         invoice.status
@@ -208,6 +217,69 @@ export function EmployeeInvoicesTab({
                     >
                       {labourInvoiceStatusLabel(invoice.status)}
                     </span>
+                  </td>
+                  <td className="relative px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {invoice.dbStatus === "pending_confirmation" ? (
+                        <button
+                          type="button"
+                          disabled={confirmingId === invoice.id}
+                          onClick={() => onConfirmInvoice?.(invoice)}
+                          className="inline-flex min-h-[32px] items-center rounded-lg border border-amber-400/30 bg-amber-500/10 px-2.5 text-[11px] font-semibold text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-40"
+                        >
+                          {confirmingId === invoice.id ? "…" : "Confirm"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenMenuId((current) =>
+                            current === invoice.id ? null : invoice.id
+                          )
+                        }
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"
+                        aria-label={`Actions for ${invoice.invoiceNumber}`}
+                      >
+                        <IconMore className="h-4 w-4" />
+                      </button>
+                    </div>
+                    {openMenuId === invoice.id ? (
+                      <div className="absolute right-4 z-20 mt-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+                        {invoice.dbStatus === "pending_confirmation" ? (
+                          <button
+                            type="button"
+                            disabled={confirmingId === invoice.id}
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              onConfirmInvoice?.(invoice);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+                          >
+                            Confirm invoice
+                          </button>
+                        ) : null}
+                        {invoice.dbStatus === "confirmed" &&
+                        invoice.balance > 0.009 ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              onRecordPayment?.(invoice);
+                            }}
+                            className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+                          >
+                            Record payment
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setOpenMenuId(null)}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-500"
+                        >
+                          View details
+                        </button>
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))
@@ -228,7 +300,7 @@ export function EmployeeInvoicesTab({
               <td className="px-3 py-3 text-right">
                 {formatEmployeeMoney(totals.balance)}
               </td>
-              <td />
+              <td colSpan={2} />
             </tr>
           </tfoot>
         </table>
