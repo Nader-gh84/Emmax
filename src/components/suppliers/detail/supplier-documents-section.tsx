@@ -47,7 +47,8 @@ export function SupplierDocumentsSection({
             Recent Documents
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Mock invoices, statements, and receipts for layout review.
+            Document vault comes in a later stage. Payment receipts will appear
+            here once uploads are wired.
           </p>
         </div>
         <button
@@ -58,6 +59,11 @@ export function SupplierDocumentsSection({
         </button>
       </div>
 
+      {documents.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-white/15 px-4 py-8 text-center text-sm text-slate-500">
+          No documents yet.
+        </p>
+      ) : (
       <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {documents.map((doc) => (
           <li
@@ -81,6 +87,7 @@ export function SupplierDocumentsSection({
           </li>
         ))}
       </ul>
+      )}
     </section>
   );
 }

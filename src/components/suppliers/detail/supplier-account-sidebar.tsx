@@ -101,8 +101,13 @@ export function SupplierAccountSidebar({
   onRecordPayment: () => void;
 }) {
   const recent = payments.slice(0, 4);
+  const minMonthly = summary.minimumMonthlyPayment;
+  const minProgress =
+    minMonthly != null && minMonthly > 0
+      ? Math.min(100, (summary.paidThisMonth / minMonthly) * 100)
+      : null;
 
-  const rows: { label: string; value: string; tone?: "danger" }[] = [
+  const rows: { label: string; value: string; tone?: "danger" | "warn" }[] = [
     {
       label: "Total Purchases",
       value: formatSupplierMoney(summary.totalPurchases),
@@ -126,14 +131,35 @@ export function SupplierAccountSidebar({
       value: String(summary.totalInvoices),
     },
     {
+      label: "Pending review",
+      value: String(summary.pendingReviewCount),
+      tone: summary.pendingReviewCount > 0 ? "warn" : undefined,
+    },
+    {
       label: "Total Payments",
       value: String(summary.totalPayments),
     },
     {
       label: "Average Payment Days",
-      value: `${summary.averagePaymentDays} days`,
+      value:
+        summary.averagePaymentDays != null
+          ? `${summary.averagePaymentDays} days`
+          : "—",
     },
   ];
+
+  if (summary.creditLimit != null) {
+    rows.push({
+      label: "Credit Limit",
+      value: formatSupplierMoney(summary.creditLimit),
+      tone:
+        summary.creditStatus === "over"
+          ? "danger"
+          : summary.creditStatus === "approaching"
+            ? "warn"
+            : undefined,
+    });
+  }
 
   return (
     <aside className="space-y-4">
@@ -150,7 +176,11 @@ export function SupplierAccountSidebar({
               <dt className="text-xs text-slate-500">{row.label}</dt>
               <dd
                 className={`text-sm font-semibold ${
-                  row.tone === "danger" ? "text-red-300" : "text-white"
+                  row.tone === "danger"
+                    ? "text-red-300"
+                    : row.tone === "warn"
+                      ? "text-amber-200"
+                      : "text-white"
                 }`}
               >
                 {row.value}
@@ -159,12 +189,32 @@ export function SupplierAccountSidebar({
           ))}
         </dl>
 
+        {minMonthly != null && minMonthly > 0 ? (
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Minimum this month
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              Paid {formatSupplierMoney(summary.paidThisMonth)} of{" "}
+              {formatSupplierMoney(minMonthly)} minimum
+            </p>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  (minProgress ?? 0) >= 100 ? "bg-emerald-400" : "bg-accent"
+                }`}
+                style={{ width: `${minProgress ?? 0}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-5 border-t border-white/10 pt-5">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             Outstanding split
           </p>
           <OutstandingDonut
-            current={summary.currentOutstanding}
+            current={Math.max(0, summary.currentOutstanding)}
             overdue={summary.overdueAmount}
           />
         </div>
@@ -175,49 +225,57 @@ export function SupplierAccountSidebar({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
             Payment History
           </h2>
-          <button
-            type="button"
-            onClick={onViewAllPayments}
-            className="text-xs font-semibold text-accent hover:text-blue-400"
-          >
-            View All
-          </button>
+          {payments.length > 0 ? (
+            <button
+              type="button"
+              onClick={onViewAllPayments}
+              className="text-xs font-semibold text-accent hover:text-blue-400"
+            >
+              View All
+            </button>
+          ) : null}
         </div>
 
-        <ul className="mt-4 space-y-2.5">
-          {recent.map((payment) => (
-            <li
-              key={payment.id}
-              className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
-            >
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30">
-                <IconPayment className="h-4 w-4" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-white">
-                    {payment.paymentNumber}
-                  </p>
-                  <p className="shrink-0 text-sm font-semibold text-white">
-                    {formatSupplierMoney(payment.amount)}
+        {recent.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-500">
+            No payments recorded yet for this supplier.
+          </p>
+        ) : (
+          <ul className="mt-4 space-y-2.5">
+            {recent.map((payment) => (
+              <li
+                key={payment.id}
+                className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+              >
+                <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30">
+                  <IconPayment className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-white">
+                      {payment.paymentNumber}
+                    </p>
+                    <p className="shrink-0 text-sm font-semibold text-white">
+                      {formatSupplierMoney(payment.amount)}
+                    </p>
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {payment.method} · {formatSupplierDate(payment.paidAt)}
                   </p>
                 </div>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {payment.method} · {formatSupplierDate(payment.paidAt)}
-                </p>
-              </div>
-              {payment.hasReceipt ? (
-                <span
-                  className="mt-0.5 text-slate-500"
-                  title="Receipt on file"
-                  aria-label="Receipt on file"
-                >
-                  <IconReceipt className="h-4 w-4" />
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                {payment.hasReceipt ? (
+                  <span
+                    className="mt-0.5 text-slate-500"
+                    title="Receipt on file"
+                    aria-label="Receipt on file"
+                  >
+                    <IconReceipt className="h-4 w-4" />
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
 
         <button
           type="button"
@@ -240,29 +298,35 @@ export function SupplierPaymentsPlaceholder({
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-400">
-        Full payments ledger UI comes in a later stage. Showing mock history
-        for layout review.
+        Account-level payments for this supplier. Record Payment wiring comes
+        in the next chunk.
       </p>
-      <ul className="divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-        {payments.map((payment) => (
-          <li
-            key={payment.id}
-            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-medium text-white">
-                {payment.paymentNumber}
+      {payments.length === 0 ? (
+        <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-8 text-center text-sm text-slate-500">
+          No payments yet.
+        </p>
+      ) : (
+        <ul className="divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+          {payments.map((payment) => (
+            <li
+              key={payment.id}
+              className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            >
+              <div>
+                <p className="text-sm font-medium text-white">
+                  {payment.paymentNumber}
+                </p>
+                <p className="text-xs text-slate-400">
+                  {payment.method} · {formatSupplierDate(payment.paidAt)}
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-white">
+                {formatSupplierMoney(payment.amount)}
               </p>
-              <p className="text-xs text-slate-400">
-                {payment.method} · {formatSupplierDate(payment.paidAt)}
-              </p>
-            </div>
-            <p className="text-sm font-semibold text-white">
-              {formatSupplierMoney(payment.amount)}
-            </p>
-          </li>
-        ))}
-      </ul>
+            </li>
+          ))}
+        </ul>
+      )}
       <button type="button" className={`${touchBtnSecondary} text-sm`}>
         + Record Payment
       </button>
