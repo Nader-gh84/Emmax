@@ -20,6 +20,7 @@ export interface ConfirmMaterialOrderResult {
   supplierName?: string;
   projectName?: string | null;
   contractorEmail?: string | null;
+  supplierInvoiceId?: string | null;
   error?: string;
 }
 
@@ -167,6 +168,7 @@ export async function confirmMaterialOrderByToken(input: {
     supplier_name?: string;
     project_name?: string | null;
     contractor_email?: string | null;
+    supplier_invoice_id?: string | null;
     error?: string;
   };
 
@@ -192,5 +194,6 @@ export async function confirmMaterialOrderByToken(input: {
     supplierName: result.supplier_name,
     projectName: result.project_name ?? null,
     contractorEmail: result.contractor_email ?? null,
+    supplierInvoiceId: result.supplier_invoice_id ?? null,
   };
 }
