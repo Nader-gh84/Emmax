@@ -7,8 +7,10 @@ import {
   touchInput,
 } from "@/components/quotes/ui";
 import {
+  EMPLOYEE_PAY_PERIOD_TYPES,
   EMPLOYEE_PAY_TYPES,
   type EmployeeFormData,
+  type EmployeePayPeriodType,
   type EmployeePayType,
 } from "@/types/employee";
 
@@ -40,6 +42,11 @@ export function EmployeeFormModal({
 
   function setPayType(payType: EmployeePayType) {
     setForm((current) => ({ ...current, pay_type: payType }));
+    setError(null);
+  }
+
+  function setPayPeriodType(payPeriodType: EmployeePayPeriodType) {
+    setForm((current) => ({ ...current, pay_period_type: payPeriodType }));
     setError(null);
   }
 
@@ -230,6 +237,34 @@ export function EmployeeFormModal({
                   : "Hourly rate (optional)"
               }
             />
+          </div>
+
+          <div>
+            <span className="block text-base font-medium text-slate-300">
+              Pay period
+            </span>
+            <p className="mt-1 text-xs text-slate-500">
+              Used to batch labour invoices for payroll review.
+            </p>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {EMPLOYEE_PAY_PERIOD_TYPES.map((option) => {
+                const active = form.pay_period_type === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setPayPeriodType(option.id)}
+                    className={`min-h-[44px] rounded-xl border px-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-accent/50 bg-accent/15 text-accent"
+                        : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <fieldset className="space-y-3 rounded-xl border border-white/10 bg-white/[0.02] p-4">

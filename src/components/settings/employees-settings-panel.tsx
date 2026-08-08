@@ -21,6 +21,7 @@ import {
   employeeFormToPayload,
   employeeToForm,
   formatEmployeeAddress,
+  formatPayPeriodType,
   formatPayRate,
   type Employee,
   type EmployeeFormData,
@@ -52,6 +53,10 @@ function EmployeeCard({
     {
       label: "Pay",
       value: formatPayRate(employee.pay_rate, employee.pay_type),
+    },
+    {
+      label: "Pay period",
+      value: formatPayPeriodType(employee.pay_period_type),
     },
     { label: "Address", value: address || null },
   ].filter((item) => item.value && item.value !== "—");

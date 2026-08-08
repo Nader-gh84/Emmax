@@ -7,6 +7,7 @@ import {
   touchInput,
   touchTextarea,
 } from "@/components/quotes/ui";
+import { ensureLabourInvoiceForTimeEntry } from "@/lib/labour-invoice";
 import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
 import { getUserInitials } from "@/lib/user-display";
@@ -163,6 +164,9 @@ export function TeamTimeCard({
           }
         : null,
     };
+
+    // Best-effort: attach to pay-period labour invoice (hourly + rate required).
+    await ensureLabourInvoiceForTimeEntry(supabase, created.id);
 
     syncEntries([created, ...entries]);
 
