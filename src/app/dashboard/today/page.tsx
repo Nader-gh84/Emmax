@@ -212,5 +212,11 @@ export default async function TodayRoute() {
     notifications,
   });
 
-  return <TodayPage agenda={agenda} />;
+  return (
+    <TodayPage
+      agenda={agenda}
+      scheduleItems={scheduleItems}
+      userId={user?.id ?? ""}
+    />
+  );
 }
