@@ -22,6 +22,7 @@ import {
   touchBtnPrimary,
   touchBtnSecondary,
 } from "@/components/quotes/ui";
+import { useTtsPlayback } from "@/hooks/use-tts-playback";
 import { createClient } from "@/lib/supabase";
 import {
   formatAgendaMoney,
@@ -35,6 +36,9 @@ import {
   type ScheduleItem,
   type ScheduleTaskType,
 } from "@/types/schedule-item";
+
+const BRIEF_TTS_INSTRUCTIONS =
+  "Speak like a calm, clear executive assistant delivering a morning briefing. Warm but efficient, natural pacing with short pauses between sentences. No theatrical flourish.";
 
 type TaskFilter = "all" | ScheduleTaskType;
 
@@ -110,12 +114,42 @@ export function TodayPage({
   const supabase = useMemo(() => createClient(), []);
   const [pending, startTransition] = useTransition();
   const [filter, setFilter] = useState<TaskFilter>("all");
-  const [briefStarted, setBriefStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const briefTts = useTtsPlayback();
+
+  const briefScript = useMemo(
+    () => agenda.briefLines.join(" "),
+    [agenda.briefLines]
+  );
+
+  async function handleStartBrief() {
+    if (briefTts.isPlaying || briefTts.isLoading) {
+      briefTts.stop();
+      return;
+    }
+    await briefTts.play(briefScript, { instructions: BRIEF_TTS_INSTRUCTIONS });
+  }
+
+  function handlePushToTalkPress() {
+    // Chunk E: stop Daily Brief when the user reaches for the mic.
+    // Chunk F will own actual push-to-talk recording + commands.
+    if (briefTts.isPlaying || briefTts.isLoading) {
+      briefTts.stop();
+    }
+  }
+
+  function briefButtonLabel() {
+    if (briefTts.isLoading) return "Generating…";
+    if (briefTts.isPlaying) return "Stop Brief";
+    if (briefTts.status === "ended" || briefTts.status === "error") {
+      return "Replay Brief";
+    }
+    return "Start Brief";
+  }
 
   const filteredItems = useMemo(() => {
     if (filter === "all") return agenda.items;
@@ -320,9 +354,10 @@ export function TodayPage({
               <button
                 type="button"
                 className={touchBtnPrimary}
-                onClick={() => setBriefStarted(true)}
+                onClick={() => void handleStartBrief()}
+                aria-pressed={briefTts.isPlaying}
               >
-                {briefStarted ? "Brief ready" : "Start Brief"}
+                {briefButtonLabel()}
               </button>
             </div>
             <ul className="mt-4 space-y-2">
@@ -332,10 +367,21 @@ export function TodayPage({
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-xs text-slate-500">
-              Voice playback comes in the next chunk — press Start Brief to
-              preview the script for now.
-            </p>
+            {briefTts.error ? (
+              <p className="mt-4 text-xs text-red-300">{briefTts.error}</p>
+            ) : briefTts.isPlaying ? (
+              <p className="mt-4 text-xs text-accent">
+                Speaking… press Stop Brief or the mic to interrupt.
+              </p>
+            ) : briefTts.isLoading ? (
+              <p className="mt-4 text-xs text-slate-500">
+                Generating voice brief…
+              </p>
+            ) : (
+              <p className="mt-4 text-xs text-slate-500">
+                Press Start Brief to hear today’s agenda spoken aloud.
+              </p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -558,7 +604,9 @@ export function TodayPage({
             type="button"
             className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/30"
             aria-label="Push to talk"
-            title="Push-to-talk — voice commands coming next"
+            title="Push-to-talk — stops brief now; voice commands coming next"
+            onPointerDown={handlePushToTalkPress}
+            onClick={handlePushToTalkPress}
           >
             <IconMicrophone className="h-5 w-5" />
           </button>
@@ -577,7 +625,13 @@ export function TodayPage({
               ))}
             </div>
           </div>
-          <button type="button" className={`${touchBtnSecondary} shrink-0`} disabled>
+          <button
+            type="button"
+            className={`${touchBtnSecondary} shrink-0`}
+            onPointerDown={handlePushToTalkPress}
+            onClick={handlePushToTalkPress}
+            title="Stops Daily Brief playback. Full push-to-talk arrives next."
+          >
             Hold mic to talk
           </button>
         </div>

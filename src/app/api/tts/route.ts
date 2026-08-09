@@ -11,7 +11,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = (await request.json()) as { text?: string; voice?: string };
+    const body = (await request.json()) as {
+      text?: string;
+      voice?: string;
+      instructions?: string;
+    };
     const text = body.text?.trim();
 
     if (!text) {
@@ -19,6 +23,9 @@ export async function POST(request: Request) {
     }
 
     const voice = body.voice ?? "nova";
+    const instructions =
+      body.instructions?.trim() ||
+      "Speak warmly and with a friendly smile in your voice — upbeat, welcoming, and a little playful, like you're genuinely happy to meet the person for the first time. Not rushed — natural, relaxed pacing with light pauses between sentences.";
 
     const response = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
@@ -31,8 +38,7 @@ export async function POST(request: Request) {
         voice,
         input: text,
         speed: 0.92,
-        instructions:
-          "Speak warmly and with a friendly smile in your voice — upbeat, welcoming, and a little playful, like you're genuinely happy to meet the person for the first time. Not rushed — natural, relaxed pacing with light pauses between sentences.",
+        instructions,
       }),
     });
 
