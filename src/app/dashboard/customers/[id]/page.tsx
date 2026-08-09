@@ -1,14 +1,23 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CustomerDetailsPage } from "@/components/customers/customer-details-page";
-import { buildMockCustomerDetails } from "@/lib/customer-details-mock";
+import {
+  buildCustomerDetailsViewModel,
+  computeLastContactAt,
+  mapProjectActivityToItems,
+} from "@/lib/customer-details";
 import {
   buildCustomerPaymentList,
   buildCustomerProjectFinancials,
   rollupCustomerOutstanding,
 } from "@/lib/customer-financials";
 import { createClient } from "@/lib/supabase/server";
-import { getCustomerDisplayName, type Customer } from "@/types/customer";
+import {
+  isCustomerType,
+  type Customer,
+  type CustomerDocument,
+  type CustomerNote,
+} from "@/types/customer";
 import type { MaterialOrder } from "@/types/material-order";
 import {
   isPlaceholderProjectName,
@@ -71,6 +80,16 @@ function normalizeChangeOrder(row: ChangeOrder): ChangeOrder {
   };
 }
 
+function normalizeCustomer(row: Customer): Customer {
+  return {
+    ...row,
+    customer_type: isCustomerType(String(row.customer_type ?? ""))
+      ? row.customer_type
+      : "residential",
+    website: row.website ?? null,
+  };
+}
+
 export default async function CustomerDetailsRoute({
   params,
 }: {
@@ -87,7 +106,7 @@ export default async function CustomerDetailsRoute({
       .select("*")
       .eq("id", customerId)
       .maybeSingle();
-    customerRow = (data as Customer | null) ?? null;
+    customerRow = data ? normalizeCustomer(data as Customer) : null;
   }
 
   if (!customerRow) {
@@ -163,43 +182,117 @@ export default async function CustomerDetailsRoute({
   });
 
   const projectIds = projects.map((p) => p.id).filter(Boolean);
+  const projectNames = Object.fromEntries(
+    projects.map((project) => [project.id, project.project_name])
+  );
 
   let paymentRows: ProjectPayment[] = [];
   let expenseRows: ProjectExpense[] = [];
   let materialOrderRows: MaterialOrder[] = [];
   let timeEntryRows: TimeEntry[] = [];
   let changeOrderRows: ChangeOrder[] = [];
+  let activityRows: Array<{
+    id: string;
+    activity_type: string;
+    description: string | null;
+    created_at: string;
+    project_id: string;
+  }> = [];
 
-  if (projectIds.length > 0) {
+  const [
+    documentsResult,
+    notesResult,
+    quotesResult,
+    financialBundle,
+  ] = await Promise.all([
+    supabase
+      .from("customer_documents")
+      .select("*")
+      .eq("customer_id", customerRow.id)
+      .order("uploaded_at", { ascending: false }),
+    supabase
+      .from("customer_notes")
+      .select("*")
+      .eq("customer_id", customerRow.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("quotes")
+      .select("id, status, sent_at, updated_at")
+      .eq("customer_id", customerRow.id),
+    projectIds.length > 0
+      ? Promise.all([
+          supabase
+            .from("project_payments")
+            .select("*")
+            .in("project_id", projectIds)
+            .order("payment_date", { ascending: false }),
+          supabase
+            .from("project_expenses")
+            .select("*")
+            .in("project_id", projectIds),
+          supabase
+            .from("material_orders")
+            .select("*")
+            .in("project_id", projectIds),
+          supabase
+            .from("time_entries")
+            .select("*, employees(id, full_name, role, pay_rate, pay_type)")
+            .in("project_id", projectIds),
+          supabase
+            .from("change_orders")
+            .select("*")
+            .in("project_id", projectIds),
+          supabase
+            .from("project_activity")
+            .select("id, activity_type, description, created_at, project_id")
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false })
+            .limit(40),
+        ])
+      : Promise.resolve(null),
+  ]);
+
+  if (documentsResult.error) {
+    console.error(
+      "[CustomerDetails] customer_documents query failed (run migration 039?):",
+      documentsResult.error.message
+    );
+  }
+  if (notesResult.error) {
+    console.error(
+      "[CustomerDetails] customer_notes query failed (run migration 039?):",
+      notesResult.error.message
+    );
+  }
+  if (quotesResult.error) {
+    console.error(
+      "[CustomerDetails] quotes query failed:",
+      quotesResult.error.message
+    );
+  }
+
+  const documents =
+    (documentsResult.data as CustomerDocument[] | null) ?? [];
+  const notes = (notesResult.data as CustomerNote[] | null) ?? [];
+  const quotes =
+    (quotesResult.data as
+      | {
+          id: string;
+          status: string | null;
+          sent_at: string | null;
+          updated_at: string | null;
+        }[]
+      | null) ?? [];
+
+  if (financialBundle) {
     const [
       paymentsResult,
       expensesResult,
       ordersResult,
       timeResult,
       changeOrdersResult,
-    ] = await Promise.all([
-      supabase
-        .from("project_payments")
-        .select("*")
-        .in("project_id", projectIds)
-        .order("payment_date", { ascending: false }),
-      supabase
-        .from("project_expenses")
-        .select("*")
-        .in("project_id", projectIds),
-      supabase
-        .from("material_orders")
-        .select("*")
-        .in("project_id", projectIds),
-      supabase
-        .from("time_entries")
-        .select("*, employees(id, full_name, role, pay_rate, pay_type)")
-        .in("project_id", projectIds),
-      supabase
-        .from("change_orders")
-        .select("*")
-        .in("project_id", projectIds),
-    ]);
+      activityResult,
+    ] = financialBundle;
 
     if (paymentsResult.error) {
       console.error(
@@ -231,6 +324,12 @@ export default async function CustomerDetailsRoute({
         changeOrdersResult.error.message
       );
     }
+    if (activityResult.error) {
+      console.error(
+        "[CustomerDetails] project_activity query failed:",
+        activityResult.error.message
+      );
+    }
 
     paymentRows = ((paymentsResult.data as ProjectPayment[] | null) ?? []).map(
       (row) => ({ ...row, amount: Number(row.amount) || 0 })
@@ -246,6 +345,8 @@ export default async function CustomerDetailsRoute({
     changeOrderRows = (
       (changeOrdersResult.data as ChangeOrder[] | null) ?? []
     ).map((row) => normalizeChangeOrder(row));
+    activityRows =
+      (activityResult.data as typeof activityRows | null) ?? [];
   }
 
   const projectFinancials = buildCustomerProjectFinancials({
@@ -263,31 +364,39 @@ export default async function CustomerDetailsRoute({
   });
 
   const outstanding = rollupCustomerOutstanding(projectFinancials);
-
-  const details = buildMockCustomerDetails({
-    id: customerRow.id,
-    firstName: customerRow.first_name,
-    lastName: customerRow.last_name,
-    email: customerRow.email,
-    phone: customerRow.phone,
-    address: customerRow.address,
-    notes: customerRow.notes,
-    createdAt: customerRow.created_at,
+  const recentActivity = mapProjectActivityToItems({
+    activities: activityRows,
+    projectNames,
   });
 
-  details.fullName = getCustomerDisplayName(customerRow);
-  details.counts.projects = projects.length;
-  details.counts.financial = projects.length;
-  details.counts.payments = paymentList.length;
-  details.outstanding = outstanding;
+  const lastContactAt = computeLastContactAt({
+    lastQuotedAt: customerRow.last_quoted_at,
+    activityDates: activityRows.map((row) => row.created_at),
+    paymentDates: paymentRows.map((row) => row.payment_date),
+    quotes,
+  });
+
+  const details = buildCustomerDetailsViewModel({
+    customer: customerRow,
+    projects,
+    documents,
+    notes,
+    paymentCount: paymentList.length,
+    outstanding,
+    lastContactAt,
+    recentActivity: recentActivity.slice(0, 8),
+  });
 
   return (
     <CustomerDetailsPage
       customer={details}
+      customerRecord={customerRow}
       projects={projects}
       projectFinancials={projectFinancials}
       customerPayments={paymentList}
-      addressPlaceholder={customerRow.address}
+      documents={documents}
+      notes={notes}
+      timeline={recentActivity}
     />
   );
 }

@@ -78,6 +78,8 @@ export async function pickContactForForm(): Promise<CustomerFormData | null> {
     phone: contact.tel?.[0] ?? "",
     address: contact.address?.[0] ?? "",
     notes: "",
+    customer_type: "residential",
+    website: "",
   };
 }
 

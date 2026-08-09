@@ -8,7 +8,7 @@ import {
   touchTextarea,
 } from "@/components/quotes/ui";
 import { isContactPickerSupported } from "@/lib/customer-contacts";
-import type { CustomerFormData } from "@/types/customer";
+import type { CustomerFormData, CustomerType } from "@/types/customer";
 
 export function CustomerFormModal({
   title,
@@ -38,7 +38,10 @@ export function CustomerFormModal({
     setContactPickerSupported(isContactPickerSupported());
   }, []);
 
-  function updateField(key: keyof CustomerFormData, value: string) {
+  function updateField<K extends keyof CustomerFormData>(
+    key: K,
+    value: CustomerFormData[K]
+  ) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -175,6 +178,49 @@ export function CustomerFormModal({
               placeholder="Optional"
               autoComplete="street-address"
             />
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label
+                htmlFor="customer-type"
+                className="block text-base font-medium text-slate-300"
+              >
+                Customer Type
+              </label>
+              <select
+                id="customer-type"
+                value={form.customer_type}
+                onChange={(event) =>
+                  updateField(
+                    "customer_type",
+                    event.target.value as CustomerType
+                  )
+                }
+                className={`${touchInput} mt-1.5`}
+              >
+                <option value="residential">Residential</option>
+                <option value="commercial">Commercial</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="customer-website"
+                className="block text-base font-medium text-slate-300"
+              >
+                Website
+              </label>
+              <input
+                id="customer-website"
+                type="url"
+                value={form.website}
+                onChange={(event) => updateField("website", event.target.value)}
+                className={`${touchInput} mt-1.5`}
+                placeholder="Optional"
+                autoComplete="url"
+              />
+            </div>
           </div>
 
           <div>

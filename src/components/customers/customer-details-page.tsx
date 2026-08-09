@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { CustomerDocumentsTab } from "@/components/customers/customer-documents-tab";
+import { CustomerFormModal } from "@/components/customers/customer-form-modal";
+import { CustomerNotesTab } from "@/components/customers/customer-notes-tab";
 import {
   IconCheckCircle,
   IconClock,
@@ -17,19 +21,29 @@ import {
   touchBtnPrimary,
   touchBtnSecondary,
 } from "@/components/quotes/ui";
+import { pickContactForForm } from "@/lib/customer-contacts";
 import {
   CUSTOMER_DETAILS_TABS,
+  customerTypeLabel,
   formatCustomerDate,
   formatCustomerMoney,
   getCustomerInitials,
+  googleMapsSearchUrl,
   type CustomerActivityItem,
   type CustomerDetailsTab,
   type CustomerDetailsViewModel,
-} from "@/lib/customer-details-mock";
+} from "@/lib/customer-details";
 import type {
   CustomerPaymentListItem,
   CustomerProjectFinancial,
 } from "@/lib/customer-financials";
+import { createClient } from "@/lib/supabase";
+import type {
+  Customer,
+  CustomerDocument,
+  CustomerFormData,
+  CustomerNote,
+} from "@/types/customer";
 import {
   asProjectLabour,
   asProjectMaterials,
@@ -40,6 +54,33 @@ import {
   type Project,
   type ProjectStatus,
 } from "@/types/project";
+
+function customerToForm(customer: Customer): CustomerFormData {
+  return {
+    first_name: customer.first_name,
+    last_name: customer.last_name,
+    email: customer.email ?? "",
+    phone: customer.phone ?? "",
+    address: customer.address ?? "",
+    notes: customer.notes ?? "",
+    customer_type:
+      customer.customer_type === "commercial" ? "commercial" : "residential",
+    website: customer.website ?? "",
+  };
+}
+
+function formToPayload(form: CustomerFormData) {
+  return {
+    first_name: form.first_name.trim(),
+    last_name: form.last_name.trim(),
+    email: form.email.trim() || null,
+    phone: form.phone.trim() || null,
+    address: form.address.trim() || null,
+    notes: form.notes.trim() || null,
+    customer_type: form.customer_type,
+    website: form.website.trim() || null,
+  };
+}
 
 function IconMapPin({ className }: { className?: string }) {
   return (
@@ -66,54 +107,72 @@ function IconPayment({ className }: { className?: string }) {
   );
 }
 
-function ActivityIcon({ type }: { type: CustomerActivityItem["type"] }) {
+function ActivityIcon({ type }: { type: string }) {
   const className = "h-4 w-4";
-  switch (type) {
-    case "payment_received":
-      return <IconPayment className={className} />;
-    case "invoice_overdue":
-      return <IconInvoice className={className} />;
-    case "project_started":
-      return <IconClock className={className} />;
-    case "quote_accepted":
-      return <IconCheckCircle className={className} />;
-    case "note_added":
-      return <IconDocumentDraft className={className} />;
-    default:
-      return <IconDocumentDraft className={className} />;
+  const normalized = type.toLowerCase();
+  if (normalized.includes("payment")) {
+    return <IconPayment className={className} />;
   }
+  if (normalized.includes("invoice") || normalized.includes("overdue")) {
+    return <IconInvoice className={className} />;
+  }
+  if (normalized.includes("start") || normalized.includes("project")) {
+    return <IconClock className={className} />;
+  }
+  if (normalized.includes("accept") || normalized.includes("complete")) {
+    return <IconCheckCircle className={className} />;
+  }
+  return <IconDocumentDraft className={className} />;
 }
 
-function activityAccent(type: CustomerActivityItem["type"]) {
-  switch (type) {
-    case "payment_received":
-      return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
-    case "invoice_overdue":
-      return "bg-red-500/15 text-red-300 ring-red-500/30";
-    case "project_started":
-      return "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30";
-    case "quote_accepted":
-      return "bg-accent/15 text-accent ring-accent/30";
-    default:
-      return "bg-white/10 text-slate-300 ring-white/15";
+function activityAccent(type: string) {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("payment")) {
+    return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
   }
+  if (normalized.includes("invoice") || normalized.includes("overdue")) {
+    return "bg-red-500/15 text-red-300 ring-red-500/30";
+  }
+  if (normalized.includes("start") || normalized.includes("project")) {
+    return "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30";
+  }
+  if (normalized.includes("accept") || normalized.includes("complete")) {
+    return "bg-accent/15 text-accent ring-accent/30";
+  }
+  return "bg-white/10 text-slate-300 ring-white/15";
 }
 
 export function CustomerDetailsPage({
   customer,
+  customerRecord,
   projects = [],
   projectFinancials = [],
   customerPayments = [],
-  addressPlaceholder = null,
+  documents = [],
+  notes = [],
+  timeline = [],
 }: {
   customer: CustomerDetailsViewModel;
+  customerRecord: Customer;
   projects?: Project[];
   projectFinancials?: CustomerProjectFinancial[];
   customerPayments?: CustomerPaymentListItem[];
-  addressPlaceholder?: string | null;
+  documents?: CustomerDocument[];
+  notes?: CustomerNote[];
+  timeline?: CustomerActivityItem[];
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<CustomerDetailsTab>("overview");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [editForm, setEditForm] = useState<CustomerFormData>(() =>
+    customerToForm(customerRecord)
+  );
+  const [editError, setEditError] = useState<string | null>(null);
+  const [documentCount, setDocumentCount] = useState(documents.length);
+  const [noteRows, setNoteRows] = useState(notes);
   const initials = useMemo(
     () => getCustomerInitials(customer.fullName),
     [customer.fullName]
@@ -122,15 +181,77 @@ export function CustomerDetailsPage({
   const customerWithCounts = useMemo(
     () => ({
       ...customer,
+      notesPreview: noteRows[0]?.note_text?.trim() || null,
       counts: {
         ...customer.counts,
         projects: projects.length,
         financial: projectFinancials.length,
         payments: customerPayments.length,
+        documents: documentCount,
+        notes: noteRows.length,
+        locations: customer.locations.length,
       },
     }),
-    [customer, projects.length, projectFinancials.length, customerPayments.length]
+    [
+      customer,
+      projects.length,
+      projectFinancials.length,
+      customerPayments.length,
+      documentCount,
+      noteRows,
+    ]
   );
+
+  async function handleImportContact() {
+    setIsImporting(true);
+    setEditError(null);
+    try {
+      const picked = await pickContactForForm();
+      if (picked) {
+        setEditForm((current) => ({
+          ...current,
+          ...picked,
+          customer_type: current.customer_type,
+          website: current.website,
+        }));
+      }
+    } catch {
+      setEditError("Couldn't import that contact. Enter details manually.");
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  async function handleSaveCustomer(form: CustomerFormData) {
+    setIsSaving(true);
+    setEditError(null);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setEditError("You must be logged in to save customers.");
+      setIsSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("customers")
+      .update(formToPayload(form))
+      .eq("id", customerRecord.id)
+      .eq("user_id", user.id);
+
+    if (error) {
+      setEditError("Failed to update customer. Please try again.");
+      setIsSaving(false);
+      return;
+    }
+
+    setIsSaving(false);
+    setShowEdit(false);
+    router.refresh();
+  }
 
   return (
     <div className="flex w-full flex-1 flex-col">
@@ -155,16 +276,20 @@ export function CustomerDetailsPage({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                    {customer.fullName}
+                    {customerWithCounts.fullName}
                   </h1>
-                  <StatusBadge status={customer.status} />
+                  <StatusBadge status={customerWithCounts.status} />
+                  <span className="inline-flex rounded-full bg-cyan-500/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-300 ring-1 ring-cyan-500/30">
+                    {customerTypeLabel(customerWithCounts.customerType)}
+                  </span>
                 </div>
                 <p className="mt-1 text-sm text-slate-400">
-                  Customer Since {formatCustomerDate(customer.customerSince)}
+                  Customer Since{" "}
+                  {formatCustomerDate(customerWithCounts.customerSince)}
                   <span className="mx-2 text-slate-600">·</span>
                   Customer ID:{" "}
                   <span className="font-medium text-slate-300">
-                    {customer.displayId}
+                    {customerWithCounts.displayId}
                   </span>
                 </p>
 
@@ -172,21 +297,33 @@ export function CustomerDetailsPage({
                   <ContactChip
                     label="Mobile"
                     icon={<IconPhone className="h-4 w-4" />}
-                    value={customer.phone}
-                    href={customer.phone ? `tel:${customer.phone}` : undefined}
+                    value={customerWithCounts.phone}
+                    href={
+                      customerWithCounts.phone
+                        ? `tel:${customerWithCounts.phone}`
+                        : undefined
+                    }
                   />
                   <ContactChip
                     label="Email"
                     icon={<IconMail className="h-4 w-4" />}
-                    value={customer.email}
+                    value={customerWithCounts.email}
                     href={
-                      customer.email ? `mailto:${customer.email}` : undefined
+                      customerWithCounts.email
+                        ? `mailto:${customerWithCounts.email}`
+                        : undefined
                     }
                   />
                   <ContactChip
                     label="Address"
                     icon={<IconMapPin className="h-4 w-4" />}
-                    value={customer.address}
+                    value={customerWithCounts.address}
+                    href={
+                      customerWithCounts.address
+                        ? googleMapsSearchUrl(customerWithCounts.address)
+                        : undefined
+                    }
+                    external
                   />
                 </div>
 
@@ -194,21 +331,39 @@ export function CustomerDetailsPage({
                   <ActionButton
                     label="Call"
                     icon={<IconPhone className="h-4 w-4" />}
-                    href={customer.phone ? `tel:${customer.phone}` : undefined}
+                    href={
+                      customerWithCounts.phone
+                        ? `tel:${customerWithCounts.phone}`
+                        : undefined
+                    }
                   />
                   <ActionButton
                     label="Email"
                     icon={<IconMail className="h-4 w-4" />}
                     href={
-                      customer.email ? `mailto:${customer.email}` : undefined
+                      customerWithCounts.email
+                        ? `mailto:${customerWithCounts.email}`
+                        : undefined
                     }
                   />
                   <ActionButton
                     label="Message"
                     icon={<IconMessage className="h-4 w-4" />}
                     href={
-                      customer.phone ? `sms:${customer.phone}` : undefined
+                      customerWithCounts.phone
+                        ? `sms:${customerWithCounts.phone}`
+                        : undefined
                     }
+                  />
+                  <ActionButton
+                    label="Direction"
+                    icon={<IconMapPin className="h-4 w-4" />}
+                    href={
+                      customerWithCounts.address
+                        ? googleMapsSearchUrl(customerWithCounts.address)
+                        : undefined
+                    }
+                    external
                   />
                   <div className="relative">
                     <button
@@ -240,39 +395,52 @@ export function CustomerDetailsPage({
           </div>
 
           <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
-            <button type="button" className={touchBtnSecondary}>
+            <button
+              type="button"
+              className={touchBtnSecondary}
+              onClick={() => {
+                setEditForm(customerToForm(customerRecord));
+                setEditError(null);
+                setShowEdit(true);
+              }}
+            >
               Edit Customer
             </button>
-            <button type="button" className={touchBtnPrimary}>
+            <Link
+              href={`/dashboard/voice-quote-builder?customerId=${customerWithCounts.id}`}
+              className={touchBtnPrimary}
+            >
               + New Project
-            </button>
+            </Link>
           </div>
         </div>
       </div>
 
-      {customer.outstanding &&
-      customer.outstanding.totalOutstanding > 0 &&
-      customer.outstanding.projectCount > 0 ? (
-        <div className="border-b border-red-500/20 bg-red-500/10 px-4 py-4 sm:px-6 lg:px-8">
+      {customerWithCounts.outstanding &&
+      customerWithCounts.outstanding.totalOutstanding > 0 &&
+      customerWithCounts.outstanding.projectCount > 0 ? (
+        <div className="border-b border-amber-500/25 bg-gradient-to-r from-amber-500/15 via-red-500/10 to-transparent px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-wide text-red-300">
+              <p className="text-sm font-semibold uppercase tracking-wide text-amber-200">
                 Outstanding Balance
               </p>
-              <p className="mt-1 text-sm text-red-100/90">
-                {customer.outstanding.projectCount} project
-                {customer.outstanding.projectCount === 1 ? "" : "s"} with
-                outstanding balance
+              <p className="mt-1 text-sm text-amber-50/80">
+                {customerWithCounts.outstanding.projectCount} project
+                {customerWithCounts.outstanding.projectCount === 1 ? "" : "s"}{" "}
+                with unpaid customer balance
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-2xl font-bold text-white">
-                {formatCustomerMoney(customer.outstanding.totalOutstanding)}
+                {formatCustomerMoney(
+                  customerWithCounts.outstanding.totalOutstanding
+                )}
               </p>
               <button
                 type="button"
                 onClick={() => setActiveTab("financial")}
-                className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-red-400/40 bg-red-500/20 px-4 text-sm font-semibold text-red-100 transition hover:bg-red-500/30"
+                className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-amber-400/40 bg-amber-500/20 px-4 text-sm font-semibold text-amber-50 transition hover:bg-amber-500/30"
               >
                 View Outstanding
               </button>
@@ -323,13 +491,19 @@ export function CustomerDetailsPage({
           <div className="mt-5">
             <TabPanel
               tab={activeTab}
-              customerId={customer.id}
-              customerName={customer.fullName}
+              customerId={customerWithCounts.id}
+              customerName={customerWithCounts.fullName}
               projects={projects}
               projectFinancials={projectFinancials}
               customerPayments={customerPayments}
-              addressPlaceholder={addressPlaceholder}
+              documents={documents}
+              notes={noteRows}
+              locations={customerWithCounts.locations}
+              timeline={timeline}
+              fallbackAddress={customerWithCounts.address}
               onOpenProjects={() => setActiveTab("projects")}
+              onDocumentCountChange={setDocumentCount}
+              onNotesChange={setNoteRows}
             />
           </div>
         </div>
@@ -341,11 +515,38 @@ export function CustomerDetailsPage({
             onViewAll={() => setActiveTab("locations")}
           />
           <ActivityTimelineCard
-            items={customerWithCounts.recentActivity}
+            items={
+              timeline.length > 0
+                ? timeline.slice(0, 6)
+                : customerWithCounts.recentActivity
+            }
             onViewFull={() => setActiveTab("timeline")}
           />
         </aside>
       </div>
+
+      {showEdit ? (
+        <div>
+          {editError ? (
+            <div className="fixed inset-x-0 top-4 z-[60] flex justify-center px-4">
+              <p className="rounded-xl border border-red-500/30 bg-red-500/15 px-4 py-2 text-sm text-red-100 shadow-lg">
+                {editError}
+              </p>
+            </div>
+          ) : null}
+          <CustomerFormModal
+            title="Edit Customer"
+            initialForm={editForm}
+            isSaving={isSaving}
+            isImporting={isImporting}
+            onClose={() => {
+              if (!isSaving && !isImporting) setShowEdit(false);
+            }}
+            onSubmit={handleSaveCustomer}
+            onImportContact={handleImportContact}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -370,11 +571,13 @@ function ContactChip({
   icon,
   value,
   href,
+  external,
 }: {
   label: string;
   icon: React.ReactNode;
   value: string | null;
   href?: string;
+  external?: boolean;
 }) {
   const content = (
     <>
@@ -395,7 +598,13 @@ function ContactChip({
 
   if (href && value) {
     return (
-      <a href={href} className={`${className} transition hover:border-accent/40 hover:bg-accent/5`}>
+      <a
+        href={href}
+        className={`${className} transition hover:border-accent/40 hover:bg-accent/5`}
+        {...(external
+          ? { target: "_blank", rel: "noopener noreferrer" }
+          : {})}
+      >
         {content}
       </a>
     );
@@ -408,17 +617,25 @@ function ActionButton({
   label,
   icon,
   href,
+  external,
 }: {
   label: string;
   icon: React.ReactNode;
   href?: string;
+  external?: boolean;
 }) {
   const className =
     "inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50";
 
   if (href) {
     return (
-      <a href={href} className={className}>
+      <a
+        href={href}
+        className={className}
+        {...(external
+          ? { target: "_blank", rel: "noopener noreferrer" }
+          : {})}
+      >
         {icon}
         {label}
       </a>
@@ -440,8 +657,14 @@ function TabPanel({
   projects,
   projectFinancials,
   customerPayments,
-  addressPlaceholder,
+  documents,
+  notes,
+  locations,
+  timeline,
+  fallbackAddress,
   onOpenProjects,
+  onDocumentCountChange,
+  onNotesChange,
 }: {
   tab: CustomerDetailsTab;
   customerId: string;
@@ -449,14 +672,20 @@ function TabPanel({
   projects: Project[];
   projectFinancials: CustomerProjectFinancial[];
   customerPayments: CustomerPaymentListItem[];
-  addressPlaceholder: string | null;
+  documents: CustomerDocument[];
+  notes: CustomerNote[];
+  locations: CustomerDetailsViewModel["locations"];
+  timeline: CustomerActivityItem[];
+  fallbackAddress: string | null;
   onOpenProjects: () => void;
+  onDocumentCountChange: (count: number) => void;
+  onNotesChange: (notes: CustomerNote[]) => void;
 }) {
   if (tab === "overview") {
     const recent = projects.slice(0, 5);
     return (
       <div className="space-y-5">
-        <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] p-6">
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent p-6">
           <p className="text-sm font-semibold uppercase tracking-wide text-accent">
             Overview
           </p>
@@ -464,9 +693,7 @@ function TabPanel({
             {customerName}
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
-            Recent projects use live data. Open Financial or Payments for
-            real balances and payment history across this customer&apos;s
-            projects.
+            Live projects, balances, documents, and notes for this customer.
           </p>
         </div>
 
@@ -488,15 +715,15 @@ function TabPanel({
 
           {recent.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              No projects yet. When a quote for this customer is accepted, a
-              project is created automatically.
+              No projects yet. Use + New Project to start a quote for this
+              customer, or accept an existing quote.
             </p>
           ) : (
             <div className="mt-4">
               <ProjectList
                 customerId={customerId}
                 projects={recent}
-                addressPlaceholder={addressPlaceholder}
+                fallbackAddress={fallbackAddress}
                 dense
               />
             </div>
@@ -511,7 +738,17 @@ function TabPanel({
       <ProjectsTab
         customerId={customerId}
         projects={projects}
-        addressPlaceholder={addressPlaceholder}
+        fallbackAddress={fallbackAddress}
+      />
+    );
+  }
+
+  if (tab === "documents") {
+    return (
+      <CustomerDocumentsTab
+        customerId={customerId}
+        initialDocuments={documents}
+        onCountChange={onDocumentCountChange}
       />
     );
   }
@@ -534,17 +771,25 @@ function TabPanel({
     );
   }
 
-  const label =
-    CUSTOMER_DETAILS_TABS.find((item) => item.id === tab)?.label ?? tab;
+  if (tab === "locations") {
+    return <LocationsTab locations={locations} />;
+  }
 
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
-      <h2 className="text-lg font-semibold text-white">{label}</h2>
-      <p className="mt-2 text-sm text-slate-400">
-        Coming in a later stage — placeholder content only.
-      </p>
-    </div>
-  );
+  if (tab === "timeline") {
+    return <TimelineTab items={timeline} />;
+  }
+
+  if (tab === "notes") {
+    return (
+      <CustomerNotesTab
+        customerId={customerId}
+        initialNotes={notes}
+        onNotesChange={onNotesChange}
+      />
+    );
+  }
+
+  return null;
 }
 
 function FinancialTab({
@@ -830,11 +1075,11 @@ function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
 function ProjectsTab({
   customerId,
   projects,
-  addressPlaceholder,
+  fallbackAddress,
 }: {
   customerId: string;
   projects: Project[];
-  addressPlaceholder: string | null;
+  fallbackAddress: string | null;
 }) {
   if (projects.length === 0) {
     return (
@@ -858,7 +1103,7 @@ function ProjectsTab({
       <ProjectList
         customerId={customerId}
         projects={projects}
-        addressPlaceholder={addressPlaceholder}
+        fallbackAddress={fallbackAddress}
       />
     </div>
   );
@@ -867,12 +1112,12 @@ function ProjectsTab({
 function ProjectList({
   customerId,
   projects,
-  addressPlaceholder,
+  fallbackAddress,
   dense = false,
 }: {
   customerId: string;
   projects: Project[];
-  addressPlaceholder: string | null;
+  fallbackAddress: string | null;
   dense?: boolean;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -886,7 +1131,7 @@ function ProjectList({
             key={project.id}
             customerId={customerId}
             project={project}
-            addressPlaceholder={addressPlaceholder}
+            fallbackAddress={fallbackAddress}
             expanded={expanded}
             dense={dense}
             onToggle={() =>
@@ -904,14 +1149,14 @@ function ProjectList({
 function ProjectCard({
   customerId,
   project,
-  addressPlaceholder,
+  fallbackAddress,
   expanded,
   dense,
   onToggle,
 }: {
   customerId: string;
   project: Project;
-  addressPlaceholder: string | null;
+  fallbackAddress: string | null;
   expanded: boolean;
   dense?: boolean;
   onToggle: () => void;
@@ -921,6 +1166,8 @@ function ProjectCard({
   const name = project.project_name?.trim() || "Untitled project";
   const projectCustomerId = project.customer_id || customerId;
   const projectDetailHref = `/dashboard/customers/${projectCustomerId}/projects/${project.id}`;
+  const address =
+    project.address?.trim() || fallbackAddress?.trim() || "Address TBD";
 
   return (
     <li className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
@@ -950,7 +1197,7 @@ function ProjectCard({
               <p
                 className={`mt-1 text-slate-400 ${dense ? "text-xs" : "text-sm"}`}
               >
-                {addressPlaceholder || "Address TBD"}
+                {address}
                 <span className="mx-2 text-slate-600">·</span>
                 Started {formatProjectDate(project.start_date)}
               </p>
@@ -1098,12 +1345,32 @@ function CustomerSummaryCard({
 }: {
   customer: CustomerDetailsViewModel;
 }) {
-  const rows: { label: string; value: string }[] = [
+  const websiteHref = customer.website
+    ? customer.website.startsWith("http")
+      ? customer.website
+      : `https://${customer.website}`
+    : null;
+
+  const rows: { label: string; value: React.ReactNode }[] = [
     { label: "Full Name", value: customer.fullName },
-    { label: "Company", value: customer.company || "—" },
     { label: "Phone", value: customer.phone || "—" },
     { label: "Email", value: customer.email || "—" },
     { label: "Address", value: customer.address || "—" },
+    {
+      label: "Website",
+      value: websiteHref ? (
+        <a
+          href={websiteHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-accent hover:text-blue-400"
+        >
+          {customer.website}
+        </a>
+      ) : (
+        "—"
+      ),
+    },
     {
       label: "Customer Since",
       value: formatCustomerDate(customer.customerSince),
@@ -1112,8 +1379,6 @@ function CustomerSummaryCard({
       label: "Last Contact",
       value: formatCustomerDate(customer.lastContactAt),
     },
-    { label: "Preferred Contact", value: customer.preferredContact },
-    { label: "Customer Source", value: customer.customerSource },
   ];
 
   return (
@@ -1136,26 +1401,21 @@ function CustomerSummaryCard({
 
       <div className="mt-4">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Tags
+          Type
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
-          {customer.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-accent/25"
-            >
-              {tag}
-            </span>
-          ))}
+          <span className="rounded-full bg-accent/15 px-2.5 py-1 text-xs font-medium text-accent ring-1 ring-accent/25">
+            {customerTypeLabel(customer.customerType)}
+          </span>
         </div>
       </div>
 
       <div className="mt-4 border-t border-white/10 pt-4">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-          Notes
+          Latest Note
         </p>
         <p className="mt-1 text-sm leading-relaxed text-slate-300">
-          {customer.notes || "No notes yet."}
+          {customer.notesPreview || "No notes yet."}
         </p>
       </div>
     </section>
@@ -1191,27 +1451,143 @@ function LocationsCard({
         </div>
       </div>
 
-      <ul className="mt-4 space-y-3">
-        {customer.locations.map((location) => (
+      {customer.locations.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">No addresses on file.</p>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {customer.locations.slice(0, 3).map((location) => (
+            <li
+              key={location.id}
+              className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-white">
+                  {location.label}
+                </p>
+                {location.isPrimary ? (
+                  <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300 ring-1 ring-cyan-500/30">
+                    Primary
+                  </span>
+                ) : null}
+              </div>
+              <a
+                href={googleMapsSearchUrl(location.address)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 block text-xs leading-relaxed text-slate-400 transition hover:text-accent"
+              >
+                {location.address}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function LocationsTab({
+  locations,
+}: {
+  locations: CustomerDetailsViewModel["locations"];
+}) {
+  if (locations.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Locations</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          No addresses yet. Add a customer address or set project job-site
+          addresses to see them here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-white">
+        Locations ({locations.length})
+      </h2>
+      <ul className="space-y-3">
+        {locations.map((location) => (
           <li
             key={location.id}
-            className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
+            className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4"
           >
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-white">{location.label}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-semibold text-white">
+                {location.label}
+              </p>
               {location.isPrimary ? (
                 <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-300 ring-1 ring-cyan-500/30">
                   Primary
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-slate-400">
-              {location.address}
-            </p>
+            <p className="mt-2 text-sm text-slate-300">{location.address}</p>
+            <a
+              href={googleMapsSearchUrl(location.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex text-sm font-semibold text-accent hover:text-blue-400"
+            >
+              Open in Google Maps →
+            </a>
           </li>
         ))}
       </ul>
-    </section>
+    </div>
+  );
+}
+
+function TimelineTab({ items }: { items: CustomerActivityItem[] }) {
+  if (items.length === 0) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Timeline</h2>
+        <p className="mt-2 text-sm text-slate-400">
+          Activity from this customer&apos;s projects will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-white">
+        Timeline ({items.length})
+      </h2>
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <li
+            key={item.id}
+            className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3"
+          >
+            <div
+              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ${activityAccent(item.type)}`}
+            >
+              <ActivityIcon type={item.type} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-white">{item.title}</p>
+                <p className="shrink-0 text-[11px] text-slate-500">
+                  {formatCustomerDate(item.occurredAt)}
+                </p>
+              </div>
+              {item.projectName ? (
+                <p className="mt-0.5 text-xs font-medium text-slate-400">
+                  {item.projectName}
+                </p>
+              ) : null}
+              {item.description ? (
+                <p className="mt-1 text-sm text-slate-300">{item.description}</p>
+              ) : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -1237,35 +1613,44 @@ function ActivityTimelineCard({
         </button>
       </div>
 
-      <ul className="mt-4 space-y-3">
-        {items.map((item) => (
-          <li key={item.id} className="flex gap-3">
-            <div
-              className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ${activityAccent(item.type)}`}
-            >
-              <ActivityIcon type={item.type} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-white">{item.title}</p>
-                {typeof item.amount === "number" ? (
-                  <p className="shrink-0 text-sm font-semibold text-slate-200">
-                    {formatCustomerMoney(item.amount)}
+      {items.length === 0 ? (
+        <p className="mt-4 text-sm text-slate-500">No recent activity.</p>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {items.map((item) => (
+            <li key={item.id} className="flex gap-3">
+              <div
+                className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ring-1 ${activityAccent(item.type)}`}
+              >
+                <ActivityIcon type={item.type} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium text-white">{item.title}</p>
+                  {typeof item.amount === "number" ? (
+                    <p className="shrink-0 text-sm font-semibold text-slate-200">
+                      {formatCustomerMoney(item.amount)}
+                    </p>
+                  ) : null}
+                </div>
+                {item.projectName ? (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {item.projectName}
                   </p>
                 ) : null}
-              </div>
-              {item.description ? (
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {item.description}
+                {item.description ? (
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {item.description}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {formatCustomerDate(item.occurredAt)}
                 </p>
-              ) : null}
-              <p className="mt-1 text-[11px] text-slate-500">
-                {formatCustomerDate(item.occurredAt)}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
