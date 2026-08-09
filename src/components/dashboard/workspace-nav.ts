@@ -57,9 +57,9 @@ export const workspaceNavItems = [
     icon: IconSettings,
   },
   {
-    label: "Calendar",
-    href: "/dashboard/calendar",
-    matchPath: "/dashboard/calendar",
+    label: "Today",
+    href: "/dashboard/today",
+    matchPath: "/dashboard/today",
     icon: IconCalendar,
   },
 ] as const;
