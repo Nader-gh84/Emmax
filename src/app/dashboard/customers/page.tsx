@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CustomersEmptyState } from "@/components/dashboard/customers-empty-state";
+import {
+  IconDocument,
+  IconUsers,
+} from "@/components/dashboard/icons";
+import {
+  IconMail,
+  IconMore,
+  IconPhone,
+  IconProjects,
+  IconSearch,
+} from "@/components/dashboard/workspace-icons";
+import { CustomerFormModal } from "@/components/customers/customer-form-modal";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
   touchInput,
-  touchTextarea,
 } from "@/components/quotes/ui";
-import {
-  isContactPickerSupported,
-  pickContactForForm,
-} from "@/lib/customer-contacts";
+import { pickContactForForm } from "@/lib/customer-contacts";
 import { createClient } from "@/lib/supabase";
 import {
   EMPTY_CUSTOMER_FORM,
@@ -20,6 +28,28 @@ import {
   type Customer,
   type CustomerFormData,
 } from "@/types/customer";
+
+type CustomerListItem = Customer & {
+  quotesCount: number;
+  projectsCount: number;
+  /** Derived — no inactive status in schema yet. */
+  isActive: boolean;
+};
+
+type SortOption = "recent" | "name_asc" | "name_desc";
+type StatusFilter = "all" | "active";
+type ViewMode = "grid" | "list";
+
+const AVATAR_COLORS = [
+  "bg-sky-600",
+  "bg-teal-600",
+  "bg-indigo-600",
+  "bg-rose-600",
+  "bg-amber-600",
+  "bg-cyan-700",
+  "bg-violet-600",
+  "bg-emerald-700",
+];
 
 function customerToForm(customer: Customer): CustomerFormData {
   return {
@@ -43,269 +73,240 @@ function formToPayload(form: CustomerFormData) {
   };
 }
 
-interface CustomerFormModalProps {
-  title: string;
-  initialForm: CustomerFormData;
-  isSaving: boolean;
-  isImporting: boolean;
-  onClose: () => void;
-  onSubmit: (form: CustomerFormData) => Promise<void>;
-  onImportContact: () => Promise<void>;
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return parts[0]?.slice(0, 2).toUpperCase() || "?";
 }
 
-function CustomerFormModal({
-  title,
-  initialForm,
-  isSaving,
-  isImporting,
-  onClose,
-  onSubmit,
-  onImportContact,
-}: CustomerFormModalProps) {
-  const [form, setForm] = useState<CustomerFormData>(initialForm);
-  const [contactPickerSupported, setContactPickerSupported] = useState(false);
-
-  useEffect(() => {
-    setForm(initialForm);
-  }, [initialForm]);
-
-  useEffect(() => {
-    setContactPickerSupported(isContactPickerSupported());
-  }, []);
-
-  function updateField(key: keyof CustomerFormData, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash + name.charCodeAt(i) * (i + 1)) % AVATAR_COLORS.length;
   }
+  return AVATAR_COLORS[hash] ?? AVATAR_COLORS[0];
+}
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!form.first_name.trim() || !form.last_name.trim()) return;
-    await onSubmit(form);
-  }
+function IconUserPlus({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+    </svg>
+  );
+}
+
+function IconGrid({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+    </svg>
+  );
+}
+
+function IconList({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function StatsRow({
+  totalCustomers,
+  activeCustomers,
+  quotesSent,
+  projects,
+}: {
+  totalCustomers: number;
+  activeCustomers: number;
+  quotesSent: number;
+  projects: number;
+}) {
+  const cards = [
+    {
+      id: "total",
+      label: "Total Customers",
+      value: totalCustomers,
+      icon: <IconUsers className="h-5 w-5" />,
+      iconClass: "bg-accent/15 text-accent ring-accent/30",
+    },
+    {
+      id: "active",
+      label: "Active Customers",
+      value: activeCustomers,
+      icon: <IconUserPlus className="h-5 w-5" />,
+      iconClass: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30",
+    },
+    {
+      id: "quotes",
+      label: "Quotes Sent",
+      value: quotesSent,
+      icon: <IconDocument className="h-5 w-5" />,
+      iconClass: "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30",
+    },
+    {
+      id: "projects",
+      label: "Projects",
+      value: projects,
+      icon: <IconProjects className="h-5 w-5" />,
+      iconClass: "bg-amber-500/15 text-amber-200 ring-amber-500/30",
+    },
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-      <div
-        className="absolute inset-0"
-        aria-hidden="true"
-        onClick={onClose}
-      />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-
-        <div className="mt-6 space-y-4">
-          {contactPickerSupported ? (
-            <button
-              type="button"
-              onClick={onImportContact}
-              disabled={isSaving || isImporting}
-              className={`${touchBtnSecondary} w-full`}
-            >
-              {isImporting ? "Opening contacts..." : "Import from Contacts"}
-            </button>
-          ) : (
-            <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400">
-              Contact import isn&apos;t supported on this device — please
-              enter details manually below.
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => (
+        <section
+          key={card.id}
+          className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {card.label}
             </p>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="customer-first-name"
-                className="block text-base font-medium text-slate-300"
-              >
-                First Name <span className="text-accent">*</span>
-              </label>
-              <input
-                id="customer-first-name"
-                type="text"
-                value={form.first_name}
-                onChange={(event) =>
-                  updateField("first_name", event.target.value)
-                }
-                className={`${touchInput} mt-1.5`}
-                placeholder="First name"
-                required
-                autoComplete="given-name"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="customer-last-name"
-                className="block text-base font-medium text-slate-300"
-              >
-                Last Name <span className="text-accent">*</span>
-              </label>
-              <input
-                id="customer-last-name"
-                type="text"
-                value={form.last_name}
-                onChange={(event) =>
-                  updateField("last_name", event.target.value)
-                }
-                className={`${touchInput} mt-1.5`}
-                placeholder="Last name"
-                required
-                autoComplete="family-name"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="customer-email"
-              className="block text-base font-medium text-slate-300"
+            <span
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${card.iconClass}`}
             >
-              Email
-            </label>
-            <input
-              id="customer-email"
-              type="email"
-              value={form.email}
-              onChange={(event) => updateField("email", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-              autoComplete="email"
-            />
+              {card.icon}
+            </span>
           </div>
-
-          <div>
-            <label
-              htmlFor="customer-phone"
-              className="block text-base font-medium text-slate-300"
-            >
-              Phone
-            </label>
-            <input
-              id="customer-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(event) => updateField("phone", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-              autoComplete="tel"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="customer-address"
-              className="block text-base font-medium text-slate-300"
-            >
-              Address
-            </label>
-            <input
-              id="customer-address"
-              type="text"
-              value={form.address}
-              onChange={(event) => updateField("address", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-              autoComplete="street-address"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="customer-notes"
-              className="block text-base font-medium text-slate-300"
-            >
-              Notes
-            </label>
-            <textarea
-              id="customer-notes"
-              value={form.notes}
-              onChange={(event) => updateField("notes", event.target.value)}
-              className={`${touchTextarea} mt-1.5 min-h-[96px]`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className={`${touchBtnSecondary} w-full sm:w-auto`}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={
-                isSaving || !form.first_name.trim() || !form.last_name.trim()
-              }
-              className={`${touchBtnPrimary} w-full sm:w-auto`}
-            >
-              {isSaving ? "Saving..." : "Save Customer"}
-            </button>
-          </div>
-        </form>
-      </div>
+          <p className="mt-3 text-2xl font-bold tracking-tight text-white">
+            {card.value}
+          </p>
+        </section>
+      ))}
     </div>
   );
 }
 
 function CustomerCard({
   customer,
+  viewMode,
   isDeleting,
   onEdit,
   onDelete,
 }: {
-  customer: Customer;
+  customer: CustomerListItem;
+  viewMode: ViewMode;
   isDeleting: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const displayName = getCustomerDisplayName(customer);
+  const initials = getInitials(displayName);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <article className="rounded-xl border border-white/10 bg-white/5 p-5">
-      <Link
-        href={`/dashboard/customers/${customer.id}`}
-        className="group block"
+    <article
+      className={`relative rounded-2xl border border-white/10 bg-white/[0.03] p-5 ${
+        viewMode === "list" ? "sm:flex sm:items-stretch sm:gap-6" : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"
+        aria-label={`More actions for ${displayName}`}
       >
-        <h3 className="text-lg font-semibold text-white transition group-hover:text-accent">
-          {displayName}
-        </h3>
-      </Link>
+        <IconMore className="h-4 w-4" />
+      </button>
+      {menuOpen ? (
+        <div className="absolute right-3 top-12 z-20 w-40 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+          <Link
+            href={`/dashboard/customers/${customer.id}`}
+            className="block px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            onClick={() => setMenuOpen(false)}
+          >
+            View details
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onEdit();
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onDelete();
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
 
-      <dl className="mt-4 space-y-2">
-        {customer.email && (
-          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-            <dt className="shrink-0 text-sm font-medium text-slate-500 sm:w-16">
-              Email
-            </dt>
-            <dd className="text-sm text-slate-300">{customer.email}</dd>
+      <div className={viewMode === "list" ? "min-w-0 flex-1" : ""}>
+        <div className="flex items-start gap-3 pr-10">
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColor(
+              displayName
+            )}`}
+          >
+            {initials}
           </div>
-        )}
-        {customer.phone && (
-          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-            <dt className="shrink-0 text-sm font-medium text-slate-500 sm:w-16">
-              Phone
-            </dt>
-            <dd className="text-sm text-slate-300">{customer.phone}</dd>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-lg font-semibold text-white">
+                {displayName}
+              </h3>
+              <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30">
+                Active
+              </span>
+            </div>
           </div>
-        )}
-        {customer.address && (
-          <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-            <dt className="shrink-0 text-sm font-medium text-slate-500 sm:w-16">
-              Address
-            </dt>
-            <dd className="text-sm text-slate-300">{customer.address}</dd>
-          </div>
-        )}
-        {!customer.email && !customer.phone && !customer.address && (
-          <p className="text-sm text-slate-500">No contact details added.</p>
-        )}
-      </dl>
+        </div>
 
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+        <div
+          className={`mt-4 flex gap-4 ${
+            viewMode === "list"
+              ? "flex-col sm:flex-row sm:items-center sm:justify-between"
+              : "flex-col"
+          }`}
+        >
+          <div className="min-w-0 space-y-2 text-sm text-slate-300">
+            <p className="flex items-center gap-2 truncate">
+              <IconMail className="h-4 w-4 shrink-0 text-cyan-400/90" />
+              <span className="truncate">{customer.email || "—"}</span>
+            </p>
+            <p className="flex items-center gap-2 truncate">
+              <IconPhone className="h-4 w-4 shrink-0 text-cyan-400/90" />
+              <span className="truncate">{customer.phone || "—"}</span>
+            </p>
+          </div>
+
+          <div className="flex shrink-0 gap-4 text-sm text-slate-300 sm:justify-end">
+            <p className="inline-flex items-center gap-1.5">
+              <IconDocument className="h-4 w-4 text-slate-500" />
+              <span className="font-semibold text-white">
+                {customer.quotesCount}
+              </span>
+              <span className="text-slate-500">Quotes</span>
+            </p>
+            <p className="inline-flex items-center gap-1.5">
+              <IconProjects className="h-4 w-4 text-slate-500" />
+              <span className="font-semibold text-white">
+                {customer.projectsCount}
+              </span>
+              <span className="text-slate-500">Projects</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`mt-5 flex flex-col gap-2 sm:flex-row ${
+          viewMode === "list" ? "sm:mt-0 sm:shrink-0 sm:items-center" : ""
+        }`}
+      >
         <Link
           href={`/dashboard/customers/${customer.id}`}
           className={`${touchBtnSecondary} w-full sm:w-auto`}
@@ -315,7 +316,7 @@ function CustomerCard({
         <button
           type="button"
           onClick={onEdit}
-          className={`${touchBtnSecondary} w-full sm:w-auto`}
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-accent/40 px-6 text-base font-medium text-accent transition hover:bg-accent/10 sm:w-auto"
         >
           Edit
         </button>
@@ -333,7 +334,9 @@ function CustomerCard({
 }
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customers, setCustomers] = useState<CustomerListItem[]>([]);
+  const [quotesSentTotal, setQuotesSentTotal] = useState(0);
+  const [projectsTotal, setProjectsTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -345,23 +348,81 @@ export default function CustomersPage() {
   const [formData, setFormData] = useState<CustomerFormData>(
     EMPTY_CUSTOMER_FORM
   );
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("recent");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const loadCustomers = useCallback(async () => {
     setError(null);
 
     const supabase = createClient();
-    const { data, error: fetchError } = await supabase
-      .from("customers")
-      .select("*")
-      .order("last_name", { ascending: true })
-      .order("first_name", { ascending: true });
+    const [
+      { data: customerData, error: fetchError },
+      { data: quoteData },
+      { data: projectData },
+    ] = await Promise.all([
+      supabase
+        .from("customers")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase.from("quotes").select("id, customer_id, status, sent_at"),
+      supabase.from("projects").select("id, customer_id"),
+    ]);
 
     if (fetchError) {
       setError("Failed to load customers. Please try again.");
       return;
     }
 
-    setCustomers((data as Customer[]) ?? []);
+    const quotesByCustomer = new Map<string, number>();
+    let sentCount = 0;
+    for (const quote of (quoteData as
+      | {
+          id: string;
+          customer_id: string | null;
+          status: string | null;
+          sent_at: string | null;
+        }[]
+      | null) ?? []) {
+      const isSent =
+        quote.status === "sent" ||
+        quote.status === "accepted" ||
+        quote.status === "declined" ||
+        Boolean(quote.sent_at);
+      if (isSent) sentCount += 1;
+      if (!quote.customer_id) continue;
+      quotesByCustomer.set(
+        quote.customer_id,
+        (quotesByCustomer.get(quote.customer_id) ?? 0) + 1
+      );
+    }
+
+    const projectsByCustomer = new Map<string, number>();
+    for (const project of (projectData as
+      | { id: string; customer_id: string | null }[]
+      | null) ?? []) {
+      if (!project.customer_id) continue;
+      projectsByCustomer.set(
+        project.customer_id,
+        (projectsByCustomer.get(project.customer_id) ?? 0) + 1
+      );
+    }
+
+    const rows = ((customerData as Customer[] | null) ?? []).map(
+      (customer) => ({
+        ...customer,
+        quotesCount: quotesByCustomer.get(customer.id) ?? 0,
+        projectsCount: projectsByCustomer.get(customer.id) ?? 0,
+        isActive: true,
+      })
+    );
+
+    setCustomers(rows);
+    setQuotesSentTotal(sentCount);
+    setProjectsTotal(
+      ((projectData as { id: string }[] | null) ?? []).length
+    );
   }, []);
 
   useEffect(() => {
@@ -371,8 +432,44 @@ export default function CustomersPage() {
       setIsLoading(false);
     }
 
-    init();
+    void init();
   }, [loadCustomers]);
+
+  const filteredCustomers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let rows = [...customers];
+
+    if (statusFilter === "active") {
+      rows = rows.filter((row) => row.isActive);
+    }
+
+    if (query) {
+      rows = rows.filter((row) => {
+        const name = getCustomerDisplayName(row).toLowerCase();
+        return (
+          name.includes(query) ||
+          (row.email ?? "").toLowerCase().includes(query) ||
+          (row.phone ?? "").toLowerCase().includes(query)
+        );
+      });
+    }
+
+    rows.sort((a, b) => {
+      if (sortBy === "name_asc") {
+        return getCustomerDisplayName(a).localeCompare(
+          getCustomerDisplayName(b)
+        );
+      }
+      if (sortBy === "name_desc") {
+        return getCustomerDisplayName(b).localeCompare(
+          getCustomerDisplayName(a)
+        );
+      }
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    });
+
+    return rows;
+  }, [customers, search, statusFilter, sortBy]);
 
   function openAddForm() {
     setEditingCustomer(null);
@@ -403,11 +500,7 @@ export default function CustomersPage() {
 
     try {
       const imported = await pickContactForForm();
-
-      if (!imported) {
-        return;
-      }
-
+      if (!imported) return;
       setFormData(imported);
     } catch (err) {
       setError(
@@ -478,7 +571,6 @@ export default function CustomersPage() {
     const confirmed = window.confirm(
       `Delete ${getCustomerDisplayName(customer)}? This cannot be undone.`
     );
-
     if (!confirmed) return;
 
     setDeletingId(customer.id);
@@ -511,7 +603,6 @@ export default function CustomersPage() {
     );
   }
 
-  // Step 1: empty state only — no stats row / table when there are zero customers.
   if (customers.length === 0) {
     return (
       <main className="flex min-h-full flex-1 flex-col">
@@ -543,49 +634,148 @@ export default function CustomersPage() {
     );
   }
 
-  // Temporary list until Step 2 (table redesign).
+  const activeCount = customers.filter((row) => row.isActive).length;
+
   return (
     <main className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Customers</h1>
-            <p className="mt-2 text-base text-slate-400">
-              Manage your customer contacts for faster quoting.
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Customers
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400 sm:text-base">
+              Manage your customer contacts for faster quoting and better
+              service.
             </p>
           </div>
           <button
             type="button"
             onClick={openAddForm}
-            className={`${touchBtnPrimary} w-full sm:w-auto`}
+            className={`${touchBtnPrimary} w-full shrink-0 sm:w-auto`}
           >
             + Add Customer
           </button>
         </div>
 
+        <StatsRow
+          totalCustomers={customers.length}
+          activeCustomers={activeCount}
+          quotesSent={quotesSentTotal}
+          projects={projectsTotal}
+        />
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <label className="relative min-w-0 flex-1">
+            <span className="sr-only">Search customers</span>
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search customers by name, email or phone..."
+              className={`${touchInput} w-full pl-10`}
+            />
+          </label>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={statusFilter}
+              onChange={(event) =>
+                setStatusFilter(event.target.value as StatusFilter)
+              }
+              className={`${touchInput} w-full appearance-none sm:w-40`}
+              aria-label="Filter by status"
+            >
+              <option value="all" className="bg-navy">
+                All Status
+              </option>
+              <option value="active" className="bg-navy">
+                Active
+              </option>
+            </select>
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as SortOption)}
+              className={`${touchInput} w-full appearance-none sm:w-56`}
+              aria-label="Sort customers"
+            >
+              <option value="recent" className="bg-navy">
+                Sort by: Recently Added
+              </option>
+              <option value="name_asc" className="bg-navy">
+                Sort by: Name A–Z
+              </option>
+              <option value="name_desc" className="bg-navy">
+                Sort by: Name Z–A
+              </option>
+            </select>
+            <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.03] p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition ${
+                  viewMode === "grid"
+                    ? "bg-accent/20 text-accent"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                aria-label="Grid view"
+                aria-pressed={viewMode === "grid"}
+              >
+                <IconGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition ${
+                  viewMode === "list"
+                    ? "bg-accent/20 text-accent"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                aria-label="List view"
+                aria-pressed={viewMode === "list"}
+              >
+                <IconList className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
         {success && (
-          <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
+          <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
             {success}
           </div>
         )}
 
         {error && (
-          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
             {error}
           </div>
         )}
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {customers.map((customer) => (
-            <CustomerCard
-              key={customer.id}
-              customer={customer}
-              isDeleting={deletingId === customer.id}
-              onEdit={() => openEditForm(customer)}
-              onDelete={() => handleDelete(customer)}
-            />
-          ))}
-        </div>
+        {filteredCustomers.length === 0 ? (
+          <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-10 text-center text-sm text-slate-500">
+            No customers match your search or filters.
+          </p>
+        ) : (
+          <div
+            className={
+              viewMode === "grid"
+                ? "grid gap-4 sm:grid-cols-2"
+                : "flex flex-col gap-3"
+            }
+          >
+            {filteredCustomers.map((customer) => (
+              <CustomerCard
+                key={customer.id}
+                customer={customer}
+                viewMode={viewMode}
+                isDeleting={deletingId === customer.id}
+                onEdit={() => openEditForm(customer)}
+                onDelete={() => void handleDelete(customer)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {showForm && (
