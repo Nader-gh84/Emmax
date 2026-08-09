@@ -47,6 +47,8 @@ export type SupplierDetailsViewModel = {
   paymentTerms: string;
   defaultAccountNumber: string;
   notes: string;
+  /** Storage path in supplier-logos bucket. */
+  logoUrl: string | null;
   summary: SupplierAccountSummary;
   invoices: SupplierInvoice[];
   payments: SupplierPayment[];
@@ -103,6 +105,7 @@ export function buildSupplierDetailsViewModel(input: {
     defaultAccountNumber:
       input.supplier.default_account_number?.trim() || "—",
     notes: input.supplier.notes?.trim() || "No notes yet.",
+    logoUrl: input.supplier.logo_url?.trim() || null,
     summary,
     invoices,
     payments,

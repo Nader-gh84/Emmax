@@ -200,5 +200,13 @@ export default async function SupplierDetailsRoute({
     customerNames,
   });
 
-  return <SupplierDetailsPage supplier={details} />;
+  return (
+    <SupplierDetailsPage
+      supplier={details}
+      supplierRecord={{
+        ...supplierRow,
+        logo_url: supplierRow.logo_url ?? null,
+      }}
+    />
+  );
 }

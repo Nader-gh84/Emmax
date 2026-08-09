@@ -13,6 +13,7 @@ import {
 } from "@/lib/customer-financials";
 import { createClient } from "@/lib/supabase/server";
 import {
+  isCustomerGender,
   isCustomerType,
   type Customer,
   type CustomerDocument,
@@ -87,6 +88,10 @@ function normalizeCustomer(row: Customer): Customer {
       ? row.customer_type
       : "residential",
     website: row.website ?? null,
+    gender: isCustomerGender(String(row.gender ?? ""))
+      ? row.gender
+      : "unspecified",
+    avatar_url: row.avatar_url ?? null,
   };
 }
 
