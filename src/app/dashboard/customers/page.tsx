@@ -22,6 +22,7 @@ import {
 } from "@/components/quotes/ui";
 import { pickContactForForm } from "@/lib/customer-contacts";
 import { createClient } from "@/lib/supabase";
+import { deriveCustomerStatus } from "@/lib/customer-details";
 import {
   EMPTY_CUSTOMER_FORM,
   getCustomerDisplayName,
@@ -59,6 +60,9 @@ function customerToForm(customer: Customer): CustomerFormData {
     phone: customer.phone ?? "",
     address: customer.address ?? "",
     notes: customer.notes ?? "",
+    customer_type:
+      customer.customer_type === "commercial" ? "commercial" : "residential",
+    website: customer.website ?? "",
   };
 }
 
@@ -70,6 +74,8 @@ function formToPayload(form: CustomerFormData) {
     phone: form.phone.trim() || null,
     address: form.address.trim() || null,
     notes: form.notes.trim() || null,
+    customer_type: form.customer_type,
+    website: form.website.trim() || null,
   };
 }
 
@@ -367,7 +373,7 @@ export default function CustomersPage() {
         .select("*")
         .order("created_at", { ascending: false }),
       supabase.from("quotes").select("id, customer_id, status, sent_at"),
-      supabase.from("projects").select("id, customer_id"),
+      supabase.from("projects").select("id, customer_id, status"),
     ]);
 
     if (fetchError) {
@@ -398,24 +404,29 @@ export default function CustomersPage() {
       );
     }
 
-    const projectsByCustomer = new Map<string, number>();
+    const projectsByCustomer = new Map<
+      string,
+      { id: string; status: string }[]
+    >();
     for (const project of (projectData as
-      | { id: string; customer_id: string | null }[]
+      | { id: string; customer_id: string | null; status: string | null }[]
       | null) ?? []) {
       if (!project.customer_id) continue;
-      projectsByCustomer.set(
-        project.customer_id,
-        (projectsByCustomer.get(project.customer_id) ?? 0) + 1
-      );
+      const list = projectsByCustomer.get(project.customer_id) ?? [];
+      list.push({ id: project.id, status: project.status ?? "active" });
+      projectsByCustomer.set(project.customer_id, list);
     }
 
     const rows = ((customerData as Customer[] | null) ?? []).map(
-      (customer) => ({
-        ...customer,
-        quotesCount: quotesByCustomer.get(customer.id) ?? 0,
-        projectsCount: projectsByCustomer.get(customer.id) ?? 0,
-        isActive: true,
-      })
+      (customer) => {
+        const customerProjects = projectsByCustomer.get(customer.id) ?? [];
+        return {
+          ...customer,
+          quotesCount: quotesByCustomer.get(customer.id) ?? 0,
+          projectsCount: customerProjects.length,
+          isActive: deriveCustomerStatus(customerProjects) === "active",
+        };
+      }
     );
 
     setCustomers(rows);

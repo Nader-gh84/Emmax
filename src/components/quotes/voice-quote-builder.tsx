@@ -213,6 +213,7 @@ export function VoiceQuoteBuilder(props: VoiceQuoteBuilderProps = {}) {
         onPersisted={props.onPersisted}
         quoteParam={null}
         uploadPricingParam={null}
+        customerIdParam={null}
       />
     );
   }
@@ -228,6 +229,7 @@ function VoiceQuoteBuilderWithSearchParams(props: VoiceQuoteBuilderProps) {
       onPersisted={props.onPersisted}
       quoteParam={searchParams.get("quote")}
       uploadPricingParam={searchParams.get("uploadPricing")}
+      customerIdParam={searchParams.get("customerId")}
     />
   );
 }
@@ -237,9 +239,11 @@ function VoiceQuoteBuilderInner({
   onPersisted,
   quoteParam,
   uploadPricingParam,
+  customerIdParam,
 }: VoiceQuoteBuilderProps & {
   quoteParam: string | null;
   uploadPricingParam: string | null;
+  customerIdParam: string | null;
 }) {
   const [showSidebar, setShowSidebar] = useState(!embedded);
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -372,6 +376,45 @@ function VoiceQuoteBuilderInner({
       cancelled = true;
     };
   }, [quoteParam]);
+
+  useEffect(() => {
+    if (quoteParam) return;
+    const customerId = customerIdParam?.trim();
+    if (!customerId) return;
+
+    let cancelled = false;
+
+    async function preloadCustomer() {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", customerId)
+          .maybeSingle();
+
+        if (cancelled || error || !data) return;
+
+        const customer = data as Customer;
+        setCustomerMode("existing");
+        setSelectedCustomerId(customer.id);
+        setCustomerName(getCustomerDisplayName(customer));
+        setCustomerEmail(customer.email ?? "");
+        setCustomerPhone(customer.phone ?? "");
+        setCustomerSecondary(
+          customer.notes?.trim() || customer.email || ""
+        );
+      } catch {
+        // Soft-fail: builder still works with empty customer fields.
+      }
+    }
+
+    void preloadCustomer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerIdParam, quoteParam]);
 
   useEffect(() => {
     if (uploadPricingParam !== "1") return;
