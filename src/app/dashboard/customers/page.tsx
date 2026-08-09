@@ -15,17 +15,24 @@ import {
   IconSearch,
 } from "@/components/dashboard/workspace-icons";
 import { CustomerFormModal } from "@/components/customers/customer-form-modal";
+import { EntityAvatar } from "@/components/ui/entity-avatar";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
+import {
+  createCustomerAvatarSignedUrl,
+  deleteCustomerAvatarFile,
+  uploadCustomerAvatar,
+} from "@/lib/customer-avatar-storage";
 import { pickContactForForm } from "@/lib/customer-contacts";
 import { createClient } from "@/lib/supabase";
 import { deriveCustomerStatus } from "@/lib/customer-details";
 import {
   EMPTY_CUSTOMER_FORM,
   getCustomerDisplayName,
+  isCustomerGender,
   type Customer,
   type CustomerFormData,
 } from "@/types/customer";
@@ -41,17 +48,6 @@ type SortOption = "recent" | "name_asc" | "name_desc";
 type StatusFilter = "all" | "active";
 type ViewMode = "grid" | "list";
 
-const AVATAR_COLORS = [
-  "bg-sky-600",
-  "bg-teal-600",
-  "bg-indigo-600",
-  "bg-rose-600",
-  "bg-amber-600",
-  "bg-cyan-700",
-  "bg-violet-600",
-  "bg-emerald-700",
-];
-
 function customerToForm(customer: Customer): CustomerFormData {
   return {
     first_name: customer.first_name,
@@ -63,6 +59,9 @@ function customerToForm(customer: Customer): CustomerFormData {
     customer_type:
       customer.customer_type === "commercial" ? "commercial" : "residential",
     website: customer.website ?? "",
+    gender: isCustomerGender(String(customer.gender ?? ""))
+      ? customer.gender
+      : "unspecified",
   };
 }
 
@@ -76,23 +75,8 @@ function formToPayload(form: CustomerFormData) {
     notes: form.notes.trim() || null,
     customer_type: form.customer_type,
     website: form.website.trim() || null,
+    gender: form.gender,
   };
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  }
-  return parts[0]?.slice(0, 2).toUpperCase() || "?";
-}
-
-function avatarColor(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i += 1) {
-    hash = (hash + name.charCodeAt(i) * (i + 1)) % AVATAR_COLORS.length;
-  }
-  return AVATAR_COLORS[hash] ?? AVATAR_COLORS[0];
 }
 
 function IconUserPlus({ className }: { className?: string }) {
@@ -201,7 +185,6 @@ function CustomerCard({
   onDelete: () => void;
 }) {
   const displayName = getCustomerDisplayName(customer);
-  const initials = getInitials(displayName);
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -252,20 +235,30 @@ function CustomerCard({
 
       <div className={viewMode === "list" ? "min-w-0 flex-1" : ""}>
         <div className="flex items-start gap-3 pr-10">
-          <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColor(
-              displayName
-            )}`}
-          >
-            {initials}
-          </div>
+          <EntityAvatar
+            name={displayName}
+            size="md"
+            imagePath={customer.avatar_url}
+            resolveImageUrl={createCustomerAvatarSignedUrl}
+            gender={
+              isCustomerGender(String(customer.gender ?? ""))
+                ? customer.gender
+                : "unspecified"
+            }
+          />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="truncate text-lg font-semibold text-white">
                 {displayName}
               </h3>
-              <span className="inline-flex rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-500/30">
-                Active
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${
+                  customer.isActive
+                    ? "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                    : "bg-slate-500/15 text-slate-300 ring-slate-500/30"
+                }`}
+              >
+                {customer.isActive ? "Active" : "Inactive"}
               </span>
             </div>
           </div>
@@ -524,7 +517,10 @@ export default function CustomersPage() {
     }
   }
 
-  async function handleSave(form: CustomerFormData) {
+  async function handleSave(
+    form: CustomerFormData,
+    options?: { avatarFile?: File | null; removeAvatar?: boolean }
+  ) {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
@@ -543,16 +539,49 @@ export default function CustomersPage() {
     const payload = formToPayload(form);
 
     if (editingCustomer) {
+      let nextAvatarPath: string | null | undefined;
+      const previousPath = editingCustomer.avatar_url ?? null;
+
+      if (options?.removeAvatar) {
+        nextAvatarPath = null;
+      } else if (options?.avatarFile) {
+        const uploadResult = await uploadCustomerAvatar({
+          userId: user.id,
+          customerId: editingCustomer.id,
+          file: options.avatarFile,
+        });
+        if ("error" in uploadResult) {
+          setError(uploadResult.error);
+          setIsSaving(false);
+          return;
+        }
+        nextAvatarPath = uploadResult.path;
+      }
+
       const { error: updateError } = await supabase
         .from("customers")
-        .update(payload)
+        .update({
+          ...payload,
+          ...(nextAvatarPath !== undefined
+            ? { avatar_url: nextAvatarPath }
+            : {}),
+        })
         .eq("id", editingCustomer.id)
         .eq("user_id", user.id);
 
       if (updateError) {
+        if (nextAvatarPath) await deleteCustomerAvatarFile(nextAvatarPath);
         setError("Failed to update customer. Please try again.");
         setIsSaving(false);
         return;
+      }
+
+      if (
+        (options?.removeAvatar || options?.avatarFile) &&
+        previousPath &&
+        previousPath !== nextAvatarPath
+      ) {
+        await deleteCustomerAvatarFile(previousPath);
       }
 
       setSuccess("Customer updated!");
@@ -639,6 +668,7 @@ export default function CustomersPage() {
             onClose={closeForm}
             onSubmit={handleSave}
             onImportContact={handleImportContact}
+            customerId={null}
           />
         )}
       </main>
@@ -798,6 +828,8 @@ export default function CustomersPage() {
           onClose={closeForm}
           onSubmit={handleSave}
           onImportContact={handleImportContact}
+          customerId={editingCustomer?.id ?? null}
+          currentAvatarPath={editingCustomer?.avatar_url ?? null}
         />
       )}
     </main>

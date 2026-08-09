@@ -18,6 +18,8 @@ export interface Supplier {
   payment_terms_type?: SupplierPaymentTermsType | null;
   default_account_number?: string | null;
   notes?: string | null;
+  /** Storage path in supplier-logos bucket. */
+  logo_url?: string | null;
   created_at: string;
 }
 

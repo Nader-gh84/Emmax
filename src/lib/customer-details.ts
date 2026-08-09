@@ -1,9 +1,11 @@
 import {
   customerTypeLabel,
   getCustomerDisplayName,
+  isCustomerGender,
   isCustomerType,
   type Customer,
   type CustomerDocument,
+  type CustomerGender,
   type CustomerNote,
   type CustomerType,
 } from "@/types/customer";
@@ -43,6 +45,8 @@ export interface CustomerDetailsViewModel {
   lastName: string;
   fullName: string;
   customerType: CustomerType;
+  gender: CustomerGender;
+  avatarUrl: string | null;
   website: string | null;
   status: "active" | "inactive";
   customerSince: string;
@@ -228,6 +232,9 @@ export function buildCustomerDetailsViewModel(input: {
   const customerType = isCustomerType(customer.customer_type)
     ? customer.customer_type
     : "residential";
+  const gender = isCustomerGender(String(customer.gender ?? ""))
+    ? customer.gender
+    : "unspecified";
   const short =
     customer.id.replace(/-/g, "").slice(0, 4).toUpperCase() || "0000";
   const locations = buildCustomerLocations({
@@ -244,6 +251,8 @@ export function buildCustomerDetailsViewModel(input: {
     lastName: customer.last_name,
     fullName: getCustomerDisplayName(customer),
     customerType,
+    gender,
+    avatarUrl: customer.avatar_url?.trim() || null,
     website: customer.website?.trim() || null,
     status: deriveCustomerStatus(input.projects),
     customerSince: customer.created_at,

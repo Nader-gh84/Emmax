@@ -21,13 +21,18 @@ import {
   touchBtnPrimary,
   touchBtnSecondary,
 } from "@/components/quotes/ui";
+import { EntityAvatar } from "@/components/ui/entity-avatar";
+import {
+  createCustomerAvatarSignedUrl,
+  deleteCustomerAvatarFile,
+  uploadCustomerAvatar,
+} from "@/lib/customer-avatar-storage";
 import { pickContactForForm } from "@/lib/customer-contacts";
 import {
   CUSTOMER_DETAILS_TABS,
   customerTypeLabel,
   formatCustomerDate,
   formatCustomerMoney,
-  getCustomerInitials,
   googleMapsSearchUrl,
   type CustomerActivityItem,
   type CustomerDetailsTab,
@@ -38,11 +43,12 @@ import type {
   CustomerProjectFinancial,
 } from "@/lib/customer-financials";
 import { createClient } from "@/lib/supabase";
-import type {
-  Customer,
-  CustomerDocument,
-  CustomerFormData,
-  CustomerNote,
+import {
+  isCustomerGender,
+  type Customer,
+  type CustomerDocument,
+  type CustomerFormData,
+  type CustomerNote,
 } from "@/types/customer";
 import {
   asProjectLabour,
@@ -66,6 +72,9 @@ function customerToForm(customer: Customer): CustomerFormData {
     customer_type:
       customer.customer_type === "commercial" ? "commercial" : "residential",
     website: customer.website ?? "",
+    gender: isCustomerGender(String(customer.gender ?? ""))
+      ? customer.gender
+      : "unspecified",
   };
 }
 
@@ -79,6 +88,7 @@ function formToPayload(form: CustomerFormData) {
     notes: form.notes.trim() || null,
     customer_type: form.customer_type,
     website: form.website.trim() || null,
+    gender: form.gender,
   };
 }
 
@@ -173,10 +183,6 @@ export function CustomerDetailsPage({
   const [editError, setEditError] = useState<string | null>(null);
   const [documentCount, setDocumentCount] = useState(documents.length);
   const [noteRows, setNoteRows] = useState(notes);
-  const initials = useMemo(
-    () => getCustomerInitials(customer.fullName),
-    [customer.fullName]
-  );
 
   const customerWithCounts = useMemo(
     () => ({
@@ -213,6 +219,7 @@ export function CustomerDetailsPage({
           ...picked,
           customer_type: current.customer_type,
           website: current.website,
+          gender: current.gender,
         }));
       }
     } catch {
@@ -222,7 +229,10 @@ export function CustomerDetailsPage({
     }
   }
 
-  async function handleSaveCustomer(form: CustomerFormData) {
+  async function handleSaveCustomer(
+    form: CustomerFormData,
+    options?: { avatarFile?: File | null; removeAvatar?: boolean }
+  ) {
     setIsSaving(true);
     setEditError(null);
     const supabase = createClient();
@@ -236,16 +246,49 @@ export function CustomerDetailsPage({
       return;
     }
 
+    let nextAvatarPath: string | null | undefined;
+    const previousPath = customerRecord.avatar_url ?? null;
+
+    if (options?.removeAvatar) {
+      nextAvatarPath = null;
+    } else if (options?.avatarFile) {
+      const uploadResult = await uploadCustomerAvatar({
+        userId: user.id,
+        customerId: customerRecord.id,
+        file: options.avatarFile,
+      });
+      if ("error" in uploadResult) {
+        setEditError(uploadResult.error);
+        setIsSaving(false);
+        return;
+      }
+      nextAvatarPath = uploadResult.path;
+    }
+
     const { error } = await supabase
       .from("customers")
-      .update(formToPayload(form))
+      .update({
+        ...formToPayload(form),
+        ...(nextAvatarPath !== undefined
+          ? { avatar_url: nextAvatarPath }
+          : {}),
+      })
       .eq("id", customerRecord.id)
       .eq("user_id", user.id);
 
     if (error) {
+      if (nextAvatarPath) await deleteCustomerAvatarFile(nextAvatarPath);
       setEditError("Failed to update customer. Please try again.");
       setIsSaving(false);
       return;
+    }
+
+    if (
+      (options?.removeAvatar || options?.avatarFile) &&
+      previousPath &&
+      previousPath !== nextAvatarPath
+    ) {
+      await deleteCustomerAvatarFile(previousPath);
     }
 
     setIsSaving(false);
@@ -270,9 +313,14 @@ export function CustomerDetailsPage({
         <div className="mt-4 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-accent to-cyan-400 text-xl font-bold text-white shadow-lg shadow-accent/25">
-                {initials}
-              </div>
+              <EntityAvatar
+                name={customerWithCounts.fullName}
+                size="lg"
+                imagePath={customerWithCounts.avatarUrl}
+                resolveImageUrl={createCustomerAvatarSignedUrl}
+                gender={customerWithCounts.gender}
+                className="shadow-lg shadow-accent/25"
+              />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
@@ -544,6 +592,8 @@ export function CustomerDetailsPage({
             }}
             onSubmit={handleSaveCustomer}
             onImportContact={handleImportContact}
+            customerId={customerRecord.id}
+            currentAvatarPath={customerRecord.avatar_url}
           />
         </div>
       ) : null}

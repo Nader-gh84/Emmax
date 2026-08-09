@@ -1,23 +1,49 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SuppliersEmptyState } from "@/components/dashboard/suppliers-empty-state";
+import {
+  IconDocument,
+  IconUsers,
+} from "@/components/dashboard/icons";
+import {
+  IconMail,
+  IconMore,
+  IconPhone,
+  IconSearch,
+} from "@/components/dashboard/workspace-icons";
+import { SupplierFormModal } from "@/components/suppliers/supplier-form-modal";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
+import { EntityAvatar } from "@/components/ui/entity-avatar";
+import { formatSupplierMoney } from "@/lib/supplier-details-mock";
+import {
+  createSupplierLogoSignedUrl,
+  deleteSupplierLogoFile,
+  uploadSupplierLogo,
+} from "@/lib/supplier-logo-storage";
 import { createClient } from "@/lib/supabase";
 import {
   EMPTY_SUPPLIER_FORM,
-  ORDER_METHODS,
-  PAYMENT_TERMS_OPTIONS,
   isSupplierPaymentTermsType,
   type Supplier,
   type SupplierFormData,
   type SupplierPaymentTermsType,
 } from "@/types/supplier";
+
+type SupplierListItem = Supplier & {
+  totalPurchases: number;
+  outstandingBalance: number;
+  invoiceCount: number;
+};
+
+type SortOption = "recent" | "name_asc" | "name_desc" | "outstanding";
+type BalanceFilter = "all" | "outstanding";
+type ViewMode = "grid" | "list";
 
 function supplierToForm(supplier: Supplier): SupplierFormData {
   const terms = supplier.payment_terms_type;
@@ -69,324 +95,245 @@ function formToPayload(form: SupplierFormData) {
   };
 }
 
-interface SupplierFormModalProps {
-  title: string;
-  initialForm: SupplierFormData;
-  isSaving: boolean;
-  onClose: () => void;
-  onSubmit: (form: SupplierFormData) => Promise<void>;
+function IconBuilding({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+  );
 }
 
-function SupplierFormModal({
-  title,
-  initialForm,
-  isSaving,
-  onClose,
-  onSubmit,
-}: SupplierFormModalProps) {
-  const [form, setForm] = useState<SupplierFormData>(initialForm);
+function IconGrid({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+    </svg>
+  );
+}
 
-  useEffect(() => {
-    setForm(initialForm);
-  }, [initialForm]);
+function IconList({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
 
-  function updateField(key: keyof SupplierFormData, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!form.supplier_name.trim()) return;
-    await onSubmit(form);
-  }
+function StatsRow({
+  totalSuppliers,
+  withOutstanding,
+  totalPurchases,
+  totalOutstanding,
+}: {
+  totalSuppliers: number;
+  withOutstanding: number;
+  totalPurchases: number;
+  totalOutstanding: number;
+}) {
+  const cards = [
+    {
+      id: "total",
+      label: "Total Suppliers",
+      value: String(totalSuppliers),
+      icon: <IconUsers className="h-5 w-5" />,
+      iconClass: "bg-accent/15 text-accent ring-accent/30",
+    },
+    {
+      id: "outstanding-count",
+      label: "With Outstanding",
+      value: String(withOutstanding),
+      icon: <IconBuilding className="h-5 w-5" />,
+      iconClass: "bg-amber-500/15 text-amber-200 ring-amber-500/30",
+    },
+    {
+      id: "purchases",
+      label: "Total Purchases",
+      value: formatSupplierMoney(totalPurchases),
+      icon: <IconDocument className="h-5 w-5" />,
+      iconClass: "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30",
+    },
+    {
+      id: "outstanding",
+      label: "Outstanding",
+      value: formatSupplierMoney(totalOutstanding),
+      icon: <IconDocument className="h-5 w-5" />,
+      iconClass: "bg-rose-500/15 text-rose-300 ring-rose-500/30",
+    },
+  ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
-      <div
-        className="absolute inset-0"
-        aria-hidden="true"
-        onClick={onClose}
-      />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label
-              htmlFor="supplier-name"
-              className="block text-base font-medium text-slate-300"
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map((card) => (
+        <section
+          key={card.id}
+          className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              {card.label}
+            </p>
+            <span
+              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${card.iconClass}`}
             >
-              Supplier Name <span className="text-accent">*</span>
-            </label>
-            <input
-              id="supplier-name"
-              type="text"
-              value={form.supplier_name}
-              onChange={(event) =>
-                updateField("supplier_name", event.target.value)
-              }
-              className={`${touchInput} mt-1.5`}
-              placeholder="e.g. ABC Electrical Supply"
-              required
-            />
+              {card.icon}
+            </span>
           </div>
-
-          <div>
-            <label
-              htmlFor="supplier-contact"
-              className="block text-base font-medium text-slate-300"
-            >
-              Contact Person
-            </label>
-            <input
-              id="supplier-contact"
-              type="text"
-              value={form.contact_person}
-              onChange={(event) =>
-                updateField("contact_person", event.target.value)
-              }
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-email"
-              className="block text-base font-medium text-slate-300"
-            >
-              Email
-            </label>
-            <input
-              id="supplier-email"
-              type="email"
-              value={form.email}
-              onChange={(event) => updateField("email", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-phone"
-              className="block text-base font-medium text-slate-300"
-            >
-              Phone
-            </label>
-            <input
-              id="supplier-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(event) => updateField("phone", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-location"
-              className="block text-base font-medium text-slate-300"
-            >
-              Location / Branch
-            </label>
-            <input
-              id="supplier-location"
-              type="text"
-              value={form.location}
-              onChange={(event) => updateField("location", event.target.value)}
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-order-method"
-              className="block text-base font-medium text-slate-300"
-            >
-              Preferred Order Method
-            </label>
-            <select
-              id="supplier-order-method"
-              value={form.preferred_order_method}
-              onChange={(event) =>
-                updateField("preferred_order_method", event.target.value)
-              }
-              className={`${touchInput} mt-1.5 appearance-none`}
-            >
-              <option value="">Select method (optional)</option>
-              {ORDER_METHODS.map((method) => (
-                <option key={method} value={method} className="bg-navy text-white">
-                  {method}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-payment-terms"
-              className="block text-base font-medium text-slate-300"
-            >
-              Payment Terms
-            </label>
-            <select
-              id="supplier-payment-terms"
-              value={form.payment_terms_type}
-              onChange={(event) =>
-                updateField("payment_terms_type", event.target.value)
-              }
-              className={`${touchInput} mt-1.5 appearance-none`}
-            >
-              {PAYMENT_TERMS_OPTIONS.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  className="bg-navy text-white"
-                >
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label
-              htmlFor="supplier-account-number"
-              className="block text-base font-medium text-slate-300"
-            >
-              Default Account #
-            </label>
-            <input
-              id="supplier-account-number"
-              type="text"
-              value={form.default_account_number}
-              onChange={(event) =>
-                updateField("default_account_number", event.target.value)
-              }
-              className={`${touchInput} mt-1.5`}
-              placeholder="Optional"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="supplier-credit-limit"
-                className="block text-base font-medium text-slate-300"
-              >
-                Credit Limit
-              </label>
-              <input
-                id="supplier-credit-limit"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.credit_limit}
-                onChange={(event) =>
-                  updateField("credit_limit", event.target.value)
-                }
-                className={`${touchInput} mt-1.5`}
-                placeholder="Optional"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="supplier-min-monthly"
-                className="block text-base font-medium text-slate-300"
-              >
-                Min. Monthly Payment
-              </label>
-              <input
-                id="supplier-min-monthly"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.minimum_monthly_payment}
-                onChange={(event) =>
-                  updateField("minimum_monthly_payment", event.target.value)
-                }
-                className={`${touchInput} mt-1.5`}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSaving}
-              className={`${touchBtnSecondary} w-full sm:w-auto`}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving || !form.supplier_name.trim()}
-              className={`${touchBtnPrimary} w-full sm:w-auto`}
-            >
-              {isSaving ? "Saving..." : "Save Supplier"}
-            </button>
-          </div>
-        </form>
-      </div>
+          <p className="mt-3 text-2xl font-bold tracking-tight text-white">
+            {card.value}
+          </p>
+        </section>
+      ))}
     </div>
   );
 }
 
 function SupplierCard({
   supplier,
+  viewMode,
   isDeleting,
   onEdit,
   onDelete,
 }: {
-  supplier: Supplier;
+  supplier: SupplierListItem;
+  viewMode: ViewMode;
   isDeleting: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const details = [
-    { label: "Contact", value: supplier.contact_person },
-    { label: "Email", value: supplier.email },
-    { label: "Phone", value: supplier.phone },
-    { label: "Location", value: supplier.location },
-    { label: "Order via", value: supplier.preferred_order_method },
-  ].filter((item) => item.value);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasOutstanding = supplier.outstandingBalance > 0.009;
 
   return (
-    <article className="rounded-xl border border-white/10 bg-white/5 p-5">
-      <h3 className="text-lg font-semibold text-white">
+    <article
+      className={`relative rounded-2xl border border-white/10 bg-white/[0.03] p-5 ${
+        viewMode === "list" ? "sm:flex sm:items-stretch sm:gap-6" : ""
+      }`}
+    >
+      <button
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"
+        aria-label={`More actions for ${supplier.supplier_name}`}
+      >
+        <IconMore className="h-4 w-4" />
+      </button>
+      {menuOpen ? (
+        <div className="absolute right-3 top-12 z-20 w-40 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
+          <Link
+            href={`/dashboard/suppliers/${supplier.id}`}
+            className="block px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+            onClick={() => setMenuOpen(false)}
+          >
+            View details
+          </Link>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onEdit();
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onDelete();
+            }}
+            className="block w-full px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-500/10"
+          >
+            Delete
+          </button>
+        </div>
+      ) : null}
+
+      <div className={viewMode === "list" ? "min-w-0 flex-1" : ""}>
+        <div className="flex items-start gap-3 pr-10">
+          <EntityAvatar
+            name={supplier.supplier_name}
+            size="md"
+            imagePath={supplier.logo_url}
+            resolveImageUrl={createSupplierLogoSignedUrl}
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-lg font-semibold text-white">
+                {supplier.supplier_name}
+              </h3>
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${
+                  hasOutstanding
+                    ? "bg-amber-500/15 text-amber-200 ring-amber-500/30"
+                    : "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30"
+                }`}
+              >
+                {hasOutstanding ? "Outstanding" : "Current"}
+              </span>
+            </div>
+            {supplier.contact_person ? (
+              <p className="mt-1 truncate text-sm text-slate-400">
+                {supplier.contact_person}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className={`mt-4 flex gap-4 ${
+            viewMode === "list"
+              ? "flex-col sm:flex-row sm:items-center sm:justify-between"
+              : "flex-col"
+          }`}
+        >
+          <div className="min-w-0 space-y-2 text-sm text-slate-300">
+            <p className="flex items-center gap-2 truncate">
+              <IconMail className="h-4 w-4 shrink-0 text-cyan-400/90" />
+              <span className="truncate">{supplier.email || "—"}</span>
+            </p>
+            <p className="flex items-center gap-2 truncate">
+              <IconPhone className="h-4 w-4 shrink-0 text-cyan-400/90" />
+              <span className="truncate">{supplier.phone || "—"}</span>
+            </p>
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-1 text-sm text-slate-300 sm:items-end">
+            <p>
+              <span className="text-slate-500">Purchases </span>
+              <span className="font-semibold text-white">
+                {formatSupplierMoney(supplier.totalPurchases)}
+              </span>
+            </p>
+            <p>
+              <span className="text-slate-500">Outstanding </span>
+              <span
+                className={`font-semibold ${
+                  hasOutstanding ? "text-amber-200" : "text-white"
+                }`}
+              >
+                {formatSupplierMoney(Math.max(0, supplier.outstandingBalance))}
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        className={`mt-5 flex flex-col gap-2 sm:flex-row ${
+          viewMode === "list" ? "sm:mt-0 sm:shrink-0 sm:items-center" : ""
+        }`}
+      >
         <Link
           href={`/dashboard/suppliers/${supplier.id}`}
-          className="transition hover:text-accent"
+          className={`${touchBtnSecondary} w-full sm:w-auto`}
         >
-          {supplier.supplier_name}
+          View
         </Link>
-      </h3>
-
-      {details.length > 0 ? (
-        <dl className="mt-4 space-y-2">
-          {details.map((item) => (
-            <div key={item.label} className="flex flex-col gap-0.5 sm:flex-row sm:gap-3">
-              <dt className="shrink-0 text-sm font-medium text-slate-500 sm:w-24">
-                {item.label}
-              </dt>
-              <dd className="text-sm text-slate-300">{item.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className="mt-4 text-sm text-slate-500">No contact details added.</p>
-      )}
-
-      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <button
           type="button"
           onClick={onEdit}
-          className={`${touchBtnSecondary} w-full sm:w-auto`}
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-accent/40 px-6 text-base font-medium text-accent transition hover:bg-accent/10 sm:w-auto"
         >
           Edit
         </button>
@@ -404,7 +351,7 @@ function SupplierCard({
 }
 
 export default function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -412,22 +359,78 @@ export default function SuppliersPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [formData, setFormData] = useState<SupplierFormData>(EMPTY_SUPPLIER_FORM);
+  const [search, setSearch] = useState("");
+  const [balanceFilter, setBalanceFilter] = useState<BalanceFilter>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("name_asc");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const loadSuppliers = useCallback(async () => {
     setError(null);
 
     const supabase = createClient();
-    const { data, error: fetchError } = await supabase
-      .from("suppliers")
-      .select("*")
-      .order("supplier_name", { ascending: true });
+    const [
+      { data: supplierData, error: fetchError },
+      { data: invoiceData },
+      { data: paymentData },
+    ] = await Promise.all([
+      supabase
+        .from("suppliers")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("supplier_invoices")
+        .select("supplier_id, amount, status"),
+      supabase.from("supplier_payments").select("supplier_id, amount"),
+    ]);
 
     if (fetchError) {
       setError("Failed to load suppliers. Please try again.");
       return;
     }
 
-    setSuppliers((data as Supplier[]) ?? []);
+    const purchasesBySupplier = new Map<string, number>();
+    const invoicesBySupplier = new Map<string, number>();
+    for (const invoice of (invoiceData as
+      | { supplier_id: string; amount: number; status: string }[]
+      | null) ?? []) {
+      if (invoice.status !== "confirmed") continue;
+      purchasesBySupplier.set(
+        invoice.supplier_id,
+        (purchasesBySupplier.get(invoice.supplier_id) ?? 0) +
+          (Number(invoice.amount) || 0)
+      );
+      invoicesBySupplier.set(
+        invoice.supplier_id,
+        (invoicesBySupplier.get(invoice.supplier_id) ?? 0) + 1
+      );
+    }
+
+    const paidBySupplier = new Map<string, number>();
+    for (const payment of (paymentData as
+      | { supplier_id: string; amount: number }[]
+      | null) ?? []) {
+      paidBySupplier.set(
+        payment.supplier_id,
+        (paidBySupplier.get(payment.supplier_id) ?? 0) +
+          (Number(payment.amount) || 0)
+      );
+    }
+
+    const rows = ((supplierData as Supplier[] | null) ?? []).map(
+      (supplier) => {
+        const totalPurchases = purchasesBySupplier.get(supplier.id) ?? 0;
+        const totalPaid = paidBySupplier.get(supplier.id) ?? 0;
+        return {
+          ...supplier,
+          totalPurchases,
+          outstandingBalance: totalPurchases - totalPaid,
+          invoiceCount: invoicesBySupplier.get(supplier.id) ?? 0,
+        };
+      }
+    );
+
+    setSuppliers(rows);
   }, []);
 
   useEffect(() => {
@@ -436,12 +439,49 @@ export default function SuppliersPage() {
       await loadSuppliers();
       setIsLoading(false);
     }
-
-    init();
+    void init();
   }, [loadSuppliers]);
+
+  const filteredSuppliers = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let rows = [...suppliers];
+
+    if (balanceFilter === "outstanding") {
+      rows = rows.filter((row) => row.outstandingBalance > 0.009);
+    }
+
+    if (query) {
+      rows = rows.filter((row) => {
+        return (
+          row.supplier_name.toLowerCase().includes(query) ||
+          (row.contact_person ?? "").toLowerCase().includes(query) ||
+          (row.email ?? "").toLowerCase().includes(query) ||
+          (row.phone ?? "").toLowerCase().includes(query)
+        );
+      });
+    }
+
+    rows.sort((a, b) => {
+      if (sortBy === "name_desc") {
+        return b.supplier_name.localeCompare(a.supplier_name);
+      }
+      if (sortBy === "outstanding") {
+        return b.outstandingBalance - a.outstandingBalance;
+      }
+      if (sortBy === "recent") {
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      }
+      return a.supplier_name.localeCompare(b.supplier_name);
+    });
+
+    return rows;
+  }, [suppliers, search, balanceFilter, sortBy]);
 
   function openAddForm() {
     setEditingSupplier(null);
+    setFormData(EMPTY_SUPPLIER_FORM);
     setShowForm(true);
     setSuccess(null);
     setError(null);
@@ -449,6 +489,7 @@ export default function SuppliersPage() {
 
   function openEditForm(supplier: Supplier) {
     setEditingSupplier(supplier);
+    setFormData(supplierToForm(supplier));
     setShowForm(true);
     setSuccess(null);
     setError(null);
@@ -458,9 +499,13 @@ export default function SuppliersPage() {
     if (isSaving) return;
     setShowForm(false);
     setEditingSupplier(null);
+    setFormData(EMPTY_SUPPLIER_FORM);
   }
 
-  async function handleSave(form: SupplierFormData) {
+  async function handleSave(
+    form: SupplierFormData,
+    options?: { logoFile?: File | null; removeLogo?: boolean }
+  ) {
     setIsSaving(true);
     setError(null);
     setSuccess(null);
@@ -479,22 +524,52 @@ export default function SuppliersPage() {
     const payload = formToPayload(form);
 
     if (editingSupplier) {
+      let nextLogoPath: string | null | undefined;
+      const previousPath = editingSupplier.logo_url ?? null;
+
+      if (options?.removeLogo) {
+        nextLogoPath = null;
+      } else if (options?.logoFile) {
+        const uploadResult = await uploadSupplierLogo({
+          userId: user.id,
+          supplierId: editingSupplier.id,
+          file: options.logoFile,
+        });
+        if ("error" in uploadResult) {
+          setError(uploadResult.error);
+          setIsSaving(false);
+          return;
+        }
+        nextLogoPath = uploadResult.path;
+      }
+
       const { error: updateError } = await supabase
         .from("suppliers")
-        .update(payload)
+        .update({
+          ...payload,
+          ...(nextLogoPath !== undefined ? { logo_url: nextLogoPath } : {}),
+        })
         .eq("id", editingSupplier.id)
         .eq("user_id", user.id);
 
       if (updateError) {
+        if (nextLogoPath) await deleteSupplierLogoFile(nextLogoPath);
         const hint =
-          updateError.message?.includes("credit_limit") ||
-          updateError.message?.includes("payment_terms_type") ||
+          updateError.message?.includes("logo_url") ||
           updateError.message?.includes("column")
-            ? " Run migration 036_supplier_accounting.sql in Supabase."
+            ? " Run migration 040 in Supabase."
             : "";
         setError(`Failed to update supplier.${hint}`);
         setIsSaving(false);
         return;
+      }
+
+      if (
+        (options?.removeLogo || options?.logoFile) &&
+        previousPath &&
+        previousPath !== nextLogoPath
+      ) {
+        await deleteSupplierLogoFile(previousPath);
       }
 
       setSuccess("Supplier updated!");
@@ -509,7 +584,7 @@ export default function SuppliersPage() {
           insertError.message?.includes("credit_limit") ||
           insertError.message?.includes("payment_terms_type") ||
           insertError.message?.includes("column")
-            ? " Run migration 036_supplier_accounting.sql in Supabase."
+            ? " Run migration 036/040 in Supabase."
             : "";
         setError(`Failed to add supplier.${hint}`);
         setIsSaving(false);
@@ -523,13 +598,13 @@ export default function SuppliersPage() {
     setIsSaving(false);
     setShowForm(false);
     setEditingSupplier(null);
+    setFormData(EMPTY_SUPPLIER_FORM);
   }
 
   async function handleDelete(supplier: Supplier) {
     const confirmed = window.confirm(
       `Delete ${supplier.supplier_name}? This cannot be undone.`
     );
-
     if (!confirmed) return;
 
     setDeletingId(supplier.id);
@@ -548,6 +623,10 @@ export default function SuppliersPage() {
       return;
     }
 
+    if (supplier.logo_url) {
+      await deleteSupplierLogoFile(supplier.logo_url);
+    }
+
     setSuccess("Supplier deleted.");
     await loadSuppliers();
     setDeletingId(null);
@@ -562,7 +641,6 @@ export default function SuppliersPage() {
     );
   }
 
-  // Step 1: empty state only — no stats row / table when there are zero suppliers.
   if (suppliers.length === 0) {
     return (
       <main className="flex min-h-full flex-1 flex-col">
@@ -582,25 +660,39 @@ export default function SuppliersPage() {
         {showForm && (
           <SupplierFormModal
             title="Add Supplier"
-            initialForm={EMPTY_SUPPLIER_FORM}
+            initialForm={formData}
             isSaving={isSaving}
             onClose={closeForm}
             onSubmit={handleSave}
+            supplierId={null}
           />
         )}
       </main>
     );
   }
 
-  // Temporary list until Step 2 (table redesign).
+  const withOutstanding = suppliers.filter(
+    (row) => row.outstandingBalance > 0.009
+  ).length;
+  const totalPurchases = suppliers.reduce(
+    (sum, row) => sum + row.totalPurchases,
+    0
+  );
+  const totalOutstanding = suppliers.reduce(
+    (sum, row) => sum + Math.max(0, row.outstandingBalance),
+    0
+  );
+
   return (
     <main className="flex-1 p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Suppliers</h1>
-            <p className="mt-2 text-base text-slate-400">
-              Manage your material and parts suppliers for faster ordering.
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              Suppliers
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400 sm:text-base">
+              Manage material suppliers, purchases, and outstanding balances.
             </p>
           </div>
           <button
@@ -613,47 +705,121 @@ export default function SuppliersPage() {
         </div>
 
         {success && (
-          <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
+          <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">
             {success}
           </div>
         )}
-
         {error && (
-          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-base text-red-400">
             {error}
           </div>
         )}
 
-        {suppliers.length < 3 && (
-          <p className="mt-6 rounded-xl border border-accent/20 bg-accent/10 px-4 py-3 text-sm text-slate-300">
-            Add at least 3 suppliers to get the most out of ordering.
-          </p>
-        )}
+        <StatsRow
+          totalSuppliers={suppliers.length}
+          withOutstanding={withOutstanding}
+          totalPurchases={totalPurchases}
+          totalOutstanding={totalOutstanding}
+        />
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          {suppliers.map((supplier) => (
-            <SupplierCard
-              key={supplier.id}
-              supplier={supplier}
-              isDeleting={deletingId === supplier.id}
-              onEdit={() => openEditForm(supplier)}
-              onDelete={() => handleDelete(supplier)}
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 lg:flex-row lg:items-center">
+          <div className="relative min-w-0 flex-1">
+            <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search name, contact, email, phone…"
+              className={`${touchInput} pl-10`}
             />
-          ))}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={balanceFilter}
+              onChange={(event) =>
+                setBalanceFilter(event.target.value as BalanceFilter)
+              }
+              className={`${touchInput} appearance-none sm:w-44`}
+            >
+              <option value="all">All suppliers</option>
+              <option value="outstanding">With outstanding</option>
+            </select>
+            <select
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as SortOption)}
+              className={`${touchInput} appearance-none sm:w-44`}
+            >
+              <option value="name_asc">Name A–Z</option>
+              <option value="name_desc">Name Z–A</option>
+              <option value="recent">Recently added</option>
+              <option value="outstanding">Highest outstanding</option>
+            </select>
+            <div className="inline-flex rounded-xl border border-white/10 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-lg ${
+                  viewMode === "grid"
+                    ? "bg-accent/20 text-accent"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                aria-label="Grid view"
+              >
+                <IconGrid className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                className={`inline-flex h-10 w-10 items-center justify-center rounded-lg ${
+                  viewMode === "list"
+                    ? "bg-accent/20 text-accent"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                aria-label="List view"
+              >
+                <IconList className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        {filteredSuppliers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-12 text-center">
+            <p className="text-sm text-slate-400">
+              No suppliers match your search or filters.
+            </p>
+          </div>
+        ) : (
+          <div
+            className={
+              viewMode === "grid"
+                ? "grid gap-4 sm:grid-cols-2"
+                : "flex flex-col gap-3"
+            }
+          >
+            {filteredSuppliers.map((supplier) => (
+              <SupplierCard
+                key={supplier.id}
+                supplier={supplier}
+                viewMode={viewMode}
+                isDeleting={deletingId === supplier.id}
+                onEdit={() => openEditForm(supplier)}
+                onDelete={() => void handleDelete(supplier)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {showForm && (
         <SupplierFormModal
           title={editingSupplier ? "Edit Supplier" : "Add Supplier"}
-          initialForm={
-            editingSupplier
-              ? supplierToForm(editingSupplier)
-              : EMPTY_SUPPLIER_FORM
-          }
+          initialForm={formData}
           isSaving={isSaving}
           onClose={closeForm}
           onSubmit={handleSave}
+          supplierId={editingSupplier?.id ?? null}
+          currentLogoPath={editingSupplier?.logo_url ?? null}
         />
       )}
     </main>

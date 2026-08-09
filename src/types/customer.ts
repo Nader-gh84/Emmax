@@ -1,5 +1,7 @@
 export type CustomerType = "residential" | "commercial";
 
+export type CustomerGender = "male" | "female" | "unspecified";
+
 export interface Customer {
   id: string;
   user_id: string;
@@ -11,6 +13,8 @@ export interface Customer {
   notes: string | null;
   customer_type: CustomerType;
   website: string | null;
+  gender: CustomerGender;
+  avatar_url: string | null;
   last_quoted_at: string | null;
   created_at: string;
 }
@@ -24,6 +28,7 @@ export interface CustomerFormData {
   notes: string;
   customer_type: CustomerType;
   website: string;
+  gender: CustomerGender;
 }
 
 export interface CustomerDocument {
@@ -56,10 +61,15 @@ export const EMPTY_CUSTOMER_FORM: CustomerFormData = {
   notes: "",
   customer_type: "residential",
   website: "",
+  gender: "unspecified",
 };
 
 export function isCustomerType(value: string): value is CustomerType {
   return value === "residential" || value === "commercial";
+}
+
+export function isCustomerGender(value: string): value is CustomerGender {
+  return value === "male" || value === "female" || value === "unspecified";
 }
 
 export function getCustomerDisplayName(customer: {
@@ -71,4 +81,15 @@ export function getCustomerDisplayName(customer: {
 
 export function customerTypeLabel(type: CustomerType): string {
   return type === "commercial" ? "Commercial" : "Residential";
+}
+
+export function customerGenderLabel(gender: CustomerGender): string {
+  switch (gender) {
+    case "male":
+      return "Male";
+    case "female":
+      return "Female";
+    default:
+      return "Prefer not to say";
+  }
 }
