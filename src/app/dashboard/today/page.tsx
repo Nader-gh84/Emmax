@@ -40,6 +40,13 @@ type TaskRow = ProjectTask & {
   } | null;
 };
 
+type ScheduleRow = ScheduleItem & {
+  projects?: {
+    project_name?: string | null;
+    customer_id?: string | null;
+  } | null;
+};
+
 export default async function TodayRoute() {
   const supabase = createClient();
   const {
@@ -55,8 +62,10 @@ export default async function TodayRoute() {
   weekStart.setDate(weekStart.getDate() + mondayOffset);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 7);
-  const weekStartKey = toLocalDateKey(weekStart);
-  const weekEndKey = toLocalDateKey(weekEnd);
+  const lookback = new Date(now);
+  lookback.setHours(0, 0, 0, 0);
+  lookback.setDate(lookback.getDate() - 30);
+  const lookbackKey = toLocalDateKey(lookback);
 
   let greetingName = "there";
   let scheduleItems: ScheduleItem[] = [];
@@ -88,7 +97,7 @@ export default async function TodayRoute() {
     ] = await Promise.all([
       supabase
         .from("schedule_items")
-        .select("*")
+        .select("*, projects(project_name, customer_id)")
         .eq("user_id", user.id)
         .order("scheduled_start", { ascending: true })
         .limit(300),
@@ -96,21 +105,23 @@ export default async function TodayRoute() {
         .from("tasks")
         .select("*, projects(project_name, customer_id)")
         .eq("user_id", user.id)
-        .gte("due_date", weekStartKey)
-        .lt("due_date", weekEndKey),
+        .or(
+          `due_date.eq.${todayKey},and(due_date.lt.${todayKey},due_date.gte.${lookbackKey},status.neq.completed)`
+        ),
       supabase
         .from("material_orders")
         .select("*")
         .eq("user_id", user.id)
         .or(
-          `availability_date.eq.${todayKey},required_by_date.eq.${todayKey}`
+          `and(availability_date.lte.${todayKey},availability_date.gte.${lookbackKey}),and(required_by_date.lte.${todayKey},required_by_date.gte.${lookbackKey})`
         ),
       supabase
         .from("supplier_invoices")
         .select("*")
         .eq("user_id", user.id)
         .eq("status", "confirmed")
-        .eq("due_date", todayKey),
+        .lte("due_date", todayKey)
+        .gte("due_date", lookbackKey),
       supabase
         .from("supplier_payment_allocations")
         .select("*")
@@ -151,14 +162,20 @@ export default async function TodayRoute() {
 
     const weekStartMs = weekStart.getTime();
     const weekEndMs = weekEnd.getTime();
-    scheduleItems = ((scheduleResult.data as ScheduleItem[] | null) ?? []).filter(
-      (row) => {
+    scheduleItems = ((scheduleResult.data as ScheduleRow[] | null) ?? [])
+      .map((row) => {
+        const { projects, ...item } = row;
+        return {
+          ...item,
+          customer_id: item.customer_id ?? projects?.customer_id ?? null,
+        } satisfies ScheduleItem;
+      })
+      .filter((row) => {
         if (!row.scheduled_start) return Boolean(row.all_day);
         const t = new Date(row.scheduled_start).getTime();
         if (Number.isNaN(t)) return false;
         return t >= weekStartMs && t < weekEndMs;
-      }
-    );
+      });
 
     projectTasks = ((tasksResult.data as TaskRow[] | null) ?? []).map((row) => {
       const { projects, ...task } = row;

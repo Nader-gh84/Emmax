@@ -30,11 +30,15 @@ export type TodayAgendaItem = {
   /** YYYY-MM-DD in local agenda day terms when date-only. */
   dateKey: string;
   href: string | null;
+  /** Short label for the deep-link action (Open project, Open order, …). */
+  hrefLabel?: string | null;
   meta?: {
     projectId?: string | null;
     projectName?: string | null;
     supplierId?: string | null;
     supplierName?: string | null;
+    customerId?: string | null;
+    materialOrderId?: string | null;
     amount?: number | null;
   };
 };
@@ -122,11 +126,96 @@ function materialTaskType(
   return "pickup";
 }
 
+function resolveProjectHref(
+  customerId: string | null | undefined,
+  projectId: string | null | undefined
+): string | null {
+  if (customerId && projectId) {
+    return `/dashboard/customers/${customerId}/projects/${projectId}`;
+  }
+  return null;
+}
+
+function resolveOrderMaterialsHref(
+  customerId: string | null | undefined,
+  projectId: string | null | undefined
+): string | null {
+  if (customerId && projectId) {
+    return `/dashboard/customers/${customerId}/projects/${projectId}/order-materials`;
+  }
+  return null;
+}
+
+function resolveScheduleHref(row: ScheduleItem): {
+  href: string | null;
+  hrefLabel: string | null;
+} {
+  if (row.material_order_id) {
+    const orderHref = resolveOrderMaterialsHref(row.customer_id, row.project_id);
+    if (orderHref) return { href: orderHref, hrefLabel: "Open order" };
+  }
+  const projectHref = resolveProjectHref(row.customer_id, row.project_id);
+  if (projectHref) return { href: projectHref, hrefLabel: "Open project" };
+  if (row.supplier_id) {
+    return {
+      href: `/dashboard/suppliers/${row.supplier_id}`,
+      hrefLabel: "Open supplier",
+    };
+  }
+  if (row.customer_id) {
+    return {
+      href: `/dashboard/customers/${row.customer_id}`,
+      hrefLabel: "Open customer",
+    };
+  }
+  return { href: null, hrefLabel: null };
+}
+
+/** Deep link for Today alert rows (Inbox still uses modal-only navigation). */
+export function resolveTodayAlertHref(notification: AppNotification): string | null {
+  const meta = notification.metadata;
+  if (!meta) return "/dashboard/inbox";
+
+  if (meta.customer_id && meta.project_id && meta.material_order_id) {
+    return resolveOrderMaterialsHref(meta.customer_id, meta.project_id);
+  }
+  if (meta.customer_id && meta.project_id) {
+    return resolveProjectHref(meta.customer_id, meta.project_id);
+  }
+  if (meta.customer_id) {
+    return `/dashboard/customers/${meta.customer_id}`;
+  }
+  if (typeof meta.supplier_id === "string" && meta.supplier_id) {
+    return `/dashboard/suppliers/${meta.supplier_id}`;
+  }
+  return "/dashboard/inbox";
+}
+
+function deriveScheduleStatus(
+  row: ScheduleItem,
+  now: Date
+): TodayAgendaItem["status"] {
+  if (row.status === "completed" || row.status === "cancelled") {
+    return row.status;
+  }
+  if (!row.all_day && row.scheduled_start) {
+    const startMs = new Date(row.scheduled_start).getTime();
+    if (!Number.isNaN(startMs) && startMs < now.getTime()) {
+      return "overdue";
+    }
+  }
+  return row.status === "in_progress" ? "in_progress" : "todo";
+}
+
 function sortAgenda(a: TodayAgendaItem, b: TodayAgendaItem): number {
-  // Incomplete first, then by time, then title
-  const aDone = a.status === "completed" ? 1 : 0;
-  const bDone = b.status === "completed" ? 1 : 0;
-  if (aDone !== bDone) return aDone - bDone;
+  // Overdue first, then other open, then completed; then by time, then title
+  const rank = (status: TodayAgendaItem["status"]) => {
+    if (status === "overdue") return 0;
+    if (status === "completed" || status === "cancelled") return 2;
+    return 1;
+  };
+  const byStatus = rank(a.status) - rank(b.status);
+  if (byStatus !== 0) return byStatus;
 
   if (a.scheduledStart && b.scheduledStart) {
     return a.scheduledStart.localeCompare(b.scheduledStart);
@@ -164,117 +253,141 @@ export function buildTodayAgenda(input: {
     if (itemDate !== dateKey) continue;
     if (row.status === "cancelled") continue;
 
+    const link = resolveScheduleHref(row);
     items.push({
       id: `schedule:${row.id}`,
       kind: "schedule",
       taskType: row.task_type,
       title: row.title,
       subtitle: row.notes,
-      status: row.status,
+      status: deriveScheduleStatus(row, now),
       scheduledStart: row.all_day ? null : row.scheduled_start,
       scheduledEnd: row.scheduled_end,
       allDay: row.all_day || !row.scheduled_start,
       dateKey: itemDate,
-      href: row.project_id
-        ? row.customer_id
-          ? `/dashboard/customers/${row.customer_id}/projects/${row.project_id}`
-          : `/dashboard/quotes`
-        : null,
+      href: link.href,
+      hrefLabel: link.hrefLabel,
       meta: {
         projectId: row.project_id,
         supplierId: row.supplier_id,
+        customerId: row.customer_id,
+        materialOrderId: row.material_order_id,
       },
     });
   }
 
   for (const task of input.projectTasks) {
-    if (!task.due_date || task.due_date !== dateKey) continue;
-    if (task.status === "completed") {
-      // Still show completed due-today for summary completeness
-    }
-    const status =
-      task.status === "completed"
-        ? "completed"
-        : task.status === "overdue" || task.due_date < dateKey
-          ? "overdue"
-          : task.status === "in_progress"
-            ? "in_progress"
-            : "todo";
+    if (!task.due_date) continue;
+    const isCompleted = task.status === "completed";
+    const isDueToday = task.due_date === dateKey;
+    const isPastDue = task.due_date < dateKey && !isCompleted;
+    if (!isDueToday && !isPastDue) continue;
+
+    const status: TodayAgendaItem["status"] = isCompleted
+      ? "completed"
+      : isPastDue || task.status === "overdue"
+        ? "overdue"
+        : task.status === "in_progress"
+          ? "in_progress"
+          : "todo";
+
+    const projectLabel = task.project_name?.trim() || "Project task";
+    const subtitle = isPastDue
+      ? `${projectLabel} · due ${task.due_date}`
+      : projectLabel;
+
+    const projectHref = resolveProjectHref(task.customer_id, task.project_id);
 
     items.push({
       id: `task:${task.id}`,
       kind: "project_task",
       taskType: "project_task",
       title: task.title,
-      subtitle: task.project_name?.trim() || "Project task",
+      subtitle,
       status,
       scheduledStart: null,
       scheduledEnd: null,
       allDay: true,
-      dateKey: task.due_date,
-      href: task.customer_id
-        ? `/dashboard/customers/${task.customer_id}/projects/${task.project_id}`
-        : null,
+      dateKey: isPastDue ? dateKey : task.due_date,
+      href: projectHref,
+      hrefLabel: projectHref ? "Open project" : null,
       meta: {
         projectId: task.project_id,
         projectName: task.project_name,
+        customerId: task.customer_id,
       },
     });
   }
 
   for (const order of input.materialOrders) {
     const readyDate = order.availability_date || order.required_by_date;
-    if (!readyDate || readyDate !== dateKey) continue;
+    // Today + past-due unreceived pickups/deliveries
+    if (!readyDate || readyDate > dateKey) continue;
     if (order.materials_received_at) continue;
 
     const type = materialTaskType(order.delivery_option);
     const time =
-      order.availability_time?.trim() && order.availability_date === dateKey
+      order.availability_time?.trim() && order.availability_date === readyDate
         ? `${order.availability_date}T${normalizeTime(order.availability_time)}`
         : null;
 
+    const orderHref =
+      resolveOrderMaterialsHref(order.customer_id, order.project_id) ??
+      (order.supplier_id ? `/dashboard/suppliers/${order.supplier_id}` : null);
+
+    const isPast = readyDate < dateKey;
     items.push({
       id: `material:${order.id}`,
       kind: "material",
       taskType: type,
       title: `${scheduleTaskTypeLabel(type)} — ${order.supplier_name || "Supplier"}`,
-      subtitle: order.project_name || order.branch_location || null,
-      status: "todo",
+      subtitle: isPast
+        ? `${order.project_name || order.branch_location || "Materials"} · ready ${readyDate}`
+        : order.project_name || order.branch_location || null,
+      status: isPast ? "overdue" : "todo",
       scheduledStart: time,
       scheduledEnd: null,
       allDay: !time,
-      dateKey: readyDate,
-      href:
-        order.customer_id && order.project_id
-          ? `/dashboard/customers/${order.customer_id}/projects/${order.project_id}/order-materials`
-          : null,
+      dateKey: isPast ? dateKey : readyDate,
+      href: orderHref,
+      hrefLabel: orderHref
+        ? orderHref.includes("/order-materials")
+          ? "Open order"
+          : "Open supplier"
+        : null,
       meta: {
         projectId: order.project_id,
         projectName: order.project_name,
         supplierId: order.supplier_id,
         supplierName: order.supplier_name,
+        customerId: order.customer_id,
+        materialOrderId: order.id,
       },
     });
   }
 
   for (const invoice of input.invoicesDue) {
-    if (invoice.due_date !== dateKey) continue;
+    if (!invoice.due_date || invoice.due_date > dateKey) continue;
     if (invoice.status !== "confirmed") continue;
     const balance = Number(invoice.balance);
     if (Number.isFinite(balance) && balance <= 0.009) continue;
 
+    const isPast = invoice.due_date < dateKey;
     items.push({
       id: `payment:${invoice.id}`,
       kind: "payment",
       taskType: "payment_reminder",
       title: `Payment due — ${invoice.supplier_name || "Supplier"}`,
-      subtitle: invoice.invoice_number,
-      status: "todo",
+      subtitle: isPast
+        ? `${invoice.invoice_number || "Invoice"} · due ${invoice.due_date}`
+        : invoice.invoice_number,
+      status: isPast ? "overdue" : "todo",
       scheduledStart: null,
       scheduledEnd: null,
       allDay: true,
-      dateKey: invoice.due_date,
+      dateKey: isPast ? dateKey : invoice.due_date,
       href: `/dashboard/suppliers/${invoice.supplier_id}`,
+      hrefLabel: "Open supplier",
       meta: {
         supplierId: invoice.supplier_id,
         supplierName: invoice.supplier_name,
@@ -444,6 +557,13 @@ function buildBriefLines(input: {
     agendaLine,
   ];
 
+  if (input.summary.overdueCount > 0) {
+    lines.push(
+      `You have ${input.summary.overdueCount} overdue item${
+        input.summary.overdueCount === 1 ? "" : "s"
+      } to clear.`
+    );
+  }
   if (input.summary.paymentsDueCount > 0) {
     lines.push(
       `${input.summary.paymentsDueCount} supplier payment${
