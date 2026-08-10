@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import {
   IconBell,
   IconCalendar,
@@ -29,6 +29,10 @@ import {
   findScheduleConflicts,
   type ScheduleConflictCandidate,
 } from "@/lib/schedule-conflicts";
+import {
+  USER_TIMEZONE_COOKIE,
+  detectBrowserTimeZone,
+} from "@/lib/local-date";
 import { createClient } from "@/lib/supabase";
 import {
   formatAgendaMoney,
@@ -138,6 +142,16 @@ export function TodayPage({
   const [editing, setEditing] = useState<ScheduleItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const briefTts = useTtsPlayback();
+
+  useEffect(() => {
+    const tz = detectBrowserTimeZone();
+    document.cookie = `${USER_TIMEZONE_COOKIE}=${encodeURIComponent(
+      tz
+    )}; path=/; max-age=31536000; SameSite=Lax`;
+    if (agenda.timeZone && tz !== agenda.timeZone) {
+      router.refresh();
+    }
+  }, [agenda.timeZone, router]);
 
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const [voiceTranscript, setVoiceTranscript] = useState("");
@@ -293,7 +307,9 @@ export function TodayPage({
   }, [agenda.items, filter]);
 
   const dateLabel = useMemo(() => {
-    const date = new Date(`${agenda.dateKey}T12:00:00`);
+    const [y, m, d] = agenda.dateKey.split("-").map(Number);
+    // Civil date in the browser — dateKey is already the user's local day.
+    const date = new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
     return date.toLocaleDateString("en-CA", {
       weekday: "long",
       month: "long",

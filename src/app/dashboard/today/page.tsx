@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { TodayPage } from "@/components/today/today-page";
+import { TodayTimezoneBootstrap } from "@/components/today/today-timezone-bootstrap";
 import {
   enrichSupplierInvoices,
   type SupplierInvoiceRow,
   type SupplierPaymentAllocationRow,
 } from "@/lib/supplier-accounting";
-import { buildTodayAgenda, toLocalDateKey } from "@/lib/today-agenda";
+import {
+  USER_TIMEZONE_COOKIE,
+  addDaysToDateKey,
+  isValidTimeZone,
+  startOfWeekMondayDateKey,
+  toZonedDateKey,
+  zonedDateTimeToUtc,
+} from "@/lib/local-date";
+import { buildTodayAgenda } from "@/lib/today-agenda";
 import { createClient } from "@/lib/supabase/server";
 import type { MaterialOrder } from "@/types/material-order";
 import type { AppNotification } from "@/types/notification";
@@ -48,24 +58,26 @@ type ScheduleRow = ScheduleItem & {
 };
 
 export default async function TodayRoute() {
+  const cookieStore = cookies();
+  const rawTz = cookieStore.get(USER_TIMEZONE_COOKIE)?.value;
+  const timeZone = rawTz ? decodeURIComponent(rawTz) : null;
+
+  if (!isValidTimeZone(timeZone)) {
+    return <TodayTimezoneBootstrap />;
+  }
+
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const todayKey = toLocalDateKey(new Date());
   const now = new Date();
-  const day = now.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  const weekStart = new Date(now);
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(weekStart.getDate() + mondayOffset);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
-  const lookback = new Date(now);
-  lookback.setHours(0, 0, 0, 0);
-  lookback.setDate(lookback.getDate() - 30);
-  const lookbackKey = toLocalDateKey(lookback);
+  const todayKey = toZonedDateKey(now, timeZone);
+  const weekStartKey = startOfWeekMondayDateKey(todayKey, timeZone);
+  const weekEndKey = addDaysToDateKey(weekStartKey, 7);
+  const lookbackKey = addDaysToDateKey(todayKey, -30);
+  const weekStartMs = zonedDateTimeToUtc(weekStartKey, "00:00:00", timeZone).getTime();
+  const weekEndMs = zonedDateTimeToUtc(weekEndKey, "00:00:00", timeZone).getTime();
 
   let greetingName = "there";
   let scheduleItems: ScheduleItem[] = [];
@@ -160,8 +172,6 @@ export default async function TodayRoute() {
       );
     }
 
-    const weekStartMs = weekStart.getTime();
-    const weekEndMs = weekEnd.getTime();
     scheduleItems = ((scheduleResult.data as ScheduleRow[] | null) ?? [])
       .map((row) => {
         const { projects, ...item } = row;
@@ -221,6 +231,9 @@ export default async function TodayRoute() {
   }
 
   const agenda = buildTodayAgenda({
+    now,
+    timeZone,
+    dateKey: todayKey,
     greetingName,
     scheduleItems,
     projectTasks,

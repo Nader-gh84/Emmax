@@ -9,6 +9,16 @@ import {
   type ScheduleTaskType,
 } from "@/types/schedule-item";
 import type { SupplierInvoiceRow } from "@/lib/supplier-accounting";
+import {
+  addDaysToDateKey,
+  dateKeyFromIsoInTimeZone,
+  startOfWeekMondayDateKey,
+  toZonedDateKey,
+  zonedDateTimeToUtc,
+} from "@/lib/local-date";
+
+export { toLocalDateKey, toZonedDateKey } from "@/lib/local-date";
+export { parseDateKeyUtc as parseLocalDateKey } from "@/lib/local-date";
 
 export type TodayAgendaKind =
   | "schedule"
@@ -63,6 +73,7 @@ export type TodaySummary = {
 
 export type TodayAgendaViewModel = {
   dateKey: string;
+  timeZone: string;
   greetingName: string;
   briefLines: string[];
   items: TodayAgendaItem[];
@@ -71,40 +82,6 @@ export type TodayAgendaViewModel = {
   alerts: AppNotification[];
   summary: TodaySummary;
 };
-
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-/** Local calendar YYYY-MM-DD for a Date. */
-export function toLocalDateKey(date: Date = new Date()): string {
-  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-}
-
-export function parseLocalDateKey(dateKey: string): Date {
-  const [y, m, d] = dateKey.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0, 0);
-}
-
-function startOfWeekMonday(date: Date): Date {
-  const day = date.getDay(); // 0 Sun … 6 Sat
-  const diff = day === 0 ? -6 : 1 - day;
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() + diff);
-  return start;
-}
-
-function dateKeyFromIso(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    // Already a date-only string?
-    if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
-    return null;
-  }
-  return toLocalDateKey(date);
-}
 
 function normalizeScheduleItem(row: ScheduleItem): ScheduleItem {
   return {
@@ -227,6 +204,10 @@ function sortAgenda(a: TodayAgendaItem, b: TodayAgendaItem): number {
 
 export function buildTodayAgenda(input: {
   now?: Date;
+  /** IANA time zone for calendar-day boundaries (e.g. America/Vancouver). */
+  timeZone: string;
+  /** Optional override; defaults to zoned "today" for `now`. */
+  dateKey?: string;
   greetingName: string;
   scheduleItems: ScheduleItem[];
   projectTasks: Array<
@@ -242,14 +223,17 @@ export function buildTodayAgenda(input: {
   notifications: AppNotification[];
 }): TodayAgendaViewModel {
   const now = input.now ?? new Date();
-  const dateKey = toLocalDateKey(now);
+  const timeZone = input.timeZone;
+  const dateKey = input.dateKey ?? toZonedDateKey(now, timeZone);
   const items: TodayAgendaItem[] = [];
 
   for (const raw of input.scheduleItems) {
     const row = normalizeScheduleItem(raw);
     const itemDate =
-      dateKeyFromIso(row.scheduled_start) ??
-      (row.all_day ? dateKeyFromIso(row.created_at) : null);
+      dateKeyFromIsoInTimeZone(row.scheduled_start, timeZone) ??
+      (row.all_day
+        ? dateKeyFromIsoInTimeZone(row.created_at, timeZone)
+        : null);
     if (itemDate !== dateKey) continue;
     if (row.status === "cancelled") continue;
 
@@ -407,8 +391,9 @@ export function buildTodayAgenda(input: {
   );
   const upNext = (openTimed.length > 0 ? openTimed : items.filter((i) => i.status !== "completed")).slice(0, 3);
 
-  const weekStart = startOfWeekMonday(now);
+  const weekStartKey = startOfWeekMondayDateKey(dateKey, timeZone);
   const weekCounts = countItemsByDateKey({
+    timeZone,
     scheduleItems: input.scheduleItems,
     projectTasks: input.projectTasks,
     materialOrders: input.materialOrders,
@@ -416,13 +401,15 @@ export function buildTodayAgenda(input: {
   });
 
   const week: TodayWeekDay[] = Array.from({ length: 7 }, (_, index) => {
-    const day = new Date(weekStart);
-    day.setDate(weekStart.getDate() + index);
-    const key = toLocalDateKey(day);
+    const key = addDaysToDateKey(weekStartKey, index);
+    const noon = zonedDateTimeToUtc(key, "12:00:00", timeZone);
     return {
       dateKey: key,
-      label: String(day.getDate()),
-      weekday: day.toLocaleDateString("en-CA", { weekday: "short" }),
+      label: String(Number(key.slice(8, 10))),
+      weekday: noon.toLocaleDateString("en-CA", {
+        timeZone,
+        weekday: "short",
+      }),
       isToday: key === dateKey,
       itemCount: weekCounts.get(key) ?? 0,
     };
@@ -463,10 +450,12 @@ export function buildTodayAgenda(input: {
     summary,
     upNext,
     items,
+    timeZone,
   });
 
   return {
     dateKey,
+    timeZone,
     greetingName: input.greetingName,
     briefLines,
     items,
@@ -489,10 +478,11 @@ function normalizeTime(value: string): string {
   const meridiem = match[3]?.toUpperCase();
   if (meridiem === "PM" && hours < 12) hours += 12;
   if (meridiem === "AM" && hours === 12) hours = 0;
-  return `${pad2(hours)}:${minutes}:00`;
+  return `${String(hours).padStart(2, "0")}:${minutes}:00`;
 }
 
 function countItemsByDateKey(input: {
+  timeZone: string;
   scheduleItems: ScheduleItem[];
   projectTasks: Array<ProjectTask>;
   materialOrders: MaterialOrder[];
@@ -506,7 +496,7 @@ function countItemsByDateKey(input: {
 
   for (const row of input.scheduleItems) {
     if (row.status === "cancelled") continue;
-    bump(dateKeyFromIso(row.scheduled_start));
+    bump(dateKeyFromIsoInTimeZone(row.scheduled_start, input.timeZone));
   }
   for (const task of input.projectTasks) {
     bump(task.due_date);
@@ -530,6 +520,7 @@ function buildBriefLines(input: {
   summary: TodaySummary;
   upNext: TodayAgendaItem[];
   items: TodayAgendaItem[];
+  timeZone: string;
 }): string[] {
   const name = input.greetingName || "there";
   const open = input.summary.openToday;
@@ -580,10 +571,7 @@ function buildBriefLines(input: {
   const next = input.upNext[0];
   if (next) {
     const when = next.scheduledStart
-      ? new Date(next.scheduledStart).toLocaleTimeString("en-CA", {
-          hour: "numeric",
-          minute: "2-digit",
-        })
+      ? formatAgendaTime(next.scheduledStart, input.timeZone)
       : "today";
     lines.push(`Up next: ${next.title} at ${when}.`);
   } else if (open === 0 && done === 0) {
@@ -601,11 +589,15 @@ export function formatAgendaMoney(amount: number): string {
   }).format(amount);
 }
 
-export function formatAgendaTime(iso: string | null | undefined): string {
+export function formatAgendaTime(
+  iso: string | null | undefined,
+  timeZone?: string
+): string {
   if (!iso) return "All day";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "All day";
   return date.toLocaleTimeString("en-CA", {
+    ...(timeZone ? { timeZone } : {}),
     hour: "numeric",
     minute: "2-digit",
   });
