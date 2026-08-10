@@ -2,9 +2,11 @@ import type { MaterialOrder } from "@/types/material-order";
 import type { AppNotification } from "@/types/notification";
 import type { ProjectTask } from "@/types/project-operations";
 import {
+  isAgendaPriority,
   isScheduleItemStatus,
   isScheduleTaskType,
   scheduleTaskTypeLabel,
+  type AgendaPriority,
   type ScheduleItem,
   type ScheduleTaskType,
 } from "@/types/schedule-item";
@@ -33,6 +35,8 @@ export type TodayAgendaItem = {
   title: string;
   subtitle: string | null;
   status: "todo" | "in_progress" | "completed" | "cancelled" | "overdue";
+  /** high | medium | low — from schedule_items/tasks; default medium for derived rows. */
+  priority: AgendaPriority;
   /** ISO timestamptz when known; null for all-day / date-only. */
   scheduledStart: string | null;
   scheduledEnd: string | null;
@@ -69,6 +73,7 @@ export type TodaySummary = {
   paymentsDueAmount: number;
   pickupsCount: number;
   overdueCount: number;
+  highPriorityCount: number;
 };
 
 export type TodayAgendaViewModel = {
@@ -90,9 +95,16 @@ function normalizeScheduleItem(row: ScheduleItem): ScheduleItem {
       ? row.task_type
       : "other",
     status: isScheduleItemStatus(String(row.status)) ? row.status : "todo",
+    priority: resolveAgendaPriority(row.priority),
     notes: row.notes ?? null,
     all_day: Boolean(row.all_day),
   };
+}
+
+function resolveAgendaPriority(value: unknown): AgendaPriority {
+  return isAgendaPriority(String(value ?? ""))
+    ? (value as AgendaPriority)
+    : "medium";
 }
 
 function materialTaskType(
@@ -245,6 +257,7 @@ export function buildTodayAgenda(input: {
       title: row.title,
       subtitle: row.notes,
       status: deriveScheduleStatus(row, now),
+      priority: row.priority,
       scheduledStart: row.all_day ? null : row.scheduled_start,
       scheduledEnd: row.scheduled_end,
       allDay: row.all_day || !row.scheduled_start,
@@ -289,6 +302,7 @@ export function buildTodayAgenda(input: {
       title: task.title,
       subtitle,
       status,
+      priority: resolveAgendaPriority(task.priority),
       scheduledStart: null,
       scheduledEnd: null,
       allDay: true,
@@ -329,6 +343,7 @@ export function buildTodayAgenda(input: {
         ? `${order.project_name || order.branch_location || "Materials"} · ready ${readyDate}`
         : order.project_name || order.branch_location || null,
       status: isPast ? "overdue" : "todo",
+      priority: isPast ? "high" : "medium",
       scheduledStart: time,
       scheduledEnd: null,
       allDay: !time,
@@ -366,6 +381,7 @@ export function buildTodayAgenda(input: {
         ? `${invoice.invoice_number || "Invoice"} · due ${invoice.due_date}`
         : invoice.invoice_number,
       status: isPast ? "overdue" : "todo",
+      priority: isPast ? "high" : "medium",
       scheduledStart: null,
       scheduledEnd: null,
       allDay: true,
@@ -424,6 +440,12 @@ export function buildTodayAgenda(input: {
     (i) => i.taskType === "pickup" || i.taskType === "delivery"
   );
   const overdueCount = items.filter((i) => i.status === "overdue").length;
+  const highPriorityCount = items.filter(
+    (i) =>
+      i.priority === "high" &&
+      i.status !== "completed" &&
+      i.status !== "cancelled"
+  ).length;
 
   const summary: TodaySummary = {
     totalToday: items.length,
@@ -436,6 +458,7 @@ export function buildTodayAgenda(input: {
     ),
     pickupsCount: pickups.length,
     overdueCount,
+    highPriorityCount,
   };
 
   const alerts = [...input.notifications]

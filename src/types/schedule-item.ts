@@ -31,6 +31,10 @@ export const SCHEDULE_ITEM_SOURCES = [
 
 export type ScheduleItemSource = (typeof SCHEDULE_ITEM_SOURCES)[number];
 
+export const AGENDA_PRIORITIES = ["high", "medium", "low"] as const;
+
+export type AgendaPriority = (typeof AGENDA_PRIORITIES)[number];
+
 export interface ScheduleItem {
   id: string;
   user_id: string;
@@ -38,6 +42,8 @@ export interface ScheduleItem {
   title: string;
   notes: string | null;
   status: ScheduleItemStatus;
+  /** Present after migration 042; treat missing as medium until then. */
+  priority?: AgendaPriority;
   scheduled_start: string | null;
   scheduled_end: string | null;
   all_day: boolean;
@@ -61,6 +67,21 @@ export function isScheduleTaskType(value: string): value is ScheduleTaskType {
 
 export function isScheduleItemStatus(value: string): value is ScheduleItemStatus {
   return (SCHEDULE_ITEM_STATUSES as readonly string[]).includes(value);
+}
+
+export function isAgendaPriority(value: string): value is AgendaPriority {
+  return (AGENDA_PRIORITIES as readonly string[]).includes(value);
+}
+
+export function agendaPriorityLabel(priority: AgendaPriority): string {
+  switch (priority) {
+    case "high":
+      return "High";
+    case "low":
+      return "Low";
+    default:
+      return "Medium";
+  }
 }
 
 export function scheduleTaskTypeLabel(type: ScheduleTaskType): string {
