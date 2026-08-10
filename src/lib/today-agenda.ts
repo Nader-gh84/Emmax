@@ -419,14 +419,29 @@ function buildBriefLines(input: {
   items: TodayAgendaItem[];
 }): string[] {
   const name = input.greetingName || "there";
+  const open = input.summary.openToday;
+  const done = input.summary.completedToday;
+
+  let agendaLine: string;
+  if (open === 0 && done > 0) {
+    agendaLine = `Your open agenda is clear — ${done} item${
+      done === 1 ? "" : "s"
+    } already done.`;
+  } else if (open === 0) {
+    agendaLine = "Your agenda is clear for today.";
+  } else if (done > 0) {
+    agendaLine = `You have ${open} open item${
+      open === 1 ? "" : "s"
+    } on the agenda, and ${done} already done.`;
+  } else {
+    agendaLine = `You have ${open} open item${
+      open === 1 ? "" : "s"
+    } on the agenda.`;
+  }
+
   const lines = [
     `Good day, ${name}. Here's your brief for today.`,
-    `You have ${input.summary.openToday} open item${
-      input.summary.openToday === 1 ? "" : "s"
-    } on the agenda` +
-      (input.summary.completedToday > 0
-        ? `, and ${input.summary.completedToday} already done.`
-        : "."),
+    agendaLine,
   ];
 
   if (input.summary.paymentsDueCount > 0) {
@@ -451,8 +466,8 @@ function buildBriefLines(input: {
         })
       : "today";
     lines.push(`Up next: ${next.title} at ${when}.`);
-  } else if (input.items.length === 0) {
-    lines.push("Your schedule looks clear — a good day to catch up or plan ahead.");
+  } else if (open === 0 && done === 0) {
+    lines.push("A good day to catch up or plan ahead.");
   }
 
   return lines;
