@@ -257,7 +257,7 @@ export function buildTodayAgenda(input: {
       title: row.title,
       subtitle: row.notes,
       status: deriveScheduleStatus(row, now),
-      priority: row.priority,
+      priority: resolveAgendaPriority(row.priority),
       scheduledStart: row.all_day ? null : row.scheduled_start,
       scheduledEnd: row.scheduled_end,
       allDay: row.all_day || !row.scheduled_start,
