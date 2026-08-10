@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase";
 import {
   formatAgendaMoney,
   formatAgendaTime,
+  resolveTodayAlertHref,
   type TodayAgendaItem,
   type TodayAgendaViewModel,
 } from "@/lib/today-agenda";
@@ -222,7 +223,7 @@ export function TodayPage({
     stopRecording,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
-    silenceDurationMs: 4000,
+    silenceDurationMs: 5000,
   });
 
   const isRecording = recorderStatus === "recording";
@@ -727,9 +728,18 @@ export function TodayPage({
               <IconClock className="h-4 w-4 text-slate-500" />
             </div>
             {agenda.upNext.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">
-                Nothing queued — your next hours look clear.
-              </p>
+              <div className="mt-4">
+                <p className="text-sm text-slate-500">
+                  Nothing queued — your next hours look clear.
+                </p>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="mt-3 text-xs font-semibold text-accent hover:text-blue-400"
+                >
+                  + Add a timed task
+                </button>
+              </div>
             ) : (
               <ul className="mt-4 space-y-3">
                 {agenda.upNext.map((item) => (
@@ -738,11 +748,22 @@ export function TodayPage({
                     className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-white">
-                        {item.title}
-                      </p>
+                      {item.href ? (
+                        <Link
+                          href={item.href}
+                          className="text-sm font-medium text-white hover:underline"
+                        >
+                          {item.title}
+                        </Link>
+                      ) : (
+                        <p className="text-sm font-medium text-white">
+                          {item.title}
+                        </p>
+                      )}
                       <p className="shrink-0 text-xs font-semibold text-accent">
-                        {formatAgendaTime(item.scheduledStart)}
+                        {item.status === "overdue"
+                          ? "Overdue"
+                          : formatAgendaTime(item.scheduledStart)}
                       </p>
                     </div>
                     {item.subtitle ? (
@@ -756,6 +777,14 @@ export function TodayPage({
             )}
           </section>
         </div>
+
+        {agenda.summary.overdueCount > 0 ? (
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+            {agenda.summary.overdueCount === 1
+              ? "1 overdue item needs attention — clear it before the rest of the day piles up."
+              : `${agenda.summary.overdueCount} overdue items need attention — clear them before the rest of the day piles up.`}
+          </div>
+        ) : null}
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.9fr)]">
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -798,10 +827,40 @@ export function TodayPage({
             </div>
 
             {filteredItems.length === 0 ? (
-              <p className="mt-6 text-sm text-slate-500">
-                No items in this filter for today. Add a personal task or check
-                project due dates.
-              </p>
+              <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-6 text-center">
+                {filter === "all" && agenda.items.length === 0 ? (
+                  <>
+                    <p className="text-sm font-medium text-slate-200">
+                      Nothing on today’s agenda yet
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Add a personal task, or project due dates and material
+                      pickups will show up here automatically.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreate}
+                      className={`mt-4 ${touchBtnPrimary}`}
+                    >
+                      + Add Task
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-400">
+                      No {filter === "all" ? "" : "matching "}items in this
+                      filter.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreate}
+                      className="mt-3 text-xs font-semibold text-accent hover:text-blue-400"
+                    >
+                      + Add Task
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
               <ul className="mt-4 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10">
                 {filteredItems.map((item) => (
@@ -875,22 +934,36 @@ export function TodayPage({
                 <IconBell className="h-4 w-4 text-slate-500" />
               </div>
               {agenda.alerts.length === 0 ? (
-                <p className="mt-4 text-sm text-slate-500">
-                  No recent alerts. Inbox is quiet.
-                </p>
+                <div className="mt-4 rounded-xl border border-dashed border-white/10 px-3 py-4">
+                  <p className="text-sm text-slate-500">
+                    No recent alerts. Inbox is quiet.
+                  </p>
+                </div>
               ) : (
                 <ul className="mt-4 space-y-3">
-                  {agenda.alerts.slice(0, 5).map((alert) => (
-                    <li key={alert.id} className="min-w-0">
-                      <p className="text-sm text-slate-200 line-clamp-2">
-                        {alert.message}
-                      </p>
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        {formatNotificationTime(alert.created_at)}
-                        {!alert.read ? " · Unread" : ""}
-                      </p>
-                    </li>
-                  ))}
+                  {agenda.alerts.slice(0, 5).map((alert) => {
+                    const href = resolveTodayAlertHref(alert);
+                    return (
+                      <li key={alert.id} className="min-w-0">
+                        {href ? (
+                          <Link
+                            href={href}
+                            className="block text-sm text-slate-200 line-clamp-2 hover:text-white hover:underline"
+                          >
+                            {alert.message}
+                          </Link>
+                        ) : (
+                          <p className="text-sm text-slate-200 line-clamp-2">
+                            {alert.message}
+                          </p>
+                        )}
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {formatNotificationTime(alert.created_at)}
+                          {!alert.read ? " · Unread" : ""}
+                        </p>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <Link
@@ -909,6 +982,14 @@ export function TodayPage({
                 <SummaryMetric
                   label="Open"
                   value={String(agenda.summary.openToday)}
+                />
+                <SummaryMetric
+                  label="Overdue"
+                  value={
+                    agenda.summary.overdueCount > 0
+                      ? String(agenda.summary.overdueCount)
+                      : "—"
+                  }
                 />
                 <SummaryMetric
                   label="Done"
@@ -933,11 +1014,16 @@ export function TodayPage({
         </div>
       </div>
 
-      <div className="sticky bottom-0 border-t border-white/10 bg-[#0B1220]/95 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center">
+      {/* Mobile: fixed above bottom nav. md+: sticky in page flow (nav hidden). */}
+      <div
+        className="pointer-events-none h-[4.75rem] shrink-0 md:hidden"
+        aria-hidden
+      />
+      <div className="z-40 border-t border-white/10 bg-[#0B1220]/95 px-4 py-3 backdrop-blur max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(56px+env(safe-area-inset-bottom))] md:sticky md:bottom-0 md:z-10 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-5xl items-center gap-3">
           <button
             type="button"
-            className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white shadow-lg select-none ${
+            className={`inline-flex h-12 w-12 shrink-0 touch-none items-center justify-center rounded-full text-white shadow-lg select-none ${
               isRecording
                 ? "bg-red-500 shadow-red-500/30"
                 : "bg-accent shadow-accent/30"
@@ -959,13 +1045,15 @@ export function TodayPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Voice command
             </p>
-            <p className="mt-1 text-sm text-slate-300">{voiceStatusLabel()}</p>
+            <p className="mt-0.5 truncate text-sm text-slate-300">
+              {voiceStatusLabel()}
+            </p>
             {voiceError || recorderError ? (
-              <p className="mt-1 text-xs text-red-300">
+              <p className="mt-1 line-clamp-2 text-xs text-red-300">
                 {voiceError || recorderError}
               </p>
-            ) : voicePhase === "idle" || isRecording ? (
-              <div className="mt-1.5 flex gap-2 overflow-x-auto pb-0.5">
+            ) : (
+              <div className="mt-1.5 hidden gap-2 overflow-x-auto pb-0.5 sm:flex">
                 {SUGGESTED_PHRASES.map((phrase) => (
                   <span
                     key={phrase}
@@ -975,11 +1063,11 @@ export function TodayPage({
                   </span>
                 ))}
               </div>
-            ) : null}
+            )}
           </div>
           <button
             type="button"
-            className={`${touchBtnSecondary} shrink-0 select-none ${
+            className={`${touchBtnSecondary} hidden shrink-0 touch-none select-none sm:inline-flex ${
               isRecording ? "border-red-400/40 text-red-200" : ""
             }`}
             disabled={
@@ -1046,7 +1134,11 @@ function AgendaRow({
   const canMutateSchedule = item.kind === "schedule";
 
   return (
-    <li className="px-4 py-3">
+    <li
+      className={`px-4 py-3 ${
+        item.status === "overdue" ? "bg-red-500/[0.04]" : ""
+      }`}
+    >
       <div className="flex items-start gap-3">
         {canComplete ? (
           <button
@@ -1056,7 +1148,9 @@ function AgendaRow({
             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] disabled:opacity-50 ${
               item.status === "completed"
                 ? "border-emerald-500 bg-emerald-500 text-white"
-                : "border-white/20 bg-transparent text-transparent hover:border-accent"
+                : item.status === "overdue"
+                  ? "border-red-400/60 bg-transparent text-transparent hover:border-red-300"
+                  : "border-white/20 bg-transparent text-transparent hover:border-accent"
             }`}
             aria-label={
               item.status === "completed" ? "Mark open" : "Mark done"
@@ -1090,7 +1184,7 @@ function AgendaRow({
             ) : null}
           </div>
 
-          {item.href && !canMutateSchedule ? (
+          {item.href ? (
             <Link
               href={item.href}
               className={`mt-1.5 block text-sm font-medium hover:underline ${
@@ -1122,26 +1216,36 @@ function AgendaRow({
             </p>
           ) : null}
 
-          {canMutateSchedule ? (
-            <div className="mt-2 flex flex-wrap gap-3">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onEdit}
-                className="text-xs font-semibold text-accent hover:text-blue-400 disabled:opacity-50"
+          <div className="mt-2 flex flex-wrap gap-3">
+            {item.href ? (
+              <Link
+                href={item.href}
+                className="text-xs font-semibold text-accent hover:text-blue-400"
               >
-                Edit
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onDelete}
-                className="text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
-              >
-                Delete
-              </button>
-            </div>
-          ) : null}
+                {item.hrefLabel || "Open"}
+              </Link>
+            ) : null}
+            {canMutateSchedule ? (
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onEdit}
+                  className="text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-50"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onDelete}
+                  className="text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
     </li>
