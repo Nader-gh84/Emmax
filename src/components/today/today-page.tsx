@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import {
   IconBell,
   IconCalendar,
@@ -18,11 +18,17 @@ import {
   scheduleItemToForm,
   type ScheduleItemFormValues,
 } from "@/components/today/schedule-item-form-modal";
+import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confirm-modal";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
 } from "@/components/quotes/ui";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import {
+  findScheduleConflicts,
+  type ScheduleConflictCandidate,
+} from "@/lib/schedule-conflicts";
 import { createClient } from "@/lib/supabase";
 import {
   formatAgendaMoney,
@@ -30,12 +36,23 @@ import {
   type TodayAgendaItem,
   type TodayAgendaViewModel,
 } from "@/lib/today-agenda";
+import {
+  toVoiceAgendaCandidates,
+  type TodayVoiceCommandResult,
+} from "@/lib/today-voice-command";
 import { formatNotificationTime } from "@/types/notification";
 import {
   scheduleTaskTypeLabel,
   type ScheduleItem,
   type ScheduleTaskType,
 } from "@/types/schedule-item";
+
+type VoicePhase =
+  | "idle"
+  | "transcribing"
+  | "classifying"
+  | "confirm"
+  | "executing";
 
 const BRIEF_TTS_INSTRUCTIONS =
   "Speak like a calm, clear executive assistant delivering a morning briefing. Warm but efficient, natural pacing with short pauses between sentences. No theatrical flourish.";
@@ -121,10 +138,99 @@ export function TodayPage({
   const [isSaving, setIsSaving] = useState(false);
   const briefTts = useTtsPlayback();
 
+  const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [voiceCommand, setVoiceCommand] =
+    useState<TodayVoiceCommandResult | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [acknowledgeConflicts, setAcknowledgeConflicts] = useState(false);
+  const [conflictGate, setConflictGate] = useState(false);
+
   const briefScript = useMemo(
     () => agenda.briefLines.join(" "),
     [agenda.briefLines]
   );
+
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob) => {
+      setVoiceError(null);
+      setVoicePhase("transcribing");
+
+      try {
+        const formData = new FormData();
+        formData.append("audio", blob, "recording.webm");
+        formData.append("extract", "false");
+
+        const transcriptResponse = await fetch("/api/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+        const transcriptData = (await transcriptResponse.json()) as {
+          transcript?: string;
+          error?: string;
+        };
+        if (!transcriptResponse.ok) {
+          throw new Error(transcriptData.error || "Transcription failed");
+        }
+
+        const transcript = transcriptData.transcript?.trim() ?? "";
+        if (!transcript) {
+          throw new Error("I didn't catch that — try holding the mic again.");
+        }
+        setVoiceTranscript(transcript);
+        setVoicePhase("classifying");
+
+        const classifyResponse = await fetch("/api/today-voice-command", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            transcript,
+            dateKey: agenda.dateKey,
+            candidates: toVoiceAgendaCandidates(agenda.items),
+          }),
+        });
+        const classifyData = (await classifyResponse.json()) as {
+          command?: TodayVoiceCommandResult;
+          error?: string;
+        };
+        if (!classifyResponse.ok || !classifyData.command) {
+          throw new Error(
+            classifyData.error || "Could not understand that command"
+          );
+        }
+
+        setVoiceCommand(classifyData.command);
+        setAcknowledgeConflicts(false);
+        setConflictGate(false);
+        setVoicePhase("confirm");
+      } catch (err) {
+        setVoicePhase("idle");
+        setVoiceCommand(null);
+        setVoiceError(
+          err instanceof Error ? err.message : "Voice command failed"
+        );
+      }
+    },
+    [agenda.dateKey, agenda.items]
+  );
+
+  const {
+    status: recorderStatus,
+    error: recorderError,
+    seconds: recorderSeconds,
+    startRecording,
+    stopRecording,
+  } = useVoiceRecorder({
+    onRecordingComplete: handleRecordingComplete,
+    silenceDurationMs: 4000,
+  });
+
+  const isRecording = recorderStatus === "recording";
+  const voiceBusy =
+    isRecording ||
+    voicePhase === "transcribing" ||
+    voicePhase === "classifying" ||
+    voicePhase === "executing";
 
   async function handleStartBrief() {
     if (briefTts.isPlaying || briefTts.isLoading) {
@@ -134,11 +240,26 @@ export function TodayPage({
     await briefTts.play(briefScript, { instructions: BRIEF_TTS_INSTRUCTIONS });
   }
 
-  function handlePushToTalkPress() {
-    // Chunk E: stop Daily Brief when the user reaches for the mic.
-    // Chunk F will own actual push-to-talk recording + commands.
+  async function handleMicPointerDown(
+    event: React.PointerEvent<HTMLButtonElement>
+  ) {
+    event.preventDefault();
     if (briefTts.isPlaying || briefTts.isLoading) {
       briefTts.stop();
+    }
+    if (voicePhase === "confirm" || voiceBusy) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may fail on some browsers; hold-to-talk still works.
+    }
+    setVoiceError(null);
+    await startRecording();
+  }
+
+  async function handleMicPointerUp() {
+    if (isRecording) {
+      await stopRecording();
     }
   }
 
@@ -149,6 +270,15 @@ export function TodayPage({
       return "Replay Brief";
     }
     return "Start Brief";
+  }
+
+  function voiceStatusLabel() {
+    if (isRecording) return `Listening… ${recorderSeconds}s`;
+    if (voicePhase === "transcribing") return "Transcribing…";
+    if (voicePhase === "classifying") return "Understanding…";
+    if (voicePhase === "executing") return "Updating agenda…";
+    if (voicePhase === "confirm") return "Confirm the command below";
+    return "Hold mic to talk";
   }
 
   const filteredItems = useMemo(() => {
@@ -297,6 +427,211 @@ export function TodayPage({
     if (deleteError) setError(deleteError.message);
     setBusyId(null);
     startTransition(() => router.refresh());
+  }
+
+  const voiceTargetItem = useMemo(() => {
+    if (!voiceCommand?.targetAgendaId) return null;
+    return (
+      agenda.items.find((item) => item.id === voiceCommand.targetAgendaId) ??
+      null
+    );
+  }, [agenda.items, voiceCommand]);
+
+  const voiceCanConfirm = useMemo(() => {
+    if (!voiceCommand) return false;
+    if (voiceCommand.intent === "unknown") return false;
+    if (voiceCommand.confidence > 0 && voiceCommand.confidence < 0.45) {
+      return false;
+    }
+    if (voiceCommand.intent === "mark_done") {
+      return Boolean(
+        voiceTargetItem &&
+          (voiceTargetItem.kind === "schedule" ||
+            voiceTargetItem.kind === "project_task")
+      );
+    }
+    if (voiceCommand.intent === "reschedule") {
+      return Boolean(
+        voiceTargetItem?.kind === "schedule" &&
+          (voiceCommand.date || agenda.dateKey)
+      );
+    }
+    if (voiceCommand.intent === "add_personal") {
+      return Boolean(voiceCommand.title?.trim());
+    }
+    return false;
+  }, [agenda.dateKey, voiceCommand, voiceTargetItem]);
+
+  const voiceConflicts = useMemo((): ScheduleConflictCandidate[] => {
+    if (!voiceCommand) return [];
+    if (
+      voiceCommand.intent !== "reschedule" &&
+      voiceCommand.intent !== "add_personal"
+    ) {
+      return [];
+    }
+    if (!voiceCommand.time) return [];
+
+    const form: ScheduleItemFormValues = {
+      title:
+        voiceCommand.intent === "add_personal"
+          ? voiceCommand.title || "Personal task"
+          : voiceTargetItem?.title || "Scheduled item",
+      task_type:
+        voiceCommand.intent === "add_personal"
+          ? "personal"
+          : voiceTargetItem?.taskType || "other",
+      date: voiceCommand.date || agenda.dateKey,
+      time: voiceCommand.time,
+      notes: voiceCommand.notes || "",
+    };
+    const payload = formValuesToSchedulePayload(form);
+    if (!payload.scheduled_start || payload.all_day) return [];
+
+    const excludeId =
+      voiceCommand.intent === "reschedule" && voiceTargetItem
+        ? sourceIdFromAgenda(voiceTargetItem)
+        : null;
+
+    return findScheduleConflicts({
+      proposedStart: payload.scheduled_start,
+      proposedEnd: payload.scheduled_end,
+      existing: conflictCandidates,
+      excludeId,
+    });
+  }, [
+    agenda.dateKey,
+    conflictCandidates,
+    voiceCommand,
+    voiceTargetItem,
+  ]);
+
+  function closeVoiceConfirm() {
+    if (voicePhase === "executing") return;
+    setVoicePhase("idle");
+    setVoiceCommand(null);
+    setAcknowledgeConflicts(false);
+    setConflictGate(false);
+  }
+
+  async function executeVoiceCommand() {
+    if (!voiceCommand || !userId) return;
+    setVoicePhase("executing");
+    setVoiceError(null);
+    setError(null);
+
+    try {
+      if (voiceCommand.intent === "mark_done") {
+        if (!voiceTargetItem) throw new Error("No matching agenda item.");
+        const id = sourceIdFromAgenda(voiceTargetItem);
+        if (!id) throw new Error("Missing agenda item id.");
+        if (voiceTargetItem.status !== "completed") {
+          const completedAt = new Date().toISOString();
+          if (voiceTargetItem.kind === "schedule") {
+            const { error: updateError } = await supabase
+              .from("schedule_items")
+              .update({ status: "completed", completed_at: completedAt })
+              .eq("id", id);
+            if (updateError) throw new Error(updateError.message);
+          } else if (voiceTargetItem.kind === "project_task") {
+            const { error: updateError } = await supabase
+              .from("tasks")
+              .update({ status: "completed", completed_at: completedAt })
+              .eq("id", id);
+            if (updateError) throw new Error(updateError.message);
+          } else {
+            throw new Error("That item can't be marked done by voice.");
+          }
+        }
+        startTransition(() => router.refresh());
+      } else if (voiceCommand.intent === "reschedule") {
+        if (!voiceTargetItem || voiceTargetItem.kind !== "schedule") {
+          throw new Error("I can only reschedule schedule items by voice.");
+        }
+        const id = sourceIdFromAgenda(voiceTargetItem);
+        if (!id) throw new Error("Missing schedule item id.");
+        const row = scheduleItems.find((item) => item.id === id);
+        if (!row) throw new Error("Schedule item not found.");
+
+        const form: ScheduleItemFormValues = {
+          title: row.title,
+          task_type: row.task_type,
+          date: voiceCommand.date || agenda.dateKey,
+          time: voiceCommand.time || "",
+          notes: voiceCommand.notes ?? row.notes ?? "",
+        };
+        const payload = formValuesToSchedulePayload(form);
+        const { error: updateError } = await supabase
+          .from("schedule_items")
+          .update({
+            scheduled_start: payload.scheduled_start,
+            scheduled_end: payload.scheduled_end,
+            all_day: payload.all_day,
+            notes: payload.notes,
+          })
+          .eq("id", id);
+        if (updateError) throw new Error(updateError.message);
+        startTransition(() => router.refresh());
+      } else if (voiceCommand.intent === "add_personal") {
+        const title = voiceCommand.title?.trim();
+        if (!title) throw new Error("Missing task title.");
+        const form: ScheduleItemFormValues = {
+          title,
+          task_type: "personal",
+          date: voiceCommand.date || agenda.dateKey,
+          time: voiceCommand.time || "",
+          notes: voiceCommand.notes || "",
+        };
+        const payload = formValuesToSchedulePayload(form);
+        const { error: insertError } = await supabase
+          .from("schedule_items")
+          .insert({
+            user_id: userId,
+            task_type: "personal",
+            title: payload.title,
+            notes: payload.notes,
+            status: "todo",
+            scheduled_start: payload.scheduled_start,
+            scheduled_end: payload.scheduled_end,
+            all_day: payload.all_day,
+            source: "voice",
+          });
+        if (insertError) throw new Error(insertError.message);
+        startTransition(() => router.refresh());
+      } else {
+        throw new Error("Unsupported voice command.");
+      }
+
+      setVoicePhase("idle");
+      setVoiceCommand(null);
+      setAcknowledgeConflicts(false);
+      setConflictGate(false);
+    } catch (err) {
+      setVoicePhase("confirm");
+      setVoiceError(
+        err instanceof Error ? err.message : "Failed to run voice command"
+      );
+    }
+  }
+
+  function handleVoiceConfirm() {
+    if (!voiceCanConfirm) return;
+    if (
+      voiceConflicts.length > 0 &&
+      !acknowledgeConflicts &&
+      (voiceCommand?.intent === "reschedule" ||
+        voiceCommand?.intent === "add_personal")
+    ) {
+      setConflictGate(true);
+      return;
+    }
+    void executeVoiceCommand();
+  }
+
+  function handleVoiceScheduleAnyway() {
+    setAcknowledgeConflicts(true);
+    setConflictGate(false);
+    void executeVoiceCommand();
   }
 
   return (
@@ -602,11 +937,21 @@ export function TodayPage({
         <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="button"
-            className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/30"
+            className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white shadow-lg select-none ${
+              isRecording
+                ? "bg-red-500 shadow-red-500/30"
+                : "bg-accent shadow-accent/30"
+            } ${voiceBusy && !isRecording ? "opacity-60" : ""}`}
             aria-label="Push to talk"
-            title="Push-to-talk — stops brief now; voice commands coming next"
-            onPointerDown={handlePushToTalkPress}
-            onClick={handlePushToTalkPress}
+            title="Hold to talk — mark done, reschedule, or add a personal task"
+            disabled={
+              voicePhase === "transcribing" ||
+              voicePhase === "classifying" ||
+              voicePhase === "executing"
+            }
+            onPointerDown={(event) => void handleMicPointerDown(event)}
+            onPointerUp={() => void handleMicPointerUp()}
+            onPointerCancel={() => void handleMicPointerUp()}
           >
             <IconMicrophone className="h-5 w-5" />
           </button>
@@ -614,25 +959,40 @@ export function TodayPage({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Voice command
             </p>
-            <div className="mt-1.5 flex gap-2 overflow-x-auto pb-0.5">
-              {SUGGESTED_PHRASES.map((phrase) => (
-                <span
-                  key={phrase}
-                  className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300"
-                >
-                  “{phrase}”
-                </span>
-              ))}
-            </div>
+            <p className="mt-1 text-sm text-slate-300">{voiceStatusLabel()}</p>
+            {voiceError || recorderError ? (
+              <p className="mt-1 text-xs text-red-300">
+                {voiceError || recorderError}
+              </p>
+            ) : voicePhase === "idle" || isRecording ? (
+              <div className="mt-1.5 flex gap-2 overflow-x-auto pb-0.5">
+                {SUGGESTED_PHRASES.map((phrase) => (
+                  <span
+                    key={phrase}
+                    className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300"
+                  >
+                    “{phrase}”
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
-            className={`${touchBtnSecondary} shrink-0`}
-            onPointerDown={handlePushToTalkPress}
-            onClick={handlePushToTalkPress}
-            title="Stops Daily Brief playback. Full push-to-talk arrives next."
+            className={`${touchBtnSecondary} shrink-0 select-none ${
+              isRecording ? "border-red-400/40 text-red-200" : ""
+            }`}
+            disabled={
+              voicePhase === "transcribing" ||
+              voicePhase === "classifying" ||
+              voicePhase === "executing"
+            }
+            title="Hold to talk"
+            onPointerDown={(event) => void handleMicPointerDown(event)}
+            onPointerUp={() => void handleMicPointerUp()}
+            onPointerCancel={() => void handleMicPointerUp()}
           >
-            Hold mic to talk
+            {isRecording ? "Release to send" : "Hold mic to talk"}
           </button>
         </div>
       </div>
@@ -646,6 +1006,23 @@ export function TodayPage({
           excludeId={editing?.id ?? null}
           onClose={closeForm}
           onSubmit={saveScheduleItem}
+        />
+      ) : null}
+
+      {(voicePhase === "confirm" || voicePhase === "executing") &&
+      voiceCommand ? (
+        <VoiceCommandConfirmModal
+          transcript={voiceTranscript}
+          command={voiceCommand}
+          targetTitle={voiceTargetItem?.title ?? null}
+          dateKey={agenda.dateKey}
+          conflicts={conflictGate ? voiceConflicts : []}
+          acknowledgeConflicts={acknowledgeConflicts}
+          busy={voicePhase === "executing"}
+          canConfirm={voiceCanConfirm}
+          onAcknowledgeConflicts={handleVoiceScheduleAnyway}
+          onCancel={closeVoiceConfirm}
+          onConfirm={handleVoiceConfirm}
         />
       ) : null}
     </div>
