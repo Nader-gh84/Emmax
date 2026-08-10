@@ -1,4 +1,5 @@
 import type { Employee } from "@/types/employee";
+import type { AgendaPriority } from "@/types/schedule-item";
 
 export type TaskStatus = "todo" | "in_progress" | "completed" | "overdue";
 
@@ -9,6 +10,8 @@ export interface ProjectTask {
   title: string;
   assigned_employee_id: string | null;
   status: TaskStatus;
+  /** Present after migration 042; treat missing as medium until then. */
+  priority?: AgendaPriority;
   due_date: string | null;
   created_at: string;
   updated_at: string;
