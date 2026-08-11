@@ -74,7 +74,7 @@ export function QuickAddLadderModal({
                     Voice
                   </span>
                   <span className="mt-0.5 block text-xs text-slate-400">
-                    Hold the mic and say what to add or change
+                    Jump to Ema’s mic — tap for brief, hold to talk
                   </span>
                 </span>
               </button>
