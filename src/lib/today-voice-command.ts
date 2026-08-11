@@ -1,10 +1,17 @@
 import type { TodayAgendaItem } from "@/lib/today-agenda";
 import { formatAgendaTime } from "@/lib/today-agenda";
+import {
+  isAgendaPriority,
+  isScheduleTaskType,
+  scheduleTaskTypeLabel,
+  type AgendaPriority,
+  type ScheduleTaskType,
+} from "@/types/schedule-item";
 
 export const TODAY_VOICE_INTENTS = [
   "mark_done",
   "reschedule",
-  "add_personal",
+  "add_item",
   "unknown",
 ] as const;
 
@@ -22,6 +29,14 @@ export type TodayVoiceAgendaCandidate = {
   reschedulable: boolean;
 };
 
+export type TodayVoiceProjectCandidate = {
+  id: string;
+  projectName: string;
+  customerId: string | null;
+  customerName: string | null;
+  status: string;
+};
+
 export type TodayVoiceCommandResult = {
   intent: TodayVoiceIntent;
   confidence: number;
@@ -31,6 +46,17 @@ export type TodayVoiceCommandResult = {
   time: string | null;
   notes: string | null;
   clarification: string | null;
+  /** For add_item — inferred type (defaults to personal when unset). */
+  taskType: ScheduleTaskType | null;
+  projectId: string | null;
+  /** Spoken/typed project name hint when id not resolved. */
+  projectQuery: string | null;
+  /**
+   * True when the utterance referenced a job/project but matching is
+   * ambiguous or failed — UI must clarify; do not silently create personal.
+   */
+  needsProjectClarification: boolean;
+  priority: AgendaPriority | null;
 };
 
 export function isTodayVoiceIntent(value: string): value is TodayVoiceIntent {
@@ -55,27 +81,54 @@ export function toVoiceAgendaCandidates(
   }));
 }
 
-export const TODAY_VOICE_COMMAND_SYSTEM_PROMPT = `You classify spoken commands for a contractor's Daily Command Center (Today agenda).
+export function toVoiceProjectCandidates(
+  projects: TodayVoiceProjectCandidate[]
+): TodayVoiceProjectCandidate[] {
+  return projects.slice(0, 80).map((p) => ({
+    id: p.id,
+    projectName: p.projectName,
+    customerId: p.customerId,
+    customerName: p.customerName,
+    status: p.status,
+  }));
+}
+
+export const TODAY_VOICE_COMMAND_SYSTEM_PROMPT = `You classify spoken or typed commands for a contractor's Daily Command Center (Today agenda).
 
 Return a single JSON object with exactly these keys:
 {
-  "intent": "mark_done" | "reschedule" | "add_personal" | "unknown",
+  "intent": "mark_done" | "reschedule" | "add_item" | "unknown",
   "confidence": number between 0 and 1,
   "targetAgendaId": string | null,
   "title": string | null,
   "date": string | null,
   "time": string | null,
   "notes": string | null,
-  "clarification": string | null
+  "clarification": string | null,
+  "taskType": "project_task" | "pickup" | "delivery" | "site_visit" | "call" | "inspection" | "payment_reminder" | "personal" | "other" | null,
+  "projectId": string | null,
+  "projectQuery": string | null,
+  "needsProjectClarification": boolean,
+  "priority": "high" | "medium" | "low" | null
 }
 
 Rules:
-- Use only the provided agenda candidates for matching. Prefer open (not completed) items.
-- mark_done: user wants to complete/finish/check off an item. Set targetAgendaId to a completable candidate id. title/date/time may be null.
-- reschedule: user wants to move a schedule item to a new date and/or time. Set targetAgendaId to a reschedulable candidate (kind schedule only). Put the new date as YYYY-MM-DD and time as HH:MM 24-hour local. If they only change time, keep today's dateKey. If all-day / no clock time, set time to null.
-- add_personal: user wants a new personal task/reminder. Set title (required), date (default dateKey), time (HH:MM or null for all-day), optional notes. targetAgendaId must be null.
-- unknown: cannot map confidently, or the request is unsupported (delete, call someone, pay invoice, etc.). Put a short clarification for the user.
-- If multiple candidates match equally, intent may still be set but clarification must ask which one, and confidence should be <= 0.55 with targetAgendaId null.
+- Use only the provided agenda candidates for matching existing items. Prefer open (not completed) items.
+- Use only the provided project candidates when linking a new item to a job. projectId must be one of those ids or null. Do not invent project ids.
+- mark_done: user wants to complete/finish/check off an item. Set targetAgendaId to a completable candidate id. Other add fields may be null. needsProjectClarification false.
+- reschedule: user wants to move a schedule item to a new date and/or time. Set targetAgendaId to a reschedulable candidate (kind schedule only). Put the new date as YYYY-MM-DD and time as HH:MM 24-hour local. If they only change time, keep today's dateKey. If all-day / no clock time, set time to null. needsProjectClarification false.
+- add_item: user wants a NEW agenda item (task, site visit, call, pickup, personal reminder, etc.).
+  - title is required (short actionable title; do not paste the whole utterance).
+  - Infer taskType from wording (e.g. "site visit" → site_visit, "call" → call, "pickup" → pickup, "remind me" / no work context → personal). Default personal only when no work/project context.
+  - date defaults to dateKey; time HH:MM or null for all-day; optional notes; optional priority (default null → medium).
+  - targetAgendaId must be null.
+  - Project linking:
+    - If the user names a job/project/customer site ("for Kitchen remodel", "at the Smith job"), try to match project candidates by projectName (and customerName as secondary).
+    - Exact or clear unique match → set projectId, projectQuery to the spoken name, needsProjectClarification false. Prefer taskType site_visit/call/inspection/other over personal when a project is linked.
+    - Zero matches or multiple plausible matches → projectId null, set projectQuery to the spoken name, needsProjectClarification TRUE, confidence <= 0.55, and clarification asking which project. NEVER silently invent a personal-only item when a project was clearly referenced.
+    - If the user clearly wants a personal/errand item with no job reference → taskType personal, projectId null, needsProjectClarification false.
+- unknown: cannot map confidently, or the request is unsupported (delete, call someone on the phone, pay invoice, etc.). Put a short clarification for the user. needsProjectClarification false.
+- If multiple agenda candidates match equally for mark_done/reschedule, clarification must ask which one, confidence <= 0.55, targetAgendaId null.
 - Do not invent agenda ids. targetAgendaId must be one of the candidate ids or null.
 - Times like "3 PM" → "15:00". "noon" → "12:00". "7" in evening context → "19:00" when spoken as dinner/evening, else ask via clarification if ambiguous.
 - Keep clarification short (one sentence) when used; otherwise null.`;
@@ -87,6 +140,8 @@ export function formatVoiceCommandSummary(input: {
   date?: string | null;
   time?: string | null;
   dateKey: string;
+  taskType?: ScheduleTaskType | null;
+  projectName?: string | null;
 }): string {
   const when = formatVoiceWhen(input.date || input.dateKey, input.time);
 
@@ -99,10 +154,15 @@ export function formatVoiceCommandSummary(input: {
       return input.targetTitle
         ? `Reschedule “${input.targetTitle}” to ${when}.`
         : `Reschedule to ${when}.`;
-    case "add_personal":
+    case "add_item": {
+      const typeLabel = scheduleTaskTypeLabel(input.taskType || "personal");
+      const projectBit = input.projectName
+        ? ` on “${input.projectName}”`
+        : "";
       return input.title
-        ? `Add personal task “${input.title}” for ${when}.`
-        : `Add a personal task for ${when}.`;
+        ? `Add ${typeLabel.toLowerCase()} “${input.title}”${projectBit} for ${when}.`
+        : `Add a ${typeLabel.toLowerCase()}${projectBit} for ${when}.`;
+    }
     default:
       return "Could not understand that command.";
   }
@@ -129,11 +189,36 @@ function formatVoiceWhen(date: string, time: string | null | undefined): string 
 }
 
 export function normalizeVoiceCommandResult(
-  raw: Partial<TodayVoiceCommandResult> | null | undefined
+  raw: Partial<TodayVoiceCommandResult> & {
+    intent?: string | null;
+    task_type?: string | null;
+    project_id?: string | null;
+    project_query?: string | null;
+    needs_project_clarification?: boolean | null;
+  } | null | undefined
 ): TodayVoiceCommandResult {
-  const intent =
-    raw?.intent && isTodayVoiceIntent(raw.intent) ? raw.intent : "unknown";
+  let intentRaw: string =
+    typeof raw?.intent === "string" ? raw.intent : "unknown";
+  if (intentRaw === "add_personal") intentRaw = "add_item";
+  const intent: TodayVoiceIntent = isTodayVoiceIntent(intentRaw)
+    ? intentRaw
+    : "unknown";
+
   const confidence = clamp01(Number(raw?.confidence));
+
+  const taskTypeRaw =
+    cleanString(raw?.taskType) ?? cleanString(raw?.task_type);
+  const taskType =
+    taskTypeRaw && isScheduleTaskType(taskTypeRaw) ? taskTypeRaw : null;
+
+  const priorityRaw = cleanString(raw?.priority);
+  const priority =
+    priorityRaw && isAgendaPriority(priorityRaw) ? priorityRaw : null;
+
+  const needsProjectClarification = Boolean(
+    raw?.needsProjectClarification ?? raw?.needs_project_clarification
+  );
+
   return {
     intent,
     confidence: Number.isFinite(confidence) ? confidence : 0,
@@ -143,6 +228,13 @@ export function normalizeVoiceCommandResult(
     time: normalizeTime(raw?.time),
     notes: cleanString(raw?.notes),
     clarification: cleanString(raw?.clarification),
+    taskType: intent === "add_item" ? taskType || "personal" : taskType,
+    projectId: cleanString(raw?.projectId) ?? cleanString(raw?.project_id),
+    projectQuery:
+      cleanString(raw?.projectQuery) ?? cleanString(raw?.project_query),
+    needsProjectClarification:
+      intent === "add_item" ? needsProjectClarification : false,
+    priority,
   };
 }
 

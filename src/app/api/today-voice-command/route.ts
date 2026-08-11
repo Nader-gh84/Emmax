@@ -4,12 +4,14 @@ import {
   normalizeVoiceCommandResult,
   type TodayVoiceAgendaCandidate,
   type TodayVoiceCommandResult,
+  type TodayVoiceProjectCandidate,
 } from "@/lib/today-voice-command";
 
 type RequestBody = {
   transcript?: string;
   dateKey?: string;
   candidates?: TodayVoiceAgendaCandidate[];
+  projects?: TodayVoiceProjectCandidate[];
 };
 
 export async function POST(request: Request) {
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
     const transcript = body.transcript?.trim() ?? "";
     const dateKey = body.dateKey?.trim() ?? "";
     const candidates = Array.isArray(body.candidates) ? body.candidates : [];
+    const projects = Array.isArray(body.projects) ? body.projects : [];
 
     if (!transcript) {
       return NextResponse.json(
@@ -43,10 +46,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const projectPayload = projects.slice(0, 80).map((p) => ({
+      id: p.id,
+      projectName: p.projectName,
+      customerId: p.customerId,
+      customerName: p.customerName,
+      status: p.status,
+    }));
+
     const userPayload = {
       dateKey,
       transcript,
       candidates: candidates.slice(0, 40),
+      projects: projectPayload,
     };
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -101,6 +113,7 @@ export async function POST(request: Request) {
 
     const result = normalizeVoiceCommandResult(parsed);
     const allowedIds = new Set(candidates.map((c) => c.id));
+    const allowedProjectIds = new Set(projectPayload.map((p) => p.id));
 
     if (result.targetAgendaId && !allowedIds.has(result.targetAgendaId)) {
       result.targetAgendaId = null;
@@ -113,7 +126,27 @@ export async function POST(request: Request) {
       }
     }
 
-    if (result.intent === "add_personal" && !result.date) {
+    if (result.projectId && !allowedProjectIds.has(result.projectId)) {
+      result.projectId = null;
+      if (result.intent === "add_item" && result.projectQuery) {
+        result.needsProjectClarification = true;
+        result.confidence = Math.min(result.confidence, 0.5);
+        result.clarification =
+          result.clarification ||
+          "Which project should I link this to?";
+      }
+    }
+
+    // Spoken/typed a project name but no id — force clarify (never silent personal).
+    if (
+      result.intent === "add_item" &&
+      result.projectQuery &&
+      !result.projectId
+    ) {
+      result.needsProjectClarification = true;
+    }
+
+    if (result.intent === "add_item" && !result.date) {
       result.date = dateKey;
     }
     if (result.intent === "reschedule" && !result.date) {

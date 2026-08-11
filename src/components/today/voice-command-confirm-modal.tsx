@@ -10,6 +10,7 @@ import {
   formatVoiceCommandSummary,
   type TodayVoiceCommandResult,
   type TodayVoiceIntent,
+  type TodayVoiceProjectCandidate,
 } from "@/lib/today-voice-command";
 
 export function VoiceCommandConfirmModal({
@@ -17,10 +18,15 @@ export function VoiceCommandConfirmModal({
   command,
   targetTitle,
   dateKey,
+  projects,
+  selectedProjectId,
+  keepAsPersonal,
   conflicts,
   acknowledgeConflicts,
   busy,
   canConfirm,
+  onSelectProject,
+  onKeepAsPersonal,
   onAcknowledgeConflicts,
   onCancel,
   onConfirm,
@@ -29,14 +35,23 @@ export function VoiceCommandConfirmModal({
   command: TodayVoiceCommandResult;
   targetTitle: string | null;
   dateKey: string;
+  projects: TodayVoiceProjectCandidate[];
+  selectedProjectId: string | null;
+  keepAsPersonal: boolean;
   conflicts: ScheduleConflictCandidate[];
   acknowledgeConflicts: boolean;
   busy: boolean;
   canConfirm: boolean;
+  onSelectProject: (projectId: string) => void;
+  onKeepAsPersonal: () => void;
   onAcknowledgeConflicts: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const resolvedProjectId = selectedProjectId || command.projectId;
+  const projectName =
+    projects.find((p) => p.id === resolvedProjectId)?.projectName ?? null;
+
   const summary = formatVoiceCommandSummary({
     intent: command.intent,
     targetTitle,
@@ -44,10 +59,19 @@ export function VoiceCommandConfirmModal({
     date: command.date,
     time: command.time,
     dateKey,
+    taskType: command.taskType,
+    projectName: keepAsPersonal ? null : projectName,
   });
 
   const showingConflicts = conflicts.length > 0 && !acknowledgeConflicts;
   const intentLabel = intentHeading(command.intent);
+  const showProjectClarify =
+    command.intent === "add_item" &&
+    command.needsProjectClarification &&
+    !keepAsPersonal &&
+    !resolvedProjectId;
+
+  const projectChoices = rankProjectChoices(projects, command.projectQuery);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center">
@@ -120,13 +144,75 @@ export function VoiceCommandConfirmModal({
                   {command.clarification}
                 </p>
               ) : null}
-              {!canConfirm ? (
+              {keepAsPersonal ? (
+                <p className="mt-2 text-xs text-slate-400">
+                  Will save as a personal item (no project link).
+                </p>
+              ) : null}
+              {!canConfirm && !showProjectClarify ? (
                 <p className="mt-2 text-xs text-red-300">
                   I need a clearer match before running this. Try naming the
                   item and time.
                 </p>
               ) : null}
             </div>
+
+            {showProjectClarify ? (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-slate-200">
+                  Link to a project
+                  {command.projectQuery
+                    ? ` (heard “${command.projectQuery}”)`
+                    : ""}
+                </p>
+                {projectChoices.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    No active projects found. Keep as personal or cancel.
+                  </p>
+                ) : (
+                  <ul className="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
+                    {projectChoices.map((project) => (
+                      <li key={project.id}>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => onSelectProject(project.id)}
+                          className="flex w-full flex-col rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-accent/10"
+                        >
+                          <span className="text-sm font-semibold text-white">
+                            {project.projectName}
+                          </span>
+                          {project.customerName ? (
+                            <span className="text-xs text-slate-400">
+                              {project.customerName}
+                            </span>
+                          ) : null}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onKeepAsPersonal}
+                  className="mt-3 text-xs font-semibold text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                >
+                  Keep as personal instead
+                </button>
+              </div>
+            ) : null}
+
+            {command.intent === "add_item" &&
+            resolvedProjectId &&
+            !keepAsPersonal ? (
+              <p className="mt-3 text-xs text-emerald-300">
+                Linked to{" "}
+                {projectName || "selected project"}
+                {selectedProjectId ? " (your pick)" : ""}.
+              </p>
+            ) : null}
+
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -158,9 +244,40 @@ function intentHeading(intent: TodayVoiceIntent): string {
       return "Confirm mark done";
     case "reschedule":
       return "Confirm reschedule";
-    case "add_personal":
+    case "add_item":
       return "Confirm new task";
     default:
       return "Didn't catch that";
   }
+}
+
+function rankProjectChoices(
+  projects: TodayVoiceProjectCandidate[],
+  query: string | null
+): TodayVoiceProjectCandidate[] {
+  if (!query?.trim()) return projects.slice(0, 12);
+  const q = query.trim().toLowerCase();
+  const scored = projects
+    .map((p) => {
+      const name = p.projectName.toLowerCase();
+      const customer = (p.customerName || "").toLowerCase();
+      let score = 0;
+      if (name === q) score = 100;
+      else if (name.includes(q) || q.includes(name)) score = 80;
+      else if (customer && (customer.includes(q) || q.includes(customer)))
+        score = 50;
+      else {
+        const tokens = q.split(/\s+/).filter(Boolean);
+        const hits = tokens.filter(
+          (t) => name.includes(t) || customer.includes(t)
+        ).length;
+        score = hits * 20;
+      }
+      return { p, score };
+    })
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((row) => row.p);
+
+  return (scored.length ? scored : projects).slice(0, 12);
 }

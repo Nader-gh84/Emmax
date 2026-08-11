@@ -12,8 +12,12 @@ import {
   formatConflictTime,
   type ScheduleConflictCandidate,
 } from "@/lib/schedule-conflicts";
+import type { TodayVoiceProjectCandidate } from "@/lib/today-voice-command";
 import {
+  agendaPriorityLabel,
+  isAgendaPriority,
   scheduleTaskTypeLabel,
+  type AgendaPriority,
   type ScheduleItem,
   type ScheduleTaskType,
 } from "@/types/schedule-item";
@@ -28,12 +32,16 @@ const MANUAL_TYPES: ScheduleTaskType[] = [
   "other",
 ];
 
+const PRIORITIES: AgendaPriority[] = ["high", "medium", "low"];
+
 export type ScheduleItemFormValues = {
   title: string;
   task_type: ScheduleTaskType;
   date: string;
   time: string; // HH:MM or "" for all-day
   notes: string;
+  priority: AgendaPriority;
+  project_id: string;
 };
 
 export function emptyScheduleItemForm(dateKey: string): ScheduleItemFormValues {
@@ -43,6 +51,8 @@ export function emptyScheduleItemForm(dateKey: string): ScheduleItemFormValues {
     date: dateKey,
     time: "",
     notes: "",
+    priority: "medium",
+    project_id: "",
   };
 }
 
@@ -64,6 +74,10 @@ export function scheduleItemToForm(item: ScheduleItem): ScheduleItemFormValues {
     date,
     time: item.all_day ? "" : time,
     notes: item.notes ?? "",
+    priority: isAgendaPriority(String(item.priority ?? ""))
+      ? (item.priority as AgendaPriority)
+      : "medium",
+    project_id: item.project_id ?? "",
   };
 }
 
@@ -75,10 +89,14 @@ export function formValuesToSchedulePayload(form: ScheduleItemFormValues): {
   all_day: boolean;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  priority: AgendaPriority;
+  project_id: string | null;
 } {
   const title = form.title.trim();
   const notes = form.notes.trim() || null;
   const allDay = !form.time.trim();
+  const priority = form.priority;
+  const project_id = form.project_id.trim() || null;
 
   if (allDay) {
     const [y, m, d] = form.date.split("-").map(Number);
@@ -90,6 +108,8 @@ export function formValuesToSchedulePayload(form: ScheduleItemFormValues): {
       all_day: true,
       scheduled_start: start.toISOString(),
       scheduled_end: null,
+      priority,
+      project_id,
     };
   }
 
@@ -103,6 +123,8 @@ export function formValuesToSchedulePayload(form: ScheduleItemFormValues): {
     all_day: false,
     scheduled_start: start.toISOString(),
     scheduled_end: null,
+    priority,
+    project_id,
   };
 }
 
@@ -111,6 +133,7 @@ export function ScheduleItemFormModal({
   initialForm,
   isSaving,
   existingItems,
+  projects = [],
   excludeId = null,
   onClose,
   onSubmit,
@@ -119,6 +142,7 @@ export function ScheduleItemFormModal({
   initialForm: ScheduleItemFormValues;
   isSaving: boolean;
   existingItems: ScheduleConflictCandidate[];
+  projects?: TodayVoiceProjectCandidate[];
   excludeId?: string | null;
   onClose: () => void;
   onSubmit: (form: ScheduleItemFormValues) => Promise<void>;
@@ -254,24 +278,82 @@ export function ScheduleItemFormModal({
                 />
               </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="schedule-type"
+                    className="block text-base font-medium text-slate-300"
+                  >
+                    Type
+                  </label>
+                  <select
+                    id="schedule-type"
+                    value={form.task_type}
+                    onChange={(e) =>
+                      updateField("task_type", e.target.value as ScheduleTaskType)
+                    }
+                    className={`${touchInput} mt-1.5 appearance-none`}
+                  >
+                    {MANUAL_TYPES.map((type) => (
+                      <option key={type} value={type} className="bg-navy">
+                        {scheduleTaskTypeLabel(type)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label
+                    htmlFor="schedule-priority"
+                    className="block text-base font-medium text-slate-300"
+                  >
+                    Priority
+                  </label>
+                  <select
+                    id="schedule-priority"
+                    value={form.priority}
+                    onChange={(e) =>
+                      updateField(
+                        "priority",
+                        e.target.value as AgendaPriority
+                      )
+                    }
+                    className={`${touchInput} mt-1.5 appearance-none`}
+                  >
+                    {PRIORITIES.map((priority) => (
+                      <option key={priority} value={priority} className="bg-navy">
+                        {agendaPriorityLabel(priority)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label
-                  htmlFor="schedule-type"
+                  htmlFor="schedule-project"
                   className="block text-base font-medium text-slate-300"
                 >
-                  Type
+                  Project
                 </label>
                 <select
-                  id="schedule-type"
-                  value={form.task_type}
-                  onChange={(e) =>
-                    updateField("task_type", e.target.value as ScheduleTaskType)
-                  }
+                  id="schedule-project"
+                  value={form.project_id}
+                  onChange={(e) => updateField("project_id", e.target.value)}
                   className={`${touchInput} mt-1.5 appearance-none`}
                 >
-                  {MANUAL_TYPES.map((type) => (
-                    <option key={type} value={type} className="bg-navy">
-                      {scheduleTaskTypeLabel(type)}
+                  <option value="" className="bg-navy">
+                    None (personal / unlinked)
+                  </option>
+                  {projects.map((project) => (
+                    <option
+                      key={project.id}
+                      value={project.id}
+                      className="bg-navy"
+                    >
+                      {project.projectName}
+                      {project.customerName
+                        ? ` — ${project.customerName}`
+                        : ""}
                     </option>
                   ))}
                 </select>
