@@ -26,7 +26,6 @@ import {
   PriorityBadge,
   StatPill,
   TaskTypeIconBox,
-  WaveformDecor,
 } from "@/components/today/today-visuals";
 import {
   TimelineHourLabel,
@@ -37,7 +36,6 @@ import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confi
 import { AlertRescheduleModal } from "@/components/today/alert-reschedule-modal";
 import { QuickAddLadderModal } from "@/components/today/quick-add-ladder";
 import {
-  touchBtnPrimary,
   touchBtnSecondary,
 } from "@/components/quotes/ui";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
@@ -91,11 +89,8 @@ const BRIEF_TTS_INSTRUCTIONS =
 
 type ListFilter = "all" | "work" | "personal";
 
-const SUGGESTED_PHRASES = [
-  "What's next?",
-  "Site visit for Kitchen remodel at 2",
-  "Mark first task done",
-];
+/** Hold longer than this → PTT; shorter release → daily brief tap. */
+const MIC_HOLD_MS = 280;
 
 function sourceIdFromAgenda(item: TodayAgendaItem): string | null {
   const colon = item.id.indexOf(":");
@@ -153,11 +148,14 @@ export function TodayPage({
   const [isSaving, setIsSaving] = useState(false);
   const [drivingMode, setDrivingMode] = useState(false);
   const [briefPreview, setBriefPreview] = useState(false);
-  const [voiceBarCollapsed, setVoiceBarCollapsed] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [quickAddParsing, setQuickAddParsing] = useState(false);
-  const voiceBarRef = useRef<HTMLDivElement | null>(null);
+  const [micHighlight, setMicHighlight] = useState(false);
+  const briefMicRef = useRef<HTMLButtonElement | null>(null);
+  const micHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micPointerActiveRef = useRef(false);
+  const micHoldArmedRef = useRef(false);
   const briefTts = useTtsPlayback();
 
   useEffect(() => {
@@ -169,6 +167,14 @@ export function TodayPage({
       router.refresh();
     }
   }, [agenda.timeZone, router]);
+
+  useEffect(() => {
+    return () => {
+      if (micHoldTimerRef.current != null) {
+        clearTimeout(micHoldTimerRef.current);
+      }
+    };
+  }, []);
 
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("idle");
   const [voiceTranscript, setVoiceTranscript] = useState("");
@@ -273,7 +279,6 @@ export function TodayPage({
   const {
     status: recorderStatus,
     error: recorderError,
-    seconds: recorderSeconds,
     startRecording,
     stopRecording,
   } = useVoiceRecorder({
@@ -296,45 +301,79 @@ export function TodayPage({
     await briefTts.play(briefScript, { instructions: BRIEF_TTS_INSTRUCTIONS });
   }
 
-  async function handleMicPointerDown(
-    event: React.PointerEvent<HTMLButtonElement>
-  ) {
-    event.preventDefault();
-    if (briefTts.isPlaying || briefTts.isLoading) {
-      briefTts.stop();
+  function clearMicHoldTimer() {
+    if (micHoldTimerRef.current != null) {
+      clearTimeout(micHoldTimerRef.current);
+      micHoldTimerRef.current = null;
     }
-    if (voicePhase === "confirm" || voiceBusy) return;
+  }
+
+  function handleMicPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    if (
+      voicePhase === "confirm" ||
+      voicePhase === "transcribing" ||
+      voicePhase === "classifying" ||
+      voicePhase === "executing"
+    ) {
+      return;
+    }
+
+    micPointerActiveRef.current = true;
+    micHoldArmedRef.current = false;
+    clearMicHoldTimer();
+
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
       // Pointer capture may fail on some browsers; hold-to-talk still works.
     }
-    setVoiceError(null);
-    await startRecording();
+
+    micHoldTimerRef.current = setTimeout(() => {
+      if (!micPointerActiveRef.current) return;
+      micHoldArmedRef.current = true;
+      if (briefTts.isPlaying || briefTts.isLoading) {
+        briefTts.stop();
+      }
+      setVoiceError(null);
+      void startRecording();
+    }, MIC_HOLD_MS);
   }
 
   async function handleMicPointerUp() {
-    if (isRecording) {
-      await stopRecording();
-    }
-  }
+    const wasHold = micHoldArmedRef.current;
+    micPointerActiveRef.current = false;
+    clearMicHoldTimer();
 
-  function briefButtonLabel() {
-    if (briefTts.isLoading) return "Generating…";
-    if (briefTts.isPlaying) return "Stop Brief";
-    if (briefTts.status === "ended" || briefTts.status === "error") {
-      return "Replay Brief";
+    if (wasHold || isRecording) {
+      micHoldArmedRef.current = false;
+      if (isRecording) {
+        await stopRecording();
+      }
+      return;
     }
-    return "Start Brief";
+
+    // Short tap → daily brief (or stop if already playing)
+    if (
+      voicePhase === "confirm" ||
+      voicePhase === "transcribing" ||
+      voicePhase === "classifying" ||
+      voicePhase === "executing"
+    ) {
+      return;
+    }
+    await handleStartBrief();
   }
 
   function voiceStatusLabel() {
-    if (isRecording) return `Listening… ${recorderSeconds}s`;
+    if (isRecording) return "Listening…";
     if (voicePhase === "transcribing") return "Transcribing…";
     if (voicePhase === "classifying") return "Understanding…";
     if (voicePhase === "executing") return "Updating agenda…";
     if (voicePhase === "confirm") return "Confirm the command below";
-    return "Tap mic and speak";
+    if (briefTts.isLoading) return "Generating brief…";
+    if (briefTts.isPlaying) return "Playing brief… · tap to stop";
+    return "Tap for brief · Hold to talk";
   }
 
   const filterCounts = useMemo(() => {
@@ -402,9 +441,10 @@ export function TodayPage({
     [agenda.summary, agenda.timeZone]
   );
 
-  function focusVoiceBar() {
-    setVoiceBarCollapsed(false);
-    voiceBarRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  function focusBriefMic() {
+    briefMicRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setMicHighlight(true);
+    window.setTimeout(() => setMicHighlight(false), 1600);
   }
 
   const conflictCandidates = useMemo(
@@ -923,7 +963,7 @@ export function TodayPage({
 
   function handleQuickAddVoice() {
     setQuickAddOpen(false);
-    focusVoiceBar();
+    focusBriefMic();
   }
 
   function handleQuickAddFullForm() {
@@ -940,26 +980,6 @@ export function TodayPage({
             <p className="mt-1 text-sm text-slate-400">
               Your daily overview and tasks
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleStartBrief()}
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent/25 hover:bg-blue-500"
-            >
-              <IconMicrophone className="h-4 w-4" />
-              Tell Me About My Day
-              <span className="text-white/70">›</span>
-            </button>
-            <button
-              type="button"
-              onClick={focusVoiceBar}
-              className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-transparent px-4 py-2.5 text-sm font-semibold text-accent hover:bg-accent/10"
-            >
-              <IconMicrophone className="h-4 w-4" />
-              Speak to Ema
-            </button>
           </div>
 
           <div className="flex items-center gap-1 self-end lg:self-auto">
@@ -1255,12 +1275,46 @@ export function TodayPage({
               </div>
 
               <div className="mt-5 flex flex-col items-center text-center">
-                <div className="relative flex items-center gap-3">
-                  <WaveformDecor className="hidden sm:flex" />
-                  <EmaAvatar size="lg" speaking={briefTts.isPlaying} />
-                  <WaveformDecor className="hidden sm:flex" />
+                <div className="relative flex items-center gap-4">
+                  <EmaAvatar
+                    size="lg"
+                    speaking={briefTts.isPlaying || isRecording}
+                  />
+                  <button
+                    ref={briefMicRef}
+                    type="button"
+                    className={`inline-flex h-14 w-14 touch-none items-center justify-center rounded-full text-white shadow-xl select-none transition ${
+                      isRecording
+                        ? "bg-red-500 shadow-red-500/40"
+                        : briefTts.isPlaying || briefTts.isLoading
+                          ? "bg-accent/80 shadow-accent/30"
+                          : "bg-accent shadow-accent/40"
+                    } ${
+                      voiceBusy && !isRecording && !briefTts.isPlaying
+                        ? "opacity-60"
+                        : ""
+                    } ${
+                      micHighlight
+                        ? "ring-4 ring-accent/50 ring-offset-2 ring-offset-[#0B1220]"
+                        : ""
+                    }`}
+                    aria-label="Tap for daily brief, hold to talk to Ema"
+                    disabled={
+                      voicePhase === "transcribing" ||
+                      voicePhase === "classifying" ||
+                      voicePhase === "executing"
+                    }
+                    onPointerDown={(event) => handleMicPointerDown(event)}
+                    onPointerUp={() => void handleMicPointerUp()}
+                    onPointerCancel={() => void handleMicPointerUp()}
+                  >
+                    <IconMicrophone className="h-6 w-6" />
+                  </button>
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-white">
+                <p className="mt-3 text-xs font-medium text-slate-400">
+                  {voiceError || recorderError || voiceStatusLabel()}
+                </p>
+                <h3 className="mt-3 text-lg font-semibold text-white">
                   Good day, {agenda.greetingName}!
                 </h3>
                 <p className="mt-1 text-sm text-slate-400">
@@ -1285,13 +1339,6 @@ export function TodayPage({
                 ) : null}
 
                 <div className="mt-5 flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
-                  <button
-                    type="button"
-                    onClick={() => void handleStartBrief()}
-                    className={`${touchBtnPrimary} w-full sm:w-auto`}
-                  >
-                    {briefButtonLabel()}
-                  </button>
                   <button
                     type="button"
                     onClick={() => setBriefPreview((v) => !v)}
@@ -1529,99 +1576,6 @@ export function TodayPage({
             </section>
           </div>
         </div>
-      </div>
-
-      {/* Spacer for fixed voice bar on mobile */}
-      {!voiceBarCollapsed ? (
-        <div
-          className="pointer-events-none h-[5.5rem] shrink-0 md:hidden"
-          aria-hidden
-        />
-      ) : (
-        <div className="pointer-events-none h-12 shrink-0 md:hidden" aria-hidden />
-      )}
-
-      {/* —— Bottom voice bar —— */}
-      <div
-        ref={voiceBarRef}
-        className={`z-40 border-t border-white/10 bg-[#0B1220]/95 backdrop-blur max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(56px+env(safe-area-inset-bottom))] md:sticky md:bottom-0 md:z-10 ${
-          voiceBarCollapsed ? "px-4 py-2" : "px-4 py-3 sm:px-6 lg:px-8"
-        }`}
-      >
-        {voiceBarCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setVoiceBarCollapsed(false)}
-            className="mx-auto flex w-full max-w-5xl items-center justify-center gap-2 text-sm text-slate-400 hover:text-white"
-          >
-            <IconMicrophone className="h-4 w-4 text-accent" />
-            Ema voice bar
-            <span className="text-xs">▲</span>
-          </button>
-        ) : (
-          <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-1 items-center gap-3">
-              <EmaAvatar size="sm" speaking={isRecording} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">
-                  Ema is ready to help
-                </p>
-                <p className="truncate text-xs text-slate-400">
-                  {voiceError || recorderError || voiceStatusLabel()}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-center gap-3">
-              <WaveformDecor className="hidden sm:flex" />
-              <button
-                type="button"
-                className={`inline-flex h-14 w-14 touch-none items-center justify-center rounded-full text-white shadow-xl select-none ${
-                  isRecording
-                    ? "bg-red-500 shadow-red-500/40"
-                    : "bg-accent shadow-accent/40"
-                } ${voiceBusy && !isRecording ? "opacity-60" : ""}`}
-                aria-label="Push to talk"
-                disabled={
-                  voicePhase === "transcribing" ||
-                  voicePhase === "classifying" ||
-                  voicePhase === "executing"
-                }
-                onPointerDown={(event) => void handleMicPointerDown(event)}
-                onPointerUp={() => void handleMicPointerUp()}
-                onPointerCancel={() => void handleMicPointerUp()}
-              >
-                <IconMicrophone className="h-6 w-6" />
-              </button>
-              <WaveformDecor className="hidden sm:flex" />
-            </div>
-
-            <div className="hidden min-w-0 flex-1 flex-col items-end gap-1.5 lg:flex">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                Try saying:
-              </p>
-              <div className="flex flex-wrap justify-end gap-1.5">
-                {SUGGESTED_PHRASES.map((phrase) => (
-                  <span
-                    key={phrase}
-                    className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-300"
-                  >
-                    “{phrase}”
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setVoiceBarCollapsed(true)}
-              className="absolute right-3 top-2 text-slate-500 hover:text-white sm:static sm:ml-2"
-              aria-label="Collapse voice bar"
-            >
-              ▼
-            </button>
-          </div>
-        )}
       </div>
 
       {formOpen ? (

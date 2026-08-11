@@ -93,7 +93,10 @@ export function PriorityBadge({ priority }: { priority: AgendaPriority }) {
   );
 }
 
-/** Gradient “Ema” assistant avatar used in Brief + voice bar. */
+/**
+ * Ema assistant avatar.
+ * Placeholder illustration at /public/ema-avatar.png — replace with final branded asset later.
+ */
 export function EmaAvatar({
   size = "md",
   speaking = false,
@@ -102,16 +105,24 @@ export function EmaAvatar({
   speaking?: boolean;
 }) {
   const dim =
-    size === "lg" ? "h-24 w-24 text-2xl" : size === "sm" ? "h-10 w-10 text-sm" : "h-14 w-14 text-base";
+    size === "lg" ? "h-24 w-24" : size === "sm" ? "h-10 w-10" : "h-14 w-14";
+  const px = size === "lg" ? 96 : size === "sm" ? 40 : 56;
 
   return (
     <div className="relative shrink-0">
       <div
-        className={`flex items-center justify-center rounded-full bg-gradient-to-br from-accent to-cyan-400 font-bold text-white shadow-lg shadow-accent/25 ${dim} ${
-          speaking ? "animate-pulse" : ""
+        className={`relative overflow-hidden rounded-full bg-gradient-to-br from-accent/30 to-cyan-400/30 shadow-lg shadow-accent/25 ring-2 ring-white/10 ${dim} ${
+          speaking ? "animate-pulse ring-accent/60" : ""
         }`}
       >
-        Ema
+        {/* eslint-disable-next-line @next/next/no-img-element -- static public placeholder asset */}
+        <img
+          src="/ema-avatar.png"
+          alt="Ema"
+          width={px}
+          height={px}
+          className="h-full w-full object-cover"
+        />
       </div>
       {speaking ? (
         <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
