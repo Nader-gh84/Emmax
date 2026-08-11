@@ -35,6 +35,7 @@ import {
 } from "@/components/today/today-timeline";
 import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confirm-modal";
 import { AlertRescheduleModal } from "@/components/today/alert-reschedule-modal";
+import { QuickAddLadderModal } from "@/components/today/quick-add-ladder";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -67,13 +68,16 @@ import {
 } from "@/lib/today-agenda";
 import {
   toVoiceAgendaCandidates,
+  toVoiceProjectCandidates,
   type TodayVoiceCommandResult,
+  type TodayVoiceProjectCandidate,
 } from "@/lib/today-voice-command";
 import {
   formatNotificationTime,
   type AppNotification,
 } from "@/types/notification";
-import type { ScheduleItem } from "@/types/schedule-item";
+import type { AgendaPriority, ScheduleItem } from "@/types/schedule-item";
+import { isScheduleTaskType } from "@/types/schedule-item";
 
 type VoicePhase =
   | "idle"
@@ -89,7 +93,7 @@ type ListFilter = "all" | "work" | "personal";
 
 const SUGGESTED_PHRASES = [
   "What's next?",
-  "Reschedule pickup to 12 PM",
+  "Site visit for Kitchen remodel at 2",
   "Mark first task done",
 ];
 
@@ -128,10 +132,12 @@ function estimateItemMinutes(item: TodayAgendaItem): number {
 export function TodayPage({
   agenda,
   scheduleItems,
+  projects,
   userId,
 }: {
   agenda: TodayAgendaViewModel;
   scheduleItems: ScheduleItem[];
+  projects: TodayVoiceProjectCandidate[];
   userId: string;
 }) {
   const router = useRouter();
@@ -142,11 +148,15 @@ export function TodayPage({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleItem | null>(null);
+  const [createPrefill, setCreatePrefill] =
+    useState<ScheduleItemFormValues | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [drivingMode, setDrivingMode] = useState(false);
   const [briefPreview, setBriefPreview] = useState(false);
   const [voiceBarCollapsed, setVoiceBarCollapsed] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddParsing, setQuickAddParsing] = useState(false);
   const voiceBarRef = useRef<HTMLDivElement | null>(null);
   const briefTts = useTtsPlayback();
 
@@ -167,6 +177,10 @@ export function TodayPage({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [acknowledgeConflicts, setAcknowledgeConflicts] = useState(false);
   const [conflictGate, setConflictGate] = useState(false);
+  const [voiceSelectedProjectId, setVoiceSelectedProjectId] = useState<
+    string | null
+  >(null);
+  const [voiceKeepAsPersonal, setVoiceKeepAsPersonal] = useState(false);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -181,6 +195,32 @@ export function TodayPage({
   const briefScript = useMemo(
     () => agenda.briefLines.join(" "),
     [agenda.briefLines]
+  );
+
+  const classifyCommand = useCallback(
+    async (transcript: string): Promise<TodayVoiceCommandResult> => {
+      const classifyResponse = await fetch("/api/today-voice-command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transcript,
+          dateKey: agenda.dateKey,
+          candidates: toVoiceAgendaCandidates(agenda.items),
+          projects: toVoiceProjectCandidates(projects),
+        }),
+      });
+      const classifyData = (await classifyResponse.json()) as {
+        command?: TodayVoiceCommandResult;
+        error?: string;
+      };
+      if (!classifyResponse.ok || !classifyData.command) {
+        throw new Error(
+          classifyData.error || "Could not understand that command"
+        );
+      }
+      return classifyData.command;
+    },
+    [agenda.dateKey, agenda.items, projects]
   );
 
   const handleRecordingComplete = useCallback(
@@ -212,26 +252,10 @@ export function TodayPage({
         setVoiceTranscript(transcript);
         setVoicePhase("classifying");
 
-        const classifyResponse = await fetch("/api/today-voice-command", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript,
-            dateKey: agenda.dateKey,
-            candidates: toVoiceAgendaCandidates(agenda.items),
-          }),
-        });
-        const classifyData = (await classifyResponse.json()) as {
-          command?: TodayVoiceCommandResult;
-          error?: string;
-        };
-        if (!classifyResponse.ok || !classifyData.command) {
-          throw new Error(
-            classifyData.error || "Could not understand that command"
-          );
-        }
-
-        setVoiceCommand(classifyData.command);
+        const command = await classifyCommand(transcript);
+        setVoiceCommand(command);
+        setVoiceSelectedProjectId(command.projectId);
+        setVoiceKeepAsPersonal(false);
         setAcknowledgeConflicts(false);
         setConflictGate(false);
         setVoicePhase("confirm");
@@ -243,7 +267,7 @@ export function TodayPage({
         );
       }
     },
-    [agenda.dateKey, agenda.items]
+    [classifyCommand]
   );
 
   const {
@@ -395,13 +419,20 @@ export function TodayPage({
     () =>
       editing
         ? scheduleItemToForm(editing)
-        : emptyScheduleItemForm(agenda.dateKey),
-    [editing, agenda.dateKey]
+        : createPrefill ?? emptyScheduleItemForm(agenda.dateKey),
+    [editing, createPrefill, agenda.dateKey]
   );
 
-  function openCreate() {
-    setEditing(null);
+  function openQuickAdd() {
     setError(null);
+    setQuickAddOpen(true);
+  }
+
+  function openCreate(prefill?: ScheduleItemFormValues | null) {
+    setEditing(null);
+    setCreatePrefill(prefill ?? null);
+    setError(null);
+    setQuickAddOpen(false);
     setFormOpen(true);
   }
 
@@ -412,6 +443,7 @@ export function TodayPage({
     const row = scheduleItems.find((s) => s.id === id) ?? null;
     if (!row) return;
     setEditing(row);
+    setCreatePrefill(null);
     setError(null);
     setFormOpen(true);
   }
@@ -420,6 +452,7 @@ export function TodayPage({
     if (isSaving) return;
     setFormOpen(false);
     setEditing(null);
+    setCreatePrefill(null);
   }
 
   async function saveScheduleItem(form: ScheduleItemFormValues) {
@@ -430,6 +463,9 @@ export function TodayPage({
     setIsSaving(true);
     setError(null);
     const payload = formValuesToSchedulePayload(form);
+    const customerId = payload.project_id
+      ? projects.find((p) => p.id === payload.project_id)?.customerId ?? null
+      : null;
 
     const { error: saveError } = editing
       ? await supabase
@@ -441,6 +477,9 @@ export function TodayPage({
             scheduled_start: payload.scheduled_start,
             scheduled_end: payload.scheduled_end,
             all_day: payload.all_day,
+            priority: payload.priority,
+            project_id: payload.project_id,
+            customer_id: customerId,
           })
           .eq("id", editing.id)
       : await supabase.from("schedule_items").insert({
@@ -452,6 +491,9 @@ export function TodayPage({
           scheduled_start: payload.scheduled_start,
           scheduled_end: payload.scheduled_end,
           all_day: payload.all_day,
+          priority: payload.priority,
+          project_id: payload.project_id,
+          customer_id: customerId,
           source: "manual",
         });
 
@@ -463,6 +505,7 @@ export function TodayPage({
 
     setFormOpen(false);
     setEditing(null);
+    setCreatePrefill(null);
     startTransition(() => router.refresh());
   }
 
@@ -608,11 +651,24 @@ export function TodayPage({
     );
   }, [agenda.items, voiceCommand]);
 
+  const resolvedVoiceProjectId = useMemo(() => {
+    if (voiceKeepAsPersonal) return null;
+    return voiceSelectedProjectId || voiceCommand?.projectId || null;
+  }, [voiceCommand?.projectId, voiceKeepAsPersonal, voiceSelectedProjectId]);
+
   const voiceCanConfirm = useMemo(() => {
     if (!voiceCommand) return false;
     if (voiceCommand.intent === "unknown") return false;
     if (voiceCommand.confidence > 0 && voiceCommand.confidence < 0.45) {
-      return false;
+      // Allow confirm when waiting only on project pick (user resolves via UI).
+      if (
+        !(
+          voiceCommand.intent === "add_item" &&
+          voiceCommand.needsProjectClarification
+        )
+      ) {
+        return false;
+      }
     }
     if (voiceCommand.intent === "mark_done") {
       return Boolean(
@@ -627,34 +683,50 @@ export function TodayPage({
           (voiceCommand.date || agenda.dateKey)
       );
     }
-    if (voiceCommand.intent === "add_personal") {
-      return Boolean(voiceCommand.title?.trim());
+    if (voiceCommand.intent === "add_item") {
+      if (!voiceCommand.title?.trim()) return false;
+      if (voiceCommand.needsProjectClarification) {
+        return Boolean(resolvedVoiceProjectId || voiceKeepAsPersonal);
+      }
+      return true;
     }
     return false;
-  }, [agenda.dateKey, voiceCommand, voiceTargetItem]);
+  }, [
+    agenda.dateKey,
+    resolvedVoiceProjectId,
+    voiceCommand,
+    voiceKeepAsPersonal,
+    voiceTargetItem,
+  ]);
 
   const voiceConflicts = useMemo((): ScheduleConflictCandidate[] => {
     if (!voiceCommand) return [];
     if (
       voiceCommand.intent !== "reschedule" &&
-      voiceCommand.intent !== "add_personal"
+      voiceCommand.intent !== "add_item"
     ) {
       return [];
     }
     if (!voiceCommand.time) return [];
 
+    const taskType =
+      voiceCommand.intent === "add_item"
+        ? voiceCommand.taskType && isScheduleTaskType(voiceCommand.taskType)
+          ? voiceCommand.taskType
+          : "personal"
+        : voiceTargetItem?.taskType || "other";
+
     const form: ScheduleItemFormValues = {
       title:
-        voiceCommand.intent === "add_personal"
-          ? voiceCommand.title || "Personal task"
+        voiceCommand.intent === "add_item"
+          ? voiceCommand.title || "Task"
           : voiceTargetItem?.title || "Scheduled item",
-      task_type:
-        voiceCommand.intent === "add_personal"
-          ? "personal"
-          : voiceTargetItem?.taskType || "other",
+      task_type: isScheduleTaskType(String(taskType)) ? taskType : "other",
       date: voiceCommand.date || agenda.dateKey,
       time: voiceCommand.time,
       notes: voiceCommand.notes || "",
+      priority: (voiceCommand.priority as AgendaPriority) || "medium",
+      project_id: resolvedVoiceProjectId || "",
     };
     const payload = formValuesToSchedulePayload(form);
     if (!payload.scheduled_start || payload.all_day) return [];
@@ -673,6 +745,7 @@ export function TodayPage({
   }, [
     agenda.dateKey,
     conflictCandidates,
+    resolvedVoiceProjectId,
     voiceCommand,
     voiceTargetItem,
   ]);
@@ -681,6 +754,8 @@ export function TodayPage({
     if (voicePhase === "executing") return;
     setVoicePhase("idle");
     setVoiceCommand(null);
+    setVoiceSelectedProjectId(null);
+    setVoiceKeepAsPersonal(false);
     setAcknowledgeConflicts(false);
     setConflictGate(false);
   }
@@ -730,6 +805,8 @@ export function TodayPage({
           date: voiceCommand.date || agenda.dateKey,
           time: voiceCommand.time || "",
           notes: voiceCommand.notes ?? row.notes ?? "",
+          priority: row.priority || "medium",
+          project_id: row.project_id || "",
         };
         const payload = formValuesToSchedulePayload(form);
         const { error: updateError } = await supabase
@@ -743,28 +820,41 @@ export function TodayPage({
           .eq("id", id);
         if (updateError) throw new Error(updateError.message);
         startTransition(() => router.refresh());
-      } else if (voiceCommand.intent === "add_personal") {
+      } else if (voiceCommand.intent === "add_item") {
         const title = voiceCommand.title?.trim();
         if (!title) throw new Error("Missing task title.");
+        const inferredType =
+          voiceCommand.taskType && isScheduleTaskType(voiceCommand.taskType)
+            ? voiceCommand.taskType
+            : "personal";
+        const projectId = voiceKeepAsPersonal ? null : resolvedVoiceProjectId;
+        const matched = projectId
+          ? projects.find((p) => p.id === projectId)
+          : null;
         const form: ScheduleItemFormValues = {
           title,
-          task_type: "personal",
+          task_type: inferredType,
           date: voiceCommand.date || agenda.dateKey,
           time: voiceCommand.time || "",
           notes: voiceCommand.notes || "",
+          priority: voiceCommand.priority || "medium",
+          project_id: projectId || "",
         };
         const payload = formValuesToSchedulePayload(form);
         const { error: insertError } = await supabase
           .from("schedule_items")
           .insert({
             user_id: userId,
-            task_type: "personal",
+            task_type: payload.task_type,
             title: payload.title,
             notes: payload.notes,
             status: "todo",
             scheduled_start: payload.scheduled_start,
             scheduled_end: payload.scheduled_end,
             all_day: payload.all_day,
+            priority: payload.priority,
+            project_id: payload.project_id,
+            customer_id: matched?.customerId ?? null,
             source: "voice",
           });
         if (insertError) throw new Error(insertError.message);
@@ -775,6 +865,8 @@ export function TodayPage({
 
       setVoicePhase("idle");
       setVoiceCommand(null);
+      setVoiceSelectedProjectId(null);
+      setVoiceKeepAsPersonal(false);
       setAcknowledgeConflicts(false);
       setConflictGate(false);
     } catch (err) {
@@ -791,7 +883,7 @@ export function TodayPage({
       voiceConflicts.length > 0 &&
       !acknowledgeConflicts &&
       (voiceCommand?.intent === "reschedule" ||
-        voiceCommand?.intent === "add_personal")
+        voiceCommand?.intent === "add_item")
     ) {
       setConflictGate(true);
       return;
@@ -803,6 +895,39 @@ export function TodayPage({
     setAcknowledgeConflicts(true);
     setConflictGate(false);
     void executeVoiceCommand();
+  }
+
+  async function handleQuickParseText(text: string) {
+    setQuickAddParsing(true);
+    setVoiceError(null);
+    setError(null);
+    try {
+      setVoiceTranscript(text);
+      setVoicePhase("classifying");
+      const command = await classifyCommand(text);
+      setQuickAddOpen(false);
+      setVoiceCommand(command);
+      setVoiceSelectedProjectId(command.projectId);
+      setVoiceKeepAsPersonal(false);
+      setAcknowledgeConflicts(false);
+      setConflictGate(false);
+      setVoicePhase("confirm");
+    } catch (err) {
+      setVoicePhase("idle");
+      setVoiceCommand(null);
+      setError(err instanceof Error ? err.message : "Could not parse that");
+    } finally {
+      setQuickAddParsing(false);
+    }
+  }
+
+  function handleQuickAddVoice() {
+    setQuickAddOpen(false);
+    focusVoiceBar();
+  }
+
+  function handleQuickAddFullForm() {
+    openCreate(null);
   }
 
   return (
@@ -840,10 +965,10 @@ export function TodayPage({
           <div className="flex items-center gap-1 self-end lg:self-auto">
             <button
               type="button"
-              onClick={openCreate}
+              onClick={openQuickAdd}
               className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
               title="Quick add"
-              aria-label="Search / add"
+              aria-label="Quick add"
             >
               <IconSearch className="h-5 w-5" />
             </button>
@@ -982,7 +1107,7 @@ export function TodayPage({
                 <p className="text-sm text-slate-400">No tasks in this filter.</p>
                 <button
                   type="button"
-                  onClick={openCreate}
+                  onClick={openQuickAdd}
                   className="mt-3 text-sm font-semibold text-accent hover:text-blue-400"
                 >
                   + Add Task
@@ -1088,7 +1213,7 @@ export function TodayPage({
             <div className="mt-4 text-center">
               <button
                 type="button"
-                onClick={openCreate}
+                onClick={openQuickAdd}
                 className="text-sm font-semibold text-accent hover:text-blue-400"
               >
                 + Add Task
@@ -1505,11 +1630,24 @@ export function TodayPage({
           initialForm={initialForm}
           isSaving={isSaving}
           existingItems={conflictCandidates}
+          projects={projects}
           excludeId={editing?.id ?? null}
           onClose={closeForm}
           onSubmit={saveScheduleItem}
         />
       ) : null}
+
+      <QuickAddLadderModal
+        open={quickAddOpen}
+        busy={quickAddParsing || voiceBusy}
+        onClose={() => {
+          if (quickAddParsing) return;
+          setQuickAddOpen(false);
+        }}
+        onChooseVoice={handleQuickAddVoice}
+        onParseText={handleQuickParseText}
+        onChooseFullForm={handleQuickAddFullForm}
+      />
 
       {(voicePhase === "confirm" || voicePhase === "executing") &&
       voiceCommand ? (
@@ -1518,10 +1656,21 @@ export function TodayPage({
           command={voiceCommand}
           targetTitle={voiceTargetItem?.title ?? null}
           dateKey={agenda.dateKey}
+          projects={projects}
+          selectedProjectId={voiceSelectedProjectId}
+          keepAsPersonal={voiceKeepAsPersonal}
           conflicts={conflictGate ? voiceConflicts : []}
           acknowledgeConflicts={acknowledgeConflicts}
           busy={voicePhase === "executing"}
           canConfirm={voiceCanConfirm}
+          onSelectProject={(projectId) => {
+            setVoiceSelectedProjectId(projectId);
+            setVoiceKeepAsPersonal(false);
+          }}
+          onKeepAsPersonal={() => {
+            setVoiceKeepAsPersonal(true);
+            setVoiceSelectedProjectId(null);
+          }}
           onAcknowledgeConflicts={handleVoiceScheduleAnyway}
           onCancel={closeVoiceConfirm}
           onConfirm={handleVoiceConfirm}

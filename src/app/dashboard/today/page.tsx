@@ -16,6 +16,7 @@ import {
   zonedDateTimeToUtc,
 } from "@/lib/local-date";
 import { buildTodayAgenda } from "@/lib/today-agenda";
+import type { TodayVoiceProjectCandidate } from "@/lib/today-voice-command";
 import { createClient } from "@/lib/supabase/server";
 import type { MaterialOrder } from "@/types/material-order";
 import type { AppNotification } from "@/types/notification";
@@ -57,6 +58,17 @@ type ScheduleRow = ScheduleItem & {
   } | null;
 };
 
+type ProjectRow = {
+  id: string;
+  project_name: string | null;
+  customer_id: string | null;
+  status: string | null;
+  customers?: {
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null;
+};
+
 export default async function TodayRoute() {
   const cookieStore = cookies();
   const rawTz = cookieStore.get(USER_TIMEZONE_COOKIE)?.value;
@@ -89,6 +101,7 @@ export default async function TodayRoute() {
     SupplierInvoiceRow & { supplier_name?: string | null; balance?: number }
   > = [];
   let notifications: AppNotification[] = [];
+  let projects: TodayVoiceProjectCandidate[] = [];
 
   if (user) {
     const { data: profile } = await supabase
@@ -106,6 +119,7 @@ export default async function TodayRoute() {
       allocationsResult,
       suppliersResult,
       notificationsResult,
+      projectsResult,
     ] = await Promise.all([
       supabase
         .from("schedule_items")
@@ -149,6 +163,15 @@ export default async function TodayRoute() {
         .eq("read", false)
         .order("created_at", { ascending: false })
         .limit(12),
+      supabase
+        .from("projects")
+        .select(
+          "id, project_name, customer_id, status, customers(first_name, last_name)"
+        )
+        .eq("user_id", user.id)
+        .in("status", ["active", "on_hold"])
+        .order("project_name", { ascending: true })
+        .limit(100),
     ]);
 
     if (scheduleResult.error) {
@@ -229,6 +252,28 @@ export default async function TodayRoute() {
 
     notifications =
       (notificationsResult.data as AppNotification[] | null) ?? [];
+
+    if (projectsResult.error) {
+      console.error(
+        "[Today] projects query failed:",
+        projectsResult.error.message
+      );
+    }
+
+    projects = ((projectsResult.data as ProjectRow[] | null) ?? []).map(
+      (row) => {
+        const first = row.customers?.first_name?.trim() ?? "";
+        const last = row.customers?.last_name?.trim() ?? "";
+        const customerName = `${first} ${last}`.trim() || null;
+        return {
+          id: row.id,
+          projectName: row.project_name?.trim() || "Untitled project",
+          customerId: row.customer_id,
+          customerName,
+          status: row.status || "active",
+        } satisfies TodayVoiceProjectCandidate;
+      }
+    );
   }
 
   const agenda = buildTodayAgenda({
@@ -247,6 +292,7 @@ export default async function TodayRoute() {
     <TodayPage
       agenda={agenda}
       scheduleItems={scheduleItems}
+      projects={projects}
       userId={user?.id ?? ""}
     />
   );
