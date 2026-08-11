@@ -87,3 +87,61 @@ export function formatConflictTime(iso: string | null | undefined): string {
     minute: "2-digit",
   });
 }
+
+export type AgendaConflictPeer = {
+  id: string;
+  title: string;
+  scheduledStart: string;
+  scheduledEnd?: string | null;
+  status: string;
+};
+
+/**
+ * Soft conflicts among a set of already-loaded timed agenda items (± proximity).
+ * Skips completed/cancelled and items without a clock start.
+ */
+export function findPeerConflicts(
+  items: AgendaConflictPeer[],
+  proximityMs: number = CONFLICT_PROXIMITY_MS
+): Map<string, string[]> {
+  const open = items.filter(
+    (item) =>
+      item.status !== "completed" &&
+      item.status !== "cancelled" &&
+      Boolean(item.scheduledStart)
+  );
+
+  const result = new Map<string, string[]>();
+
+  for (const item of open) {
+    const start = new Date(item.scheduledStart).getTime();
+    if (Number.isNaN(start)) continue;
+    const end = item.scheduledEnd
+      ? new Date(item.scheduledEnd).getTime()
+      : start + proximityMs;
+    const windowStart = start - proximityMs;
+    const windowEnd = Math.max(end, start + proximityMs);
+
+    const peerTitles: string[] = [];
+    for (const other of open) {
+      if (other.id === item.id) continue;
+      const otherStart = new Date(other.scheduledStart).getTime();
+      if (Number.isNaN(otherStart)) continue;
+      const otherEnd = other.scheduledEnd
+        ? new Date(other.scheduledEnd).getTime()
+        : otherStart;
+
+      const overlaps = otherStart < end && otherEnd > start;
+      const near = otherStart >= windowStart && otherStart <= windowEnd;
+      if (overlaps || near) {
+        peerTitles.push(other.title);
+      }
+    }
+
+    if (peerTitles.length > 0) {
+      result.set(item.id, peerTitles);
+    }
+  }
+
+  return result;
+}
