@@ -28,6 +28,11 @@ import {
   TaskTypeIconBox,
   WaveformDecor,
 } from "@/components/today/today-visuals";
+import {
+  TimelineHourLabel,
+  TimelineNowMarker,
+  buildTimelineSlots,
+} from "@/components/today/today-timeline";
 import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confirm-modal";
 import {
   touchBtnPrimary,
@@ -334,6 +339,11 @@ export function TodayPage({
         )
         .slice(0, 4),
     [agenda.items]
+  );
+
+  const timeline = useMemo(
+    () => buildTimelineSlots(filteredItems, agenda.timeZone),
+    [filteredItems, agenda.timeZone]
   );
 
   function focusVoiceBar() {
@@ -792,12 +802,19 @@ export function TodayPage({
         ) : null}
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.9fr)]">
-          {/* —— Today's Tasks —— */}
+          {/* —— Today's Tasks / Timeline —— */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Today&apos;s Tasks</h2>
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  Today&apos;s Timeline
+                </h2>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Hour-by-hour view · gaps show free time
+                </p>
+              </div>
               <div className="flex items-center gap-2 text-slate-400">
-                <span className="text-xs">Sort by</span>
+                <span className="text-xs">Sort by time</span>
                 <IconMore className="h-4 w-4" />
               </div>
             </div>
@@ -832,6 +849,14 @@ export function TodayPage({
               })}
             </div>
 
+            {agenda.summary.conflictCount > 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-100">
+                {agenda.summary.conflictCount} schedule conflict
+                {agenda.summary.conflictCount === 1 ? "" : "s"} today — items
+                within ±60 minutes are flagged on the timeline.
+              </div>
+            ) : null}
+
             {filteredItems.length === 0 ? (
               <div className="mt-6 rounded-2xl border border-dashed border-white/15 px-4 py-8 text-center">
                 <p className="text-sm text-slate-400">No tasks in this filter.</p>
@@ -844,29 +869,100 @@ export function TodayPage({
                 </button>
               </div>
             ) : (
-              <ul className="mt-4 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10">
-                {filteredItems.map((item) => (
-                  <AgendaRow
-                    key={item.id}
-                    item={item}
-                    busy={busyId === item.id || pending}
-                    menuOpen={menuOpenId === item.id}
-                    onToggleMenu={() =>
-                      setMenuOpenId((id) => (id === item.id ? null : item.id))
-                    }
-                    onCloseMenu={() => setMenuOpenId(null)}
-                    onToggleComplete={() => void toggleComplete(item)}
-                    onEdit={() => {
-                      setMenuOpenId(null);
-                      openEdit(item);
-                    }}
-                    onDelete={() => {
-                      setMenuOpenId(null);
-                      void deleteScheduleItem(item);
-                    }}
-                  />
-                ))}
-              </ul>
+              <div className="mt-5 space-y-5">
+                {timeline.allDay.length > 0 ? (
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      All day
+                    </p>
+                    <ul className="overflow-hidden rounded-2xl border border-white/10 divide-y divide-white/10">
+                      {timeline.allDay.map((item) => (
+                        <AgendaRow
+                          key={item.id}
+                          item={item}
+                          busy={busyId === item.id || pending}
+                          menuOpen={menuOpenId === item.id}
+                          onToggleMenu={() =>
+                            setMenuOpenId((id) =>
+                              id === item.id ? null : item.id
+                            )
+                          }
+                          onCloseMenu={() => setMenuOpenId(null)}
+                          onToggleComplete={() => void toggleComplete(item)}
+                          onEdit={() => {
+                            setMenuOpenId(null);
+                            openEdit(item);
+                          }}
+                          onDelete={() => {
+                            setMenuOpenId(null);
+                            void deleteScheduleItem(item);
+                          }}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                <div className="relative space-y-0">
+                  {timeline.slots.map((slot) => {
+                    const empty = slot.items.length === 0;
+                    return (
+                      <div key={slot.hour} className="relative">
+                        {timeline.nowHour === slot.hour ? (
+                          <TimelineNowMarker />
+                        ) : null}
+                        <div className="flex gap-3 py-2">
+                          <TimelineHourLabel
+                            label={slot.label}
+                            empty={empty}
+                          />
+                          <div className="relative min-w-0 flex-1 border-l border-white/10 pl-4">
+                            {empty ? (
+                              <div className="flex h-8 items-center">
+                                <span className="text-[11px] text-slate-600">
+                                  Free
+                                </span>
+                              </div>
+                            ) : (
+                              <ul className="space-y-2">
+                                {slot.items.map((item) => (
+                                  <li
+                                    key={item.id}
+                                    className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]"
+                                  >
+                                    <AgendaRow
+                                      item={item}
+                                      busy={busyId === item.id || pending}
+                                      menuOpen={menuOpenId === item.id}
+                                      onToggleMenu={() =>
+                                        setMenuOpenId((id) =>
+                                          id === item.id ? null : item.id
+                                        )
+                                      }
+                                      onCloseMenu={() => setMenuOpenId(null)}
+                                      onToggleComplete={() =>
+                                        void toggleComplete(item)
+                                      }
+                                      onEdit={() => {
+                                        setMenuOpenId(null);
+                                        openEdit(item);
+                                      }}
+                                      onDelete={() => {
+                                        setMenuOpenId(null);
+                                        void deleteScheduleItem(item);
+                                      }}
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             <div className="mt-4 text-center">
@@ -1370,11 +1466,25 @@ function AgendaRow({
           {item.subtitle ? (
             <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
           ) : null}
-          {item.status === "overdue" ? (
-            <p className="mt-0.5 text-[11px] font-semibold text-red-300">
-              Overdue
-            </p>
-          ) : null}
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            {item.status === "overdue" ? (
+              <span className="text-[11px] font-semibold text-red-300">
+                Overdue
+              </span>
+            ) : null}
+            {item.hasConflict ? (
+              <span
+                className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200 ring-1 ring-amber-500/30"
+                title={
+                  item.conflictLabels?.length
+                    ? `Near: ${item.conflictLabels.join(", ")}`
+                    : "Within ±60 minutes of another item"
+                }
+              >
+                Schedule conflict
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="hidden shrink-0 text-right sm:block">

@@ -11,6 +11,7 @@ import {
   type ScheduleTaskType,
 } from "@/types/schedule-item";
 import type { SupplierInvoiceRow } from "@/lib/supplier-accounting";
+import { findPeerConflicts } from "@/lib/schedule-conflicts";
 import {
   addDaysToDateKey,
   dateKeyFromIsoInTimeZone,
@@ -46,6 +47,10 @@ export type TodayAgendaItem = {
   href: string | null;
   /** Short label for the deep-link action (Open project, Open order, …). */
   hrefLabel?: string | null;
+  /** Soft ±60min conflict with other timed open items today. */
+  hasConflict?: boolean;
+  /** Titles of nearby/overlapping peers when hasConflict. */
+  conflictLabels?: string[];
   meta?: {
     projectId?: string | null;
     projectName?: string | null;
@@ -74,6 +79,7 @@ export type TodaySummary = {
   pickupsCount: number;
   overdueCount: number;
   highPriorityCount: number;
+  conflictCount: number;
 };
 
 export type TodayAgendaViewModel = {
@@ -398,6 +404,35 @@ export function buildTodayAgenda(input: {
 
   items.sort(sortAgenda);
 
+  const conflictMap = findPeerConflicts(
+    items
+      .filter(
+        (item) =>
+          !item.allDay &&
+          item.scheduledStart &&
+          item.status !== "completed" &&
+          item.status !== "cancelled"
+      )
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        scheduledStart: item.scheduledStart as string,
+        scheduledEnd: item.scheduledEnd,
+        status: item.status,
+      }))
+  );
+
+  for (const item of items) {
+    const labels = conflictMap.get(item.id);
+    if (labels?.length) {
+      item.hasConflict = true;
+      item.conflictLabels = labels;
+    } else {
+      item.hasConflict = false;
+      item.conflictLabels = [];
+    }
+  }
+
   const openTimed = items.filter(
     (item) =>
       item.status !== "completed" &&
@@ -446,6 +481,7 @@ export function buildTodayAgenda(input: {
       i.status !== "completed" &&
       i.status !== "cancelled"
   ).length;
+  const conflictCount = items.filter((i) => i.hasConflict).length;
 
   const summary: TodaySummary = {
     totalToday: items.length,
@@ -459,6 +495,7 @@ export function buildTodayAgenda(input: {
     pickupsCount: pickups.length,
     overdueCount,
     highPriorityCount,
+    conflictCount,
   };
 
   const alerts = [...input.notifications]
