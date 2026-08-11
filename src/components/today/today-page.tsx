@@ -34,6 +34,7 @@ import {
   buildTimelineSlots,
 } from "@/components/today/today-timeline";
 import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confirm-modal";
+import { AlertRescheduleModal } from "@/components/today/alert-reschedule-modal";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -50,6 +51,14 @@ import {
 } from "@/lib/local-date";
 import { createClient } from "@/lib/supabase";
 import {
+  alreadyScheduledFromAlert,
+  buildAlertScheduleDraft,
+  draftToScheduleInsert,
+  isAddableTodayAlert,
+  type AlertScheduleDraft,
+} from "@/lib/today-alert-actions";
+import {
+  buildDailySummarySentence,
   formatAgendaMoney,
   formatAgendaTime,
   resolveTodayAlertHref,
@@ -60,7 +69,10 @@ import {
   toVoiceAgendaCandidates,
   type TodayVoiceCommandResult,
 } from "@/lib/today-voice-command";
-import { formatNotificationTime } from "@/types/notification";
+import {
+  formatNotificationTime,
+  type AppNotification,
+} from "@/types/notification";
 import type { ScheduleItem } from "@/types/schedule-item";
 
 type VoicePhase =
@@ -155,6 +167,16 @@ export function TodayPage({
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [acknowledgeConflicts, setAcknowledgeConflicts] = useState(false);
   const [conflictGate, setConflictGate] = useState(false);
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [alertBusyId, setAlertBusyId] = useState<string | null>(null);
+  const [rescheduleDraft, setRescheduleDraft] =
+    useState<AlertScheduleDraft | null>(null);
+  const [rescheduleAlertId, setRescheduleAlertId] = useState<string | null>(
+    null
+  );
+  const [rescheduleBusy, setRescheduleBusy] = useState(false);
 
   const briefScript = useMemo(
     () => agenda.briefLines.join(" "),
@@ -346,6 +368,16 @@ export function TodayPage({
     [filteredItems, agenda.timeZone]
   );
 
+  const visibleAlerts = useMemo(
+    () => agenda.alerts.filter((alert) => !dismissedAlertIds.has(alert.id)),
+    [agenda.alerts, dismissedAlertIds]
+  );
+
+  const dailySummarySentence = useMemo(
+    () => buildDailySummarySentence(agenda.summary, agenda.timeZone),
+    [agenda.summary, agenda.timeZone]
+  );
+
   function focusVoiceBar() {
     setVoiceBarCollapsed(false);
     voiceBarRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -432,6 +464,94 @@ export function TodayPage({
     setFormOpen(false);
     setEditing(null);
     startTransition(() => router.refresh());
+  }
+
+  async function markAlertRead(alertId: string) {
+    const { error: updateError } = await supabase
+      .from("notifications")
+      .update({ read: true })
+      .eq("id", alertId);
+    if (updateError) {
+      setError(updateError.message);
+      return false;
+    }
+    setDismissedAlertIds((prev) => {
+      const next = new Set(prev);
+      next.add(alertId);
+      return next;
+    });
+    return true;
+  }
+
+  async function dismissAlert(alert: AppNotification) {
+    setAlertBusyId(alert.id);
+    setError(null);
+    await markAlertRead(alert.id);
+    setAlertBusyId(null);
+    startTransition(() => router.refresh());
+  }
+
+  async function insertFromAlertDraft(draft: AlertScheduleDraft, alertId: string) {
+    if (!userId) {
+      setError("Sign in required to add schedule items.");
+      return false;
+    }
+    const payload = draftToScheduleInsert(draft, userId, agenda.timeZone);
+    const { error: insertError } = await supabase
+      .from("schedule_items")
+      .insert(payload);
+    if (insertError) {
+      setError(insertError.message);
+      return false;
+    }
+    await markAlertRead(alertId);
+    return true;
+  }
+
+  async function addAlertToToday(alert: AppNotification) {
+    const draft = buildAlertScheduleDraft(alert, agenda.dateKey);
+    if (!draft) return;
+    if (alreadyScheduledFromAlert(alert, scheduleItems)) {
+      setError("This pickup is already on your schedule.");
+      return;
+    }
+    setAlertBusyId(alert.id);
+    setError(null);
+    const ok = await insertFromAlertDraft(draft, alert.id);
+    setAlertBusyId(null);
+    if (ok) startTransition(() => router.refresh());
+  }
+
+  function openAlertReschedule(alert: AppNotification) {
+    const draft = buildAlertScheduleDraft(alert, agenda.dateKey);
+    if (!draft) return;
+    if (alreadyScheduledFromAlert(alert, scheduleItems)) {
+      setError("This pickup is already on your schedule.");
+      return;
+    }
+    setRescheduleDraft(draft);
+    setRescheduleAlertId(alert.id);
+  }
+
+  async function confirmAlertReschedule(next: {
+    dateKey: string;
+    timeHm: string;
+  }) {
+    if (!rescheduleDraft || !rescheduleAlertId) return;
+    setRescheduleBusy(true);
+    setError(null);
+    const draft: AlertScheduleDraft = {
+      ...rescheduleDraft,
+      dateKey: next.dateKey,
+      timeHm: next.timeHm,
+    };
+    const ok = await insertFromAlertDraft(draft, rescheduleAlertId);
+    setRescheduleBusy(false);
+    if (ok) {
+      setRescheduleDraft(null);
+      setRescheduleAlertId(null);
+      startTransition(() => router.refresh());
+    }
   }
 
   async function toggleComplete(item: TodayAgendaItem) {
@@ -1185,12 +1305,17 @@ export function TodayPage({
                   View all
                 </Link>
               </div>
-              {agenda.alerts.length === 0 ? (
+              {visibleAlerts.length === 0 ? (
                 <p className="mt-4 text-sm text-slate-500">Inbox is quiet.</p>
               ) : (
-                <ul className="mt-4 space-y-3">
-                  {agenda.alerts.slice(0, 4).map((alert) => {
+                <ul className="mt-4 space-y-4">
+                  {visibleAlerts.slice(0, 4).map((alert) => {
                     const href = resolveTodayAlertHref(alert);
+                    const addable = isAddableTodayAlert(alert);
+                    const alreadyOn =
+                      addable &&
+                      alreadyScheduledFromAlert(alert, scheduleItems);
+                    const busy = alertBusyId === alert.id;
                     return (
                       <li key={alert.id} className="flex gap-3">
                         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
@@ -1212,6 +1337,49 @@ export function TodayPage({
                           <p className="mt-0.5 text-[11px] text-slate-500">
                             {formatNotificationTime(alert.created_at)}
                           </p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {addable && !alreadyOn ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={busy || pending}
+                                  onClick={() => void addAlertToToday(alert)}
+                                  className="rounded-lg bg-accent/20 px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-accent/30 disabled:opacity-50"
+                                >
+                                  Add to Today
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy || pending}
+                                  onClick={() => openAlertReschedule(alert)}
+                                  className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/5 disabled:opacity-50"
+                                >
+                                  Reschedule
+                                </button>
+                              </>
+                            ) : null}
+                            {addable && alreadyOn ? (
+                              <span className="rounded-lg bg-emerald-500/15 px-2.5 py-1 text-[11px] font-semibold text-emerald-300">
+                                On schedule
+                              </span>
+                            ) : null}
+                            {href && !addable ? (
+                              <Link
+                                href={href}
+                                className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] font-semibold text-slate-300 transition hover:bg-white/5"
+                              >
+                                Open
+                              </Link>
+                            ) : null}
+                            <button
+                              type="button"
+                              disabled={busy || pending}
+                              onClick={() => void dismissAlert(alert)}
+                              className="rounded-lg px-2.5 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-white/5 hover:text-slate-300 disabled:opacity-50"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
                         </div>
                       </li>
                     );
@@ -1225,40 +1393,14 @@ export function TodayPage({
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                 Daily Summary
               </h2>
-              <dl className="mt-4 grid grid-cols-2 gap-3">
-                <SummaryTile
-                  label="Est. working time"
-                  value={formatEstDuration(estMinutes)}
-                />
-                <SummaryTile
-                  label="Tasks completed"
-                  value={`${agenda.summary.completedToday}/${agenda.summary.totalToday || 0}`}
-                />
-                <SummaryTile
-                  label="Productivity"
-                  value={
-                    agenda.summary.totalToday === 0
-                      ? "—"
-                      : `${Math.round(
-                          (agenda.summary.completedToday /
-                            Math.max(agenda.summary.totalToday, 1)) *
-                            100
-                        )}%`
-                  }
-                  progress={
-                    agenda.summary.totalToday === 0
-                      ? 0
-                      : agenda.summary.completedToday /
-                        Math.max(agenda.summary.totalToday, 1)
-                  }
-                />
-                <SummaryTile
-                  label="Focus time"
-                  value={formatEstDuration(
-                    Math.round(estMinutes * 0.7)
-                  )}
-                />
-              </dl>
+              <p className="mt-3 text-sm leading-relaxed text-slate-200">
+                {dailySummarySentence}
+              </p>
+              {agenda.summary.openToday === 0 ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Nothing open on the agenda right now.
+                </p>
+              ) : null}
             </section>
           </div>
         </div>
@@ -1385,6 +1527,18 @@ export function TodayPage({
           onConfirm={handleVoiceConfirm}
         />
       ) : null}
+
+      <AlertRescheduleModal
+        open={Boolean(rescheduleDraft && rescheduleAlertId)}
+        draft={rescheduleDraft}
+        busy={rescheduleBusy}
+        onClose={() => {
+          if (rescheduleBusy) return;
+          setRescheduleDraft(null);
+          setRescheduleAlertId(null);
+        }}
+        onConfirm={(next) => void confirmAlertReschedule(next)}
+      />
     </div>
   );
 }
@@ -1556,32 +1710,5 @@ function AgendaRow({
         </div>
       </div>
     </li>
-  );
-}
-
-function SummaryTile({
-  label,
-  value,
-  progress,
-}: {
-  label: string;
-  value: string;
-  progress?: number;
-}) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        {label}
-      </dt>
-      <dd className="mt-1 text-base font-semibold text-white">{value}</dd>
-      {typeof progress === "number" ? (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-emerald-400"
-            style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }}
-          />
-        </div>
-      ) : null}
-    </div>
   );
 }
