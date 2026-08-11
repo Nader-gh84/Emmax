@@ -1,0 +1,185 @@
+"use client";
+
+import type { ReactNode } from "react";
+import {
+  IconCalendar,
+  IconCheckCircle,
+  IconClock,
+  IconDocument,
+  IconEmployee,
+  IconInvoice,
+  IconMicrophone,
+  IconTruck,
+  IconUsers,
+} from "@/components/dashboard/icons";
+import { IconPhone, IconProjects } from "@/components/dashboard/workspace-icons";
+import {
+  agendaPriorityLabel,
+  type AgendaPriority,
+  type ScheduleTaskType,
+} from "@/types/schedule-item";
+
+/** Colored rounded square + category icon (reference task rows). */
+export function TaskTypeIconBox({ type }: { type: ScheduleTaskType }) {
+  const { box, Icon } = typeVisual(type);
+  return (
+    <span
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${box}`}
+    >
+      <Icon className="h-5 w-5" />
+    </span>
+  );
+}
+
+function typeVisual(type: ScheduleTaskType): {
+  box: string;
+  Icon: (props: { className?: string }) => ReactNode;
+} {
+  switch (type) {
+    case "pickup":
+    case "delivery":
+      return {
+        box: "bg-cyan-500/20 text-cyan-300",
+        Icon: IconTruck,
+      };
+    case "site_visit":
+    case "inspection":
+      return {
+        box: "bg-violet-500/20 text-violet-300",
+        Icon: IconProjects,
+      };
+    case "call":
+      return {
+        box: "bg-sky-500/20 text-sky-300",
+        Icon: IconPhone,
+      };
+    case "payment_reminder":
+      return {
+        box: "bg-amber-500/20 text-amber-200",
+        Icon: IconInvoice,
+      };
+    case "personal":
+      return {
+        box: "bg-emerald-500/20 text-emerald-300",
+        Icon: IconEmployee,
+      };
+    case "project_task":
+      return {
+        box: "bg-accent/20 text-accent",
+        Icon: IconDocument,
+      };
+    default:
+      return {
+        box: "bg-white/10 text-slate-300",
+        Icon: IconCalendar,
+      };
+  }
+}
+
+export function PriorityBadge({ priority }: { priority: AgendaPriority }) {
+  const styles =
+    priority === "high"
+      ? "bg-red-500/15 text-red-300 ring-red-500/30"
+      : priority === "low"
+        ? "bg-sky-500/15 text-sky-300 ring-sky-500/30"
+        : "bg-amber-500/15 text-amber-200 ring-amber-500/30";
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${styles}`}
+    >
+      {agendaPriorityLabel(priority)}
+    </span>
+  );
+}
+
+/** Gradient “Ema” assistant avatar used in Brief + voice bar. */
+export function EmaAvatar({
+  size = "md",
+  speaking = false,
+}: {
+  size?: "sm" | "md" | "lg";
+  speaking?: boolean;
+}) {
+  const dim =
+    size === "lg" ? "h-24 w-24 text-2xl" : size === "sm" ? "h-10 w-10 text-sm" : "h-14 w-14 text-base";
+
+  return (
+    <div className="relative shrink-0">
+      <div
+        className={`flex items-center justify-center rounded-full bg-gradient-to-br from-accent to-cyan-400 font-bold text-white shadow-lg shadow-accent/25 ${dim} ${
+          speaking ? "animate-pulse" : ""
+        }`}
+      >
+        Ema
+      </div>
+      {speaking ? (
+        <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
+          {[0, 1, 2, 3].map((i) => (
+            <span
+              key={i}
+              className="inline-block w-1 animate-pulse rounded-full bg-accent"
+              style={{
+                height: `${8 + (i % 3) * 4}px`,
+                animationDelay: `${i * 0.12}s`,
+              }}
+            />
+          ))}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+export function WaveformDecor({ className = "" }: { className?: string }) {
+  return (
+    <div className={`flex items-end gap-0.5 text-accent/70 ${className}`} aria-hidden>
+      {[10, 16, 22, 14, 18, 12, 20, 11].map((h, i) => (
+        <span
+          key={i}
+          className="w-1 rounded-full bg-current opacity-80"
+          style={{ height: h }}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function StatPill({
+  label,
+  value,
+  tone,
+  icon,
+}: {
+  label: string;
+  value: string;
+  tone: "blue" | "green" | "red" | "yellow" | "purple";
+  icon: ReactNode;
+}) {
+  const tones = {
+    blue: "bg-sky-500/15 text-sky-200 ring-sky-500/25",
+    green: "bg-emerald-500/15 text-emerald-200 ring-emerald-500/25",
+    red: "bg-red-500/15 text-red-200 ring-red-500/25",
+    yellow: "bg-amber-500/15 text-amber-100 ring-amber-500/25",
+    purple: "bg-violet-500/15 text-violet-200 ring-violet-500/25",
+  } as const;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ${tones[tone]}`}
+    >
+      <span className="opacity-80">{icon}</span>
+      <span>
+        {value} {label}
+      </span>
+    </span>
+  );
+}
+
+export {
+  IconCalendar,
+  IconCheckCircle,
+  IconClock,
+  IconMicrophone,
+  IconUsers,
+};

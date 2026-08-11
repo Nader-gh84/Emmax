@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   IconBell,
   IconCalendar,
   IconCheckCircle,
   IconClock,
   IconMicrophone,
+  IconSettings,
   IconTruck,
+  IconUsers,
 } from "@/components/dashboard/icons";
+import { IconMore, IconSearch } from "@/components/dashboard/workspace-icons";
 import {
   ScheduleItemFormModal,
   emptyScheduleItemForm,
@@ -18,6 +21,13 @@ import {
   scheduleItemToForm,
   type ScheduleItemFormValues,
 } from "@/components/today/schedule-item-form-modal";
+import {
+  EmaAvatar,
+  PriorityBadge,
+  StatPill,
+  TaskTypeIconBox,
+  WaveformDecor,
+} from "@/components/today/today-visuals";
 import { VoiceCommandConfirmModal } from "@/components/today/voice-command-confirm-modal";
 import {
   touchBtnPrimary,
@@ -46,11 +56,7 @@ import {
   type TodayVoiceCommandResult,
 } from "@/lib/today-voice-command";
 import { formatNotificationTime } from "@/types/notification";
-import {
-  scheduleTaskTypeLabel,
-  type ScheduleItem,
-  type ScheduleTaskType,
-} from "@/types/schedule-item";
+import type { ScheduleItem } from "@/types/schedule-item";
 
 type VoicePhase =
   | "idle"
@@ -62,65 +68,44 @@ type VoicePhase =
 const BRIEF_TTS_INSTRUCTIONS =
   "Speak like a calm, clear executive assistant delivering a morning briefing. Warm but efficient, natural pacing with short pauses between sentences. No theatrical flourish.";
 
-type TaskFilter = "all" | ScheduleTaskType;
-
-const FILTERS: { id: TaskFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "project_task", label: "Projects" },
-  { id: "pickup", label: "Pickup" },
-  { id: "delivery", label: "Delivery" },
-  { id: "site_visit", label: "Site visit" },
-  { id: "call", label: "Calls" },
-  { id: "payment_reminder", label: "Payments" },
-  { id: "personal", label: "Personal" },
-];
+type ListFilter = "all" | "work" | "personal";
 
 const SUGGESTED_PHRASES = [
-  "Mark the site visit as done",
-  "Reschedule pickup to 3 PM",
-  "Add a personal task for dinner at 7",
+  "What's next?",
+  "Reschedule pickup to 12 PM",
+  "Mark first task done",
 ];
-
-function typeAccent(type: ScheduleTaskType): string {
-  switch (type) {
-    case "pickup":
-    case "delivery":
-      return "bg-cyan-500/15 text-cyan-300 ring-cyan-500/30";
-    case "site_visit":
-    case "inspection":
-      return "bg-violet-500/15 text-violet-300 ring-violet-500/30";
-    case "call":
-      return "bg-sky-500/15 text-sky-300 ring-sky-500/30";
-    case "payment_reminder":
-      return "bg-amber-500/15 text-amber-200 ring-amber-500/30";
-    case "personal":
-      return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/30";
-    case "project_task":
-      return "bg-accent/15 text-accent ring-accent/30";
-    default:
-      return "bg-white/10 text-slate-300 ring-white/15";
-  }
-}
-
-function statusLabel(status: TodayAgendaItem["status"]): string {
-  switch (status) {
-    case "completed":
-      return "Done";
-    case "overdue":
-      return "Overdue";
-    case "in_progress":
-      return "In progress";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return "Open";
-  }
-}
 
 function sourceIdFromAgenda(item: TodayAgendaItem): string | null {
   const colon = item.id.indexOf(":");
   if (colon < 0) return null;
   return item.id.slice(colon + 1) || null;
+}
+
+function isPersonalItem(item: TodayAgendaItem): boolean {
+  return item.taskType === "personal";
+}
+
+function formatEstDuration(totalMinutes: number): string {
+  if (totalMinutes <= 0) return "0m";
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${minutes}m`;
+}
+
+function estimateItemMinutes(item: TodayAgendaItem): number {
+  if (item.status === "completed" || item.status === "cancelled") return 0;
+  if (item.allDay || !item.scheduledStart) return 30;
+  if (item.scheduledEnd) {
+    const start = new Date(item.scheduledStart).getTime();
+    const end = new Date(item.scheduledEnd).getTime();
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+      return Math.max(15, Math.round((end - start) / 60000));
+    }
+  }
+  return 60;
 }
 
 export function TodayPage({
@@ -135,12 +120,17 @@ export function TodayPage({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [pending, startTransition] = useTransition();
-  const [filter, setFilter] = useState<TaskFilter>("all");
+  const [filter, setFilter] = useState<ListFilter>("all");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduleItem | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [drivingMode, setDrivingMode] = useState(false);
+  const [briefPreview, setBriefPreview] = useState(false);
+  const [voiceBarCollapsed, setVoiceBarCollapsed] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const voiceBarRef = useRef<HTMLDivElement | null>(null);
   const briefTts = useTtsPlayback();
 
   useEffect(() => {
@@ -293,29 +283,63 @@ export function TodayPage({
     if (voicePhase === "classifying") return "Understanding…";
     if (voicePhase === "executing") return "Updating agenda…";
     if (voicePhase === "confirm") return "Confirm the command below";
-    return "Hold mic to talk";
+    return "Tap mic and speak";
   }
 
+  const filterCounts = useMemo(() => {
+    const all = agenda.items.length;
+    const personal = agenda.items.filter(isPersonalItem).length;
+    return {
+      all,
+      work: all - personal,
+      personal,
+    };
+  }, [agenda.items]);
+
   const filteredItems = useMemo(() => {
-    if (filter === "all") return agenda.items;
-    if (filter === "pickup") {
-      return agenda.items.filter(
-        (item) => item.taskType === "pickup" || item.taskType === "delivery"
-      );
-    }
-    return agenda.items.filter((item) => item.taskType === filter);
+    if (filter === "personal") return agenda.items.filter(isPersonalItem);
+    if (filter === "work") return agenda.items.filter((item) => !isPersonalItem(item));
+    return agenda.items;
   }, [agenda.items, filter]);
 
   const dateLabel = useMemo(() => {
     const [y, m, d] = agenda.dateKey.split("-").map(Number);
-    // Civil date in the browser — dateKey is already the user's local day.
     const date = new Date(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
     return date.toLocaleDateString("en-CA", {
       weekday: "long",
       month: "long",
       day: "numeric",
+      year: "numeric",
     });
   }, [agenda.dateKey]);
+
+  const estMinutes = useMemo(
+    () => agenda.items.reduce((sum, item) => sum + estimateItemMinutes(item), 0),
+    [agenda.items]
+  );
+
+  const weekDaysSunFirst = useMemo(() => {
+    if (agenda.week.length !== 7) return agenda.week;
+    return [agenda.week[6], ...agenda.week.slice(0, 6)];
+  }, [agenda.week]);
+
+  const calendarEvents = useMemo(
+    () =>
+      agenda.items
+        .filter(
+          (item) =>
+            item.status !== "completed" &&
+            item.status !== "cancelled" &&
+            item.scheduledStart
+        )
+        .slice(0, 4),
+    [agenda.items]
+  );
+
+  function focusVoiceBar() {
+    setVoiceBarCollapsed(false);
+    voiceBarRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
 
   const conflictCandidates = useMemo(
     () =>
@@ -653,34 +677,109 @@ export function TodayPage({
 
   return (
     <div className="flex w-full flex-1 flex-col">
-      <div className="border-b border-white/10 bg-[#0B1220]/80 px-4 py-5 sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-accent">
-              Daily Command Center
+      {/* —— Header —— */}
+      <div className="border-b border-white/10 px-4 py-5 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-bold tracking-tight text-white">Today</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              Your daily overview and tasks
             </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Today
-            </h1>
-            <p className="mt-1 text-sm text-slate-400">{dateLabel}</p>
           </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-slate-400">
-              Hi {agenda.greetingName} —{" "}
-              <span className="font-medium text-slate-200">
-                {agenda.summary.openToday} open
-              </span>
-              {agenda.summary.completedToday > 0
-                ? ` · ${agenda.summary.completedToday} done`
-                : ""}
-            </p>
+            <button
+              type="button"
+              onClick={() => void handleStartBrief()}
+              className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent/25 hover:bg-blue-500"
+            >
+              <IconMicrophone className="h-4 w-4" />
+              Tell Me About My Day
+              <span className="text-white/70">›</span>
+            </button>
+            <button
+              type="button"
+              onClick={focusVoiceBar}
+              className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-transparent px-4 py-2.5 text-sm font-semibold text-accent hover:bg-accent/10"
+            >
+              <IconMicrophone className="h-4 w-4" />
+              Speak to Ema
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 self-end lg:self-auto">
             <button
               type="button"
               onClick={openCreate}
-              className={touchBtnPrimary}
+              className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+              title="Quick add"
+              aria-label="Search / add"
             >
-              + Add Task
+              <IconSearch className="h-5 w-5" />
             </button>
+            <a
+              href="#today-calendar"
+              className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+              title="Calendar"
+            >
+              <IconCalendar className="h-5 w-5" />
+            </a>
+            <Link
+              href="/dashboard/inbox"
+              className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+              title="Notifications"
+            >
+              <IconBell className="h-5 w-5" />
+            </Link>
+            <Link
+              href="/dashboard/settings"
+              className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+              title="Account"
+            >
+              <IconUsers className="h-5 w-5" />
+            </Link>
+          </div>
+        </div>
+
+        {/* Date + stats */}
+        <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-300">
+            <span className="inline-flex items-center gap-2 font-medium text-white">
+              <IconCalendar className="h-4 w-4 text-accent" />
+              {dateLabel}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatPill
+              tone="blue"
+              icon={<IconCheckCircle className="h-3.5 w-3.5" />}
+              value={String(agenda.summary.totalToday)}
+              label="Total Tasks"
+            />
+            <StatPill
+              tone="green"
+              icon={<IconClock className="h-3.5 w-3.5" />}
+              value={String(agenda.summary.openToday)}
+              label="Due Today"
+            />
+            <StatPill
+              tone="red"
+              icon={<IconBell className="h-3.5 w-3.5" />}
+              value={String(agenda.summary.overdueCount)}
+              label="Overdue"
+            />
+            <StatPill
+              tone="yellow"
+              icon={<IconTruck className="h-3.5 w-3.5" />}
+              value={String(agenda.summary.highPriorityCount)}
+              label="High Priority"
+            />
+            <StatPill
+              tone="purple"
+              icon={<IconClock className="h-3.5 w-3.5" />}
+              value={formatEstDuration(estMinutes)}
+              label="Est. Time"
+            />
           </div>
         </div>
       </div>
@@ -692,190 +791,57 @@ export function TodayPage({
           </div>
         ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <section className="rounded-2xl border border-white/10 bg-gradient-to-br from-accent/15 via-white/[0.04] to-transparent p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-accent">
-                  Daily Brief
-                </p>
-                <h2 className="mt-1 text-xl font-semibold text-white">
-                  Good day, {agenda.greetingName}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className={touchBtnPrimary}
-                onClick={() => void handleStartBrief()}
-                aria-pressed={briefTts.isPlaying}
-              >
-                {briefButtonLabel()}
-              </button>
-            </div>
-            <ul className="mt-4 space-y-2">
-              {agenda.briefLines.map((line) => (
-                <li key={line} className="text-sm leading-relaxed text-slate-300">
-                  {line}
-                </li>
-              ))}
-            </ul>
-            {briefTts.error ? (
-              <p className="mt-4 text-xs text-red-300">{briefTts.error}</p>
-            ) : briefTts.isPlaying ? (
-              <p className="mt-4 text-xs text-accent">
-                Speaking… press Stop Brief or the mic to interrupt.
-              </p>
-            ) : briefTts.isLoading ? (
-              <p className="mt-4 text-xs text-slate-500">
-                Generating voice brief…
-              </p>
-            ) : (
-              <p className="mt-4 text-xs text-slate-500">
-                Press Start Brief to hear today’s agenda spoken aloud.
-              </p>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                Up Next
-              </h2>
-              <IconClock className="h-4 w-4 text-slate-500" />
-            </div>
-            {agenda.upNext.length === 0 ? (
-              <div className="mt-4">
-                <p className="text-sm text-slate-500">
-                  Nothing queued — your next hours look clear.
-                </p>
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="mt-3 text-xs font-semibold text-accent hover:text-blue-400"
-                >
-                  + Add a timed task
-                </button>
-              </div>
-            ) : (
-              <ul className="mt-4 space-y-3">
-                {agenda.upNext.map((item) => (
-                  <li
-                    key={item.id}
-                    className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      {item.href ? (
-                        <Link
-                          href={item.href}
-                          className="text-sm font-medium text-white hover:underline"
-                        >
-                          {item.title}
-                        </Link>
-                      ) : (
-                        <p className="text-sm font-medium text-white">
-                          {item.title}
-                        </p>
-                      )}
-                      <p className="shrink-0 text-xs font-semibold text-accent">
-                        {item.status === "overdue"
-                          ? "Overdue"
-                          : formatAgendaTime(item.scheduledStart)}
-                      </p>
-                    </div>
-                    {item.subtitle ? (
-                      <p className="mt-1 text-xs text-slate-400">
-                        {item.subtitle}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </div>
-
-        {agenda.summary.overdueCount > 0 ? (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {agenda.summary.overdueCount === 1
-              ? "1 overdue item needs attention — clear it before the rest of the day piles up."
-              : `${agenda.summary.overdueCount} overdue items need attention — clear them before the rest of the day piles up.`}
-          </div>
-        ) : null}
-
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,0.9fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.9fr)]">
+          {/* —— Today's Tasks —— */}
           <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">
-                Today&apos;s Tasks
-              </h2>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-slate-500">
-                  {filteredItems.length} shown
-                </span>
-                <button
-                  type="button"
-                  onClick={openCreate}
-                  className="text-xs font-semibold text-accent hover:text-blue-400"
-                >
-                  + Add
-                </button>
+              <h2 className="text-lg font-semibold text-white">Today&apos;s Tasks</h2>
+              <div className="flex items-center gap-2 text-slate-400">
+                <span className="text-xs">Sort by</span>
+                <IconMore className="h-4 w-4" />
               </div>
             </div>
 
-            <div className="mt-4 flex gap-1 overflow-x-auto pb-1">
-              {FILTERS.map((tab) => {
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {(
+                [
+                  { id: "all" as const, label: "All", count: filterCounts.all },
+                  { id: "work" as const, label: "Work", count: filterCounts.work },
+                  {
+                    id: "personal" as const,
+                    label: "Personal",
+                    count: filterCounts.personal,
+                  },
+                ] as const
+              ).map((tab) => {
                 const active = filter === tab.id;
                 return (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setFilter(tab.id)}
-                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                    className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
                       active
-                        ? "bg-accent/20 text-accent ring-1 ring-accent/40"
-                        : "text-slate-400 hover:bg-white/5 hover:text-slate-200"
+                        ? "bg-accent text-white shadow-md shadow-accent/30"
+                        : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-slate-200"
                     }`}
                   >
-                    {tab.label}
+                    {tab.label} ({tab.count})
                   </button>
                 );
               })}
             </div>
 
             {filteredItems.length === 0 ? (
-              <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-4 py-6 text-center">
-                {filter === "all" && agenda.items.length === 0 ? (
-                  <>
-                    <p className="text-sm font-medium text-slate-200">
-                      Nothing on today’s agenda yet
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Add a personal task, or project due dates and material
-                      pickups will show up here automatically.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={openCreate}
-                      className={`mt-4 ${touchBtnPrimary}`}
-                    >
-                      + Add Task
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-slate-400">
-                      No {filter === "all" ? "" : "matching "}items in this
-                      filter.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={openCreate}
-                      className="mt-3 text-xs font-semibold text-accent hover:text-blue-400"
-                    >
-                      + Add Task
-                    </button>
-                  </>
-                )}
+              <div className="mt-6 rounded-2xl border border-dashed border-white/15 px-4 py-8 text-center">
+                <p className="text-sm text-slate-400">No tasks in this filter.</p>
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="mt-3 text-sm font-semibold text-accent hover:text-blue-400"
+                >
+                  + Add Task
+                </button>
               </div>
             ) : (
               <ul className="mt-4 divide-y divide-white/10 overflow-hidden rounded-2xl border border-white/10">
@@ -884,145 +850,317 @@ export function TodayPage({
                     key={item.id}
                     item={item}
                     busy={busyId === item.id || pending}
+                    menuOpen={menuOpenId === item.id}
+                    onToggleMenu={() =>
+                      setMenuOpenId((id) => (id === item.id ? null : item.id))
+                    }
+                    onCloseMenu={() => setMenuOpenId(null)}
                     onToggleComplete={() => void toggleComplete(item)}
-                    onEdit={() => openEdit(item)}
-                    onDelete={() => void deleteScheduleItem(item)}
+                    onEdit={() => {
+                      setMenuOpenId(null);
+                      openEdit(item);
+                    }}
+                    onDelete={() => {
+                      setMenuOpenId(null);
+                      void deleteScheduleItem(item);
+                    }}
                   />
                 ))}
               </ul>
             )}
+
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={openCreate}
+                className="text-sm font-semibold text-accent hover:text-blue-400"
+              >
+                + Add Task
+              </button>
+            </div>
           </section>
 
+          {/* —— Right rail —— */}
           <div className="space-y-5">
+            {/* Daily Brief */}
+            <section className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-accent/20 via-white/[0.04] to-transparent p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-accent">
+                    Daily Brief
+                  </p>
+                  <span className="mt-0.5 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+                    Beta
+                  </span>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-400">
+                  Driving Mode
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={drivingMode}
+                    onClick={() => setDrivingMode((v) => !v)}
+                    className={`relative h-5 w-9 rounded-full transition ${
+                      drivingMode ? "bg-accent" : "bg-white/15"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${
+                        drivingMode ? "left-4" : "left-0.5"
+                      }`}
+                    />
+                  </button>
+                </label>
+              </div>
+
+              <div className="mt-5 flex flex-col items-center text-center">
+                <div className="relative flex items-center gap-3">
+                  <WaveformDecor className="hidden sm:flex" />
+                  <EmaAvatar size="lg" speaking={briefTts.isPlaying} />
+                  <WaveformDecor className="hidden sm:flex" />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-white">
+                  Good day, {agenda.greetingName}!
+                </h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Shall I brief your day?
+                </p>
+
+                {(briefPreview || briefTts.isPlaying || briefTts.status === "ended") && (
+                  <ul className="mt-4 w-full space-y-1.5 text-left">
+                    {agenda.briefLines.map((line) => (
+                      <li
+                        key={line}
+                        className="text-xs leading-relaxed text-slate-300"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {briefTts.error ? (
+                  <p className="mt-3 text-xs text-red-300">{briefTts.error}</p>
+                ) : null}
+
+                <div className="mt-5 flex w-full flex-col gap-2 sm:flex-row sm:justify-center">
+                  <button
+                    type="button"
+                    onClick={() => void handleStartBrief()}
+                    className={`${touchBtnPrimary} w-full sm:w-auto`}
+                  >
+                    {briefButtonLabel()}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBriefPreview((v) => !v)}
+                    className={`${touchBtnSecondary} w-full sm:w-auto`}
+                  >
+                    Preview
+                  </button>
+                  <Link
+                    href="/dashboard/settings"
+                    className={`${touchBtnSecondary} inline-flex w-full items-center justify-center gap-1.5 sm:w-auto`}
+                  >
+                    <IconSettings className="h-4 w-4" />
+                    Settings
+                  </Link>
+                </div>
+              </div>
+            </section>
+
+            {/* Up Next */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+                  Up Next
+                </h2>
+                <a
+                  href="#today-calendar"
+                  className="text-xs font-semibold text-accent hover:text-blue-400"
+                >
+                  View Calendar
+                </a>
+              </div>
+              {agenda.upNext.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">Nothing queued.</p>
+              ) : (
+                <ul className="mt-4 space-y-3">
+                  {agenda.upNext.map((item) => (
+                    <li key={item.id} className="flex items-start gap-3">
+                      <TaskTypeIconBox type={item.taskType} />
+                      <div className="min-w-0 flex-1">
+                        {item.href ? (
+                          <Link
+                            href={item.href}
+                            className="block truncate text-sm font-medium text-white hover:underline"
+                          >
+                            {item.title}
+                          </Link>
+                        ) : (
+                          <p className="truncate text-sm font-medium text-white">
+                            {item.title}
+                          </p>
+                        )}
+                        {item.subtitle ? (
+                          <p className="truncate text-xs text-slate-500">
+                            {item.subtitle}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-accent">
+                        {formatAgendaTime(item.scheduledStart)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* My Calendar */}
+            <section
+              id="today-calendar"
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+            >
+              <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                   My Calendar
                 </h2>
                 <IconCalendar className="h-4 w-4 text-slate-500" />
               </div>
-              <p className="mt-1 text-xs text-slate-500">This week</p>
-              <div className="mt-4 grid grid-cols-7 gap-1.5">
-                {agenda.week.map((day) => (
+              <div className="mt-4 grid grid-cols-7 gap-1">
+                {weekDaysSunFirst.map((day) => (
                   <div
                     key={day.dateKey}
-                    className={`rounded-xl px-1 py-2 text-center ${
-                      day.isToday
-                        ? "bg-accent/20 ring-1 ring-accent/40"
-                        : "bg-white/[0.02]"
-                    }`}
+                    className="flex flex-col items-center gap-1"
                   >
-                    <p className="text-[10px] font-semibold uppercase text-slate-500">
-                      {day.weekday}
-                    </p>
-                    <p
-                      className={`mt-1 text-sm font-semibold ${
-                        day.isToday ? "text-white" : "text-slate-300"
+                    <span className="text-[10px] font-semibold uppercase text-slate-500">
+                      {day.weekday.slice(0, 3)}
+                    </span>
+                    <span
+                      className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold ${
+                        day.isToday
+                          ? "bg-accent text-white shadow-md shadow-accent/30"
+                          : "text-slate-300"
                       }`}
                     >
                       {day.label}
-                    </p>
-                    <div className="mt-2 flex justify-center gap-0.5">
-                      {Array.from({
-                        length: Math.min(day.itemCount, 3),
-                      }).map((_, index) => (
-                        <span
-                          key={index}
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            day.isToday ? "bg-accent" : "bg-slate-500"
-                          }`}
-                        />
-                      ))}
-                      {day.itemCount === 0 ? (
-                        <span className="h-1.5 w-1.5 rounded-full bg-transparent" />
-                      ) : null}
-                    </div>
+                    </span>
                   </div>
                 ))}
               </div>
+
+              {calendarEvents.length === 0 ? (
+                <p className="mt-4 text-xs text-slate-500">No timed events today.</p>
+              ) : (
+                <ul className="relative mt-5 space-y-3 border-l border-accent/40 pl-4">
+                  {calendarEvents.map((item) => (
+                    <li key={item.id} className="relative">
+                      <span className="absolute -left-[1.3rem] top-1.5 h-2.5 w-2.5 rounded-full bg-accent" />
+                      <p className="text-xs font-semibold text-accent">
+                        {formatAgendaTime(item.scheduledStart)}
+                      </p>
+                      <p className="text-sm text-slate-200">{item.title}</p>
+                    </li>
+                  ))}
+                  {agenda.items.filter((i) => i.scheduledStart).length >
+                  calendarEvents.length ? (
+                    <li className="text-xs font-semibold text-accent">
+                      +
+                      {agenda.items.filter((i) => i.scheduledStart).length -
+                        calendarEvents.length}{" "}
+                      more events
+                    </li>
+                  ) : null}
+                </ul>
+              )}
             </section>
 
+            {/* Alerts */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                   Alerts & Updates
                 </h2>
-                <IconBell className="h-4 w-4 text-slate-500" />
+                <Link
+                  href="/dashboard/inbox"
+                  className="text-xs font-semibold text-accent hover:text-blue-400"
+                >
+                  View all
+                </Link>
               </div>
               {agenda.alerts.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 px-3 py-4">
-                  <p className="text-sm text-slate-500">
-                    No recent alerts. Inbox is quiet.
-                  </p>
-                </div>
+                <p className="mt-4 text-sm text-slate-500">Inbox is quiet.</p>
               ) : (
                 <ul className="mt-4 space-y-3">
-                  {agenda.alerts.slice(0, 5).map((alert) => {
+                  {agenda.alerts.slice(0, 4).map((alert) => {
                     const href = resolveTodayAlertHref(alert);
                     return (
-                      <li key={alert.id} className="min-w-0">
-                        {href ? (
-                          <Link
-                            href={href}
-                            className="block text-sm text-slate-200 line-clamp-2 hover:text-white hover:underline"
-                          >
-                            {alert.message}
-                          </Link>
-                        ) : (
-                          <p className="text-sm text-slate-200 line-clamp-2">
-                            {alert.message}
+                      <li key={alert.id} className="flex gap-3">
+                        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-accent">
+                          <IconBell className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          {href ? (
+                            <Link
+                              href={href}
+                              className="block text-sm font-semibold text-white line-clamp-2 hover:underline"
+                            >
+                              {alert.message}
+                            </Link>
+                          ) : (
+                            <p className="text-sm font-semibold text-white line-clamp-2">
+                              {alert.message}
+                            </p>
+                          )}
+                          <p className="mt-0.5 text-[11px] text-slate-500">
+                            {formatNotificationTime(alert.created_at)}
                           </p>
-                        )}
-                        <p className="mt-1 text-[11px] text-slate-500">
-                          {formatNotificationTime(alert.created_at)}
-                          {!alert.read ? " · Unread" : ""}
-                        </p>
+                        </div>
                       </li>
                     );
                   })}
                 </ul>
               )}
-              <Link
-                href="/dashboard/inbox"
-                className="mt-4 inline-flex text-xs font-semibold text-accent hover:text-blue-400"
-              >
-                Open Inbox →
-              </Link>
             </section>
 
+            {/* Daily Summary */}
             <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
                 Daily Summary
               </h2>
               <dl className="mt-4 grid grid-cols-2 gap-3">
-                <SummaryMetric
-                  label="Open"
-                  value={String(agenda.summary.openToday)}
+                <SummaryTile
+                  label="Est. working time"
+                  value={formatEstDuration(estMinutes)}
                 />
-                <SummaryMetric
-                  label="Overdue"
+                <SummaryTile
+                  label="Tasks completed"
+                  value={`${agenda.summary.completedToday}/${agenda.summary.totalToday || 0}`}
+                />
+                <SummaryTile
+                  label="Productivity"
                   value={
-                    agenda.summary.overdueCount > 0
-                      ? String(agenda.summary.overdueCount)
-                      : "—"
+                    agenda.summary.totalToday === 0
+                      ? "—"
+                      : `${Math.round(
+                          (agenda.summary.completedToday /
+                            Math.max(agenda.summary.totalToday, 1)) *
+                            100
+                        )}%`
+                  }
+                  progress={
+                    agenda.summary.totalToday === 0
+                      ? 0
+                      : agenda.summary.completedToday /
+                        Math.max(agenda.summary.totalToday, 1)
                   }
                 />
-                <SummaryMetric
-                  label="Done"
-                  value={String(agenda.summary.completedToday)}
-                />
-                <SummaryMetric
-                  label="Pickups"
-                  value={String(agenda.summary.pickupsCount)}
-                  icon={<IconTruck className="h-3.5 w-3.5" />}
-                />
-                <SummaryMetric
-                  label="Payments due"
-                  value={
-                    agenda.summary.paymentsDueCount > 0
-                      ? formatAgendaMoney(agenda.summary.paymentsDueAmount)
-                      : "—"
-                  }
+                <SummaryTile
+                  label="Focus time"
+                  value={formatEstDuration(
+                    Math.round(estMinutes * 0.7)
+                  )}
                 />
               </dl>
             </section>
@@ -1030,75 +1168,97 @@ export function TodayPage({
         </div>
       </div>
 
-      {/* Mobile: fixed above bottom nav. md+: sticky in page flow (nav hidden). */}
+      {/* Spacer for fixed voice bar on mobile */}
+      {!voiceBarCollapsed ? (
+        <div
+          className="pointer-events-none h-[5.5rem] shrink-0 md:hidden"
+          aria-hidden
+        />
+      ) : (
+        <div className="pointer-events-none h-12 shrink-0 md:hidden" aria-hidden />
+      )}
+
+      {/* —— Bottom voice bar —— */}
       <div
-        className="pointer-events-none h-[4.75rem] shrink-0 md:hidden"
-        aria-hidden
-      />
-      <div className="z-40 border-t border-white/10 bg-[#0B1220]/95 px-4 py-3 backdrop-blur max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(56px+env(safe-area-inset-bottom))] md:sticky md:bottom-0 md:z-10 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-5xl items-center gap-3">
+        ref={voiceBarRef}
+        className={`z-40 border-t border-white/10 bg-[#0B1220]/95 backdrop-blur max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(56px+env(safe-area-inset-bottom))] md:sticky md:bottom-0 md:z-10 ${
+          voiceBarCollapsed ? "px-4 py-2" : "px-4 py-3 sm:px-6 lg:px-8"
+        }`}
+      >
+        {voiceBarCollapsed ? (
           <button
             type="button"
-            className={`inline-flex h-12 w-12 shrink-0 touch-none items-center justify-center rounded-full text-white shadow-lg select-none ${
-              isRecording
-                ? "bg-red-500 shadow-red-500/30"
-                : "bg-accent shadow-accent/30"
-            } ${voiceBusy && !isRecording ? "opacity-60" : ""}`}
-            aria-label="Push to talk"
-            title="Hold to talk — mark done, reschedule, or add a personal task"
-            disabled={
-              voicePhase === "transcribing" ||
-              voicePhase === "classifying" ||
-              voicePhase === "executing"
-            }
-            onPointerDown={(event) => void handleMicPointerDown(event)}
-            onPointerUp={() => void handleMicPointerUp()}
-            onPointerCancel={() => void handleMicPointerUp()}
+            onClick={() => setVoiceBarCollapsed(false)}
+            className="mx-auto flex w-full max-w-5xl items-center justify-center gap-2 text-sm text-slate-400 hover:text-white"
           >
-            <IconMicrophone className="h-5 w-5" />
+            <IconMicrophone className="h-4 w-4 text-accent" />
+            Ema voice bar
+            <span className="text-xs">▲</span>
           </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Voice command
-            </p>
-            <p className="mt-0.5 truncate text-sm text-slate-300">
-              {voiceStatusLabel()}
-            </p>
-            {voiceError || recorderError ? (
-              <p className="mt-1 line-clamp-2 text-xs text-red-300">
-                {voiceError || recorderError}
+        ) : (
+          <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <EmaAvatar size="sm" speaking={isRecording} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">
+                  Ema is ready to help
+                </p>
+                <p className="truncate text-xs text-slate-400">
+                  {voiceError || recorderError || voiceStatusLabel()}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-3">
+              <WaveformDecor className="hidden sm:flex" />
+              <button
+                type="button"
+                className={`inline-flex h-14 w-14 touch-none items-center justify-center rounded-full text-white shadow-xl select-none ${
+                  isRecording
+                    ? "bg-red-500 shadow-red-500/40"
+                    : "bg-accent shadow-accent/40"
+                } ${voiceBusy && !isRecording ? "opacity-60" : ""}`}
+                aria-label="Push to talk"
+                disabled={
+                  voicePhase === "transcribing" ||
+                  voicePhase === "classifying" ||
+                  voicePhase === "executing"
+                }
+                onPointerDown={(event) => void handleMicPointerDown(event)}
+                onPointerUp={() => void handleMicPointerUp()}
+                onPointerCancel={() => void handleMicPointerUp()}
+              >
+                <IconMicrophone className="h-6 w-6" />
+              </button>
+              <WaveformDecor className="hidden sm:flex" />
+            </div>
+
+            <div className="hidden min-w-0 flex-1 flex-col items-end gap-1.5 lg:flex">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Try saying:
               </p>
-            ) : (
-              <div className="mt-1.5 hidden gap-2 overflow-x-auto pb-0.5 sm:flex">
+              <div className="flex flex-wrap justify-end gap-1.5">
                 {SUGGESTED_PHRASES.map((phrase) => (
                   <span
                     key={phrase}
-                    className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-slate-300"
+                    className="whitespace-nowrap rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[11px] text-slate-300"
                   >
                     “{phrase}”
                   </span>
                 ))}
               </div>
-            )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setVoiceBarCollapsed(true)}
+              className="absolute right-3 top-2 text-slate-500 hover:text-white sm:static sm:ml-2"
+              aria-label="Collapse voice bar"
+            >
+              ▼
+            </button>
           </div>
-          <button
-            type="button"
-            className={`${touchBtnSecondary} hidden shrink-0 touch-none select-none sm:inline-flex ${
-              isRecording ? "border-red-400/40 text-red-200" : ""
-            }`}
-            disabled={
-              voicePhase === "transcribing" ||
-              voicePhase === "classifying" ||
-              voicePhase === "executing"
-            }
-            title="Hold to talk"
-            onPointerDown={(event) => void handleMicPointerDown(event)}
-            onPointerUp={() => void handleMicPointerUp()}
-            onPointerCancel={() => void handleMicPointerUp()}
-          >
-            {isRecording ? "Release to send" : "Hold mic to talk"}
-          </button>
-        </div>
+        )}
       </div>
 
       {formOpen ? (
@@ -1136,12 +1296,18 @@ export function TodayPage({
 function AgendaRow({
   item,
   busy,
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
   onToggleComplete,
   onEdit,
   onDelete,
 }: {
   item: TodayAgendaItem;
   busy: boolean;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
   onToggleComplete: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -1151,22 +1317,20 @@ function AgendaRow({
 
   return (
     <li
-      className={`px-4 py-3 ${
+      className={`relative px-3 py-3 sm:px-4 ${
         item.status === "overdue" ? "bg-red-500/[0.04]" : ""
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-center gap-3">
         {canComplete ? (
           <button
             type="button"
             disabled={busy}
             onClick={onToggleComplete}
-            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] disabled:opacity-50 ${
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] disabled:opacity-50 ${
               item.status === "completed"
                 ? "border-emerald-500 bg-emerald-500 text-white"
-                : item.status === "overdue"
-                  ? "border-red-400/60 bg-transparent text-transparent hover:border-red-300"
-                  : "border-white/20 bg-transparent text-transparent hover:border-accent"
+                : "border-white/25 bg-transparent text-transparent hover:border-accent"
             }`}
             aria-label={
               item.status === "completed" ? "Mark open" : "Mark done"
@@ -1175,35 +1339,16 @@ function AgendaRow({
             ✓
           </button>
         ) : (
-          <span className="mt-0.5 h-5 w-5 shrink-0" aria-hidden />
+          <span className="h-5 w-5 shrink-0" aria-hidden />
         )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ${typeAccent(
-                item.taskType
-              )}`}
-            >
-              {scheduleTaskTypeLabel(item.taskType)}
-            </span>
-            <span className="text-xs text-slate-500">
-              {formatAgendaTime(item.scheduledStart)}
-            </span>
-            {item.status === "completed" ? (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
-                <IconCheckCircle className="h-3.5 w-3.5" />
-                {statusLabel(item.status)}
-              </span>
-            ) : item.status === "overdue" ? (
-              <span className="text-xs font-semibold text-red-300">Overdue</span>
-            ) : null}
-          </div>
+        <TaskTypeIconBox type={item.taskType} />
 
+        <div className="min-w-0 flex-1">
           {item.href ? (
             <Link
               href={item.href}
-              className={`mt-1.5 block text-sm font-medium hover:underline ${
+              className={`block truncate text-sm font-semibold hover:underline ${
                 item.status === "completed"
                   ? "text-slate-500 line-through"
                   : "text-white"
@@ -1213,7 +1358,7 @@ function AgendaRow({
             </Link>
           ) : (
             <p
-              className={`mt-1.5 text-sm font-medium ${
+              className={`truncate text-sm font-semibold ${
                 item.status === "completed"
                   ? "text-slate-500 line-through"
                   : "text-white"
@@ -1222,68 +1367,111 @@ function AgendaRow({
               {item.title}
             </p>
           )}
-
           {item.subtitle ? (
-            <p className="mt-0.5 text-xs text-slate-400">{item.subtitle}</p>
+            <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
           ) : null}
+          {item.status === "overdue" ? (
+            <p className="mt-0.5 text-[11px] font-semibold text-red-300">
+              Overdue
+            </p>
+          ) : null}
+        </div>
+
+        <div className="hidden shrink-0 text-right sm:block">
+          <p className="text-sm font-semibold text-slate-200">
+            {formatAgendaTime(item.scheduledStart)}
+          </p>
           {typeof item.meta?.amount === "number" ? (
-            <p className="mt-1 text-xs font-semibold text-amber-200">
+            <p className="text-xs text-amber-200">
               {formatAgendaMoney(item.meta.amount)}
             </p>
           ) : null}
+        </div>
 
-          <div className="mt-2 flex flex-wrap gap-3">
-            {item.href ? (
-              <Link
-                href={item.href}
-                className="text-xs font-semibold text-accent hover:text-blue-400"
-              >
-                {item.hrefLabel || "Open"}
-              </Link>
-            ) : null}
-            {canMutateSchedule ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onEdit}
-                  className="text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-50"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onDelete}
-                  className="text-xs font-semibold text-red-300 hover:text-red-200 disabled:opacity-50"
-                >
-                  Delete
-                </button>
-              </>
-            ) : null}
-          </div>
+        <PriorityBadge priority={item.priority} />
+
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={onToggleMenu}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+            aria-label="More actions"
+          >
+            <IconMore className="h-5 w-5" />
+          </button>
+          {menuOpen ? (
+            <>
+              <button
+                type="button"
+                className="fixed inset-0 z-10 cursor-default"
+                aria-label="Close menu"
+                onClick={onCloseMenu}
+              />
+              <div className="absolute right-0 z-20 mt-1 min-w-[140px] overflow-hidden rounded-xl border border-white/10 bg-navy py-1 shadow-xl">
+                {item.href ? (
+                  <Link
+                    href={item.href}
+                    className="block px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5"
+                    onClick={onCloseMenu}
+                  >
+                    {item.hrefLabel || "Open"}
+                  </Link>
+                ) : null}
+                {canMutateSchedule ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onEdit}
+                      className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5 disabled:opacity-50"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={onDelete}
+                      className="block w-full px-3 py-2 text-left text-sm text-red-300 hover:bg-white/5 disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
+                  </>
+                ) : null}
+                {!item.href && !canMutateSchedule ? (
+                  <p className="px-3 py-2 text-xs text-slate-500">No actions</p>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </li>
   );
 }
 
-function SummaryMetric({
+function SummaryTile({
   label,
   value,
-  icon,
+  progress,
 }: {
   label: string;
   value: string;
-  icon?: React.ReactNode;
+  progress?: number;
 }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] px-3 py-3">
-      <dt className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-        {icon}
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </dt>
       <dd className="mt-1 text-base font-semibold text-white">{value}</dd>
+      {typeof progress === "number" ? (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div
+            className="h-full rounded-full bg-emerald-400"
+            style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
