@@ -80,6 +80,15 @@ export type TodaySummary = {
   overdueCount: number;
   highPriorityCount: number;
   conflictCount: number;
+  /** Open project tasks (taskType project_task). */
+  taskCount: number;
+  /** Open non-task agenda items (visits, pickups, payments, …). */
+  appointmentCount: number;
+  /**
+   * Latest estimated finish among open timed items (ISO).
+   * Uses scheduled_end when set, otherwise start + 60 minutes. Null if none.
+   */
+  finishAround: string | null;
 };
 
 export type TodayAgendaViewModel = {
@@ -482,6 +491,14 @@ export function buildTodayAgenda(input: {
       i.status !== "cancelled"
   ).length;
   const conflictCount = items.filter((i) => i.hasConflict).length;
+  const openItems = items.filter(
+    (i) => i.status !== "completed" && i.status !== "cancelled"
+  );
+  const taskCount = openItems.filter(
+    (i) => i.taskType === "project_task"
+  ).length;
+  const appointmentCount = openItems.length - taskCount;
+  const finishAround = computeFinishAroundIso(openItems);
 
   const summary: TodaySummary = {
     totalToday: items.length,
@@ -496,9 +513,13 @@ export function buildTodayAgenda(input: {
     overdueCount,
     highPriorityCount,
     conflictCount,
+    taskCount,
+    appointmentCount,
+    finishAround,
   };
 
   const alerts = [...input.notifications]
+    .filter((n) => !n.read)
     .sort(
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -661,4 +682,49 @@ export function formatAgendaTime(
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+const DEFAULT_ITEM_DURATION_MS = 60 * 60 * 1000;
+
+/** Latest finish among open timed items (end or start+60m). */
+export function computeFinishAroundIso(
+  openItems: TodayAgendaItem[]
+): string | null {
+  let latestMs: number | null = null;
+  for (const item of openItems) {
+    if (item.allDay || !item.scheduledStart) continue;
+    const startMs = new Date(item.scheduledStart).getTime();
+    if (Number.isNaN(startMs)) continue;
+    const endMs = item.scheduledEnd
+      ? new Date(item.scheduledEnd).getTime()
+      : startMs + DEFAULT_ITEM_DURATION_MS;
+    if (Number.isNaN(endMs)) continue;
+    if (latestMs === null || endMs > latestMs) latestMs = endMs;
+  }
+  return latestMs === null ? null : new Date(latestMs).toISOString();
+}
+
+/**
+ * One-line Daily Summary, e.g.
+ * "2 tasks • 1 appointment • 0 conflicts • Finish around 3:30 PM"
+ */
+export function buildDailySummarySentence(
+  summary: TodaySummary,
+  timeZone: string
+): string {
+  const parts = [
+    `${summary.taskCount} task${summary.taskCount === 1 ? "" : "s"}`,
+    `${summary.appointmentCount} appointment${
+      summary.appointmentCount === 1 ? "" : "s"
+    }`,
+    `${summary.conflictCount} conflict${
+      summary.conflictCount === 1 ? "" : "s"
+    }`,
+  ];
+  if (summary.finishAround) {
+    parts.push(
+      `Finish around ${formatAgendaTime(summary.finishAround, timeZone)}`
+    );
+  }
+  return parts.join(" • ");
 }
