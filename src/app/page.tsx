@@ -177,7 +177,7 @@ export default function LandingPage() {
 
           {/* Center stack: wordmark + CTA sit on the triangle */}
           <div className="absolute left-1/2 top-[46%] flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-            <h1 className="select-none text-[84px] font-medium leading-none tracking-[0.4em] text-white xl:text-[92px]">
+            <h1 className="select-none text-[84px] font-medium leading-none tracking-[0.4em] text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.45)] xl:text-[92px]">
               <span className="-mr-[0.05em]">E</span>
               <span className="mx-[0.02em]">M</span>
               <span className="mx-[0.02em] inline-block translate-y-[-0.03em]">
