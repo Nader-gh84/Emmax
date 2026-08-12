@@ -59,22 +59,22 @@ const HITS: HitLink[] = [
   {
     href: "/features",
     label: "Made for Trades",
-    style: { left: "5.5%", top: "68%", width: "20%", height: "24%" },
+    style: { left: "5.5%", top: "72%", width: "20%", height: "20%" },
   },
   {
     href: "/features",
     label: "AI That Works",
-    style: { left: "28.5%", top: "68%", width: "20%", height: "24%" },
+    style: { left: "28.5%", top: "72%", width: "20%", height: "20%" },
   },
   {
     href: "/features",
     label: "All in One Place",
-    style: { left: "51.5%", top: "68%", width: "20%", height: "24%" },
+    style: { left: "51.5%", top: "72%", width: "20%", height: "20%" },
   },
   {
     href: "/features",
     label: "Focus on Growth",
-    style: { left: "74.5%", top: "68%", width: "20%", height: "24%" },
+    style: { left: "74.5%", top: "72%", width: "20%", height: "20%" },
   },
   {
     href: "/features",
