@@ -120,7 +120,7 @@ export default function LandingPage() {
     <div
       className={`${spaceGrotesk.className} relative h-screen min-h-[900px] w-full min-w-[1280px] overflow-hidden bg-[#020617] text-white antialiased`}
     >
-      {/* Full-bleed hero — must be the page_3 outdoor skyline photo */}
+      {/* Full-bleed hero — keep overlays minimal so sunset / city lights stay visible */}
       <div
         className="absolute inset-0 bg-[#0a1628] bg-cover bg-center"
         style={{
@@ -130,8 +130,9 @@ export default function LandingPage() {
         role="img"
         aria-label="Ema, AI assistant for trades"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/15 to-black/40" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/30" />
+      {/* Very light vignette only — was black/50–55, now ~black/08–12 */}
+      <div className="absolute inset-0 bg-gradient-to-r from-black/12 via-transparent to-black/10" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/18 via-transparent to-black/08" />
 
       <div className="relative z-10 mx-auto flex h-full min-h-[900px] max-w-[1600px] flex-col px-12 pb-9 pt-9 xl:px-16">
         {/* Nav */}
@@ -168,7 +169,7 @@ export default function LandingPage() {
 
         {/* Stage */}
         <main className="relative flex flex-1 flex-col">
-          <p className="absolute left-1/2 top-[9.5%] -translate-x-1/2 text-[11px] font-medium tracking-[0.45em] text-white/92">
+          <p className="absolute left-1/2 top-[9.5%] -translate-x-1/2 text-[11px] font-medium tracking-[0.45em] text-white drop-shadow-[0_1px_6px_rgba(0,0,0,0.55)]">
             AI ASSISTANT FOR TRADES
           </p>
 
@@ -176,7 +177,7 @@ export default function LandingPage() {
 
           {/* Center stack: wordmark + CTA sit on the triangle */}
           <div className="absolute left-1/2 top-[46%] flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center">
-            <h1 className="select-none text-[84px] font-medium leading-none tracking-[0.4em] text-white xl:text-[92px]">
+            <h1 className="select-none text-[84px] font-medium leading-none tracking-[0.4em] text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.45)] xl:text-[92px]">
               <span className="-mr-[0.05em]">E</span>
               <span className="mx-[0.02em]">M</span>
               <span className="mx-[0.02em] inline-block translate-y-[-0.03em]">
@@ -190,15 +191,34 @@ export default function LandingPage() {
             <div className="mt-[168px] flex flex-col items-center xl:mt-[180px]">
               <Link
                 href="/signup"
-                className="flex h-[70px] w-[70px] items-center justify-center rounded-full transition hover:scale-[1.04]"
+                className="group relative flex h-[74px] w-[74px] items-center justify-center rounded-full transition hover:scale-[1.05]"
                 style={{
-                  backgroundColor: "#38BDF8",
+                  background:
+                    "radial-gradient(circle at 35% 30%, rgba(186,230,253,0.55) 0%, rgba(56,189,248,0.22) 42%, rgba(14,165,233,0.12) 70%, rgba(8,47,73,0.18) 100%)",
+                  border: "1.5px solid rgba(186,230,253,0.85)",
                   boxShadow:
-                    "0 0 0 9px rgba(56,189,248,0.16), 0 0 36px rgba(56,189,248,0.55)",
+                    "0 0 0 1px rgba(125,211,252,0.35) inset, 0 0 22px rgba(56,189,248,0.55), 0 0 48px rgba(56,189,248,0.35), 0 0 80px rgba(14,165,233,0.2)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
                 }}
                 aria-label="Click to enter"
               >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                {/* Soft inner glass highlight */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-[6px] rounded-full"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 40% 28%, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0.08) 35%, transparent 65%)",
+                  }}
+                />
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="relative z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.7)]"
+                >
                   <path
                     d="M9 6L15 12L9 18"
                     stroke="white"
@@ -208,7 +228,7 @@ export default function LandingPage() {
                   />
                 </svg>
               </Link>
-              <p className="mt-3.5 text-[10px] font-medium tracking-[0.36em] text-white/95">
+              <p className="mt-3.5 text-[10px] font-medium tracking-[0.36em] text-white drop-shadow-[0_1px_4px_rgba(0,0,0,0.65)]">
                 CLICK TO ENTER
               </p>
             </div>
