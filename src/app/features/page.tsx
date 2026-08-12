@@ -1,18 +1,27 @@
-import LandingPlaceholder, {
-  buildPlaceholderMetadata,
-} from "@/components/landing/LandingPlaceholder";
+import type { Metadata } from "next";
+import FeaturesInteractive from "@/components/landing/FeaturesInteractive";
+import MarketingMockupStage from "@/components/landing/MarketingMockupStage";
 
-export const metadata = buildPlaceholderMetadata(
-  "Features",
-  "Key capabilities of EmaX for projects, suppliers, and customers."
-);
+/**
+ * Features: raw Features.png (same stage sizing as landing / PR #98) + hit targets.
+ * Asset is portrait 1024×1536 — stage math uses native aspect.
+ */
+
+export const metadata: Metadata = {
+  title: "Features — EmaX",
+  description:
+    "One assistant. Your whole workflow. From the first material list to the final payment.",
+};
 
 export default function FeaturesPage() {
   return (
-    <LandingPlaceholder
-      eyebrow="FEATURES"
-      title="What Ema can do"
-      description="From voice-powered quotes to project tracking, supplier pricing, and customer payments — EmaX connects the work you already do into one clear flow. Tap Projects, Suppliers, or Customers on the landing page to hear Ema explain each area."
-    />
+    <MarketingMockupStage
+      src="/images/Features.png"
+      alt="EmaX Features — One assistant. Your whole workflow."
+      widthPx={1024}
+      heightPx={1536}
+    >
+      <FeaturesInteractive />
+    </MarketingMockupStage>
   );
 }
