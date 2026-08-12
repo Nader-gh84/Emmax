@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import AboutPageContent from "@/components/marketing/AboutPageContent";
+import AboutPageContent from "@/components/marketing/about/AboutPageContent";
 
 export const metadata: Metadata = {
   title: "About — EmaX",
