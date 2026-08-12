@@ -57,13 +57,13 @@ const HITS: HitLink[] = [
   {
     href: "/about",
     label: "How it works",
-    style: { left: "12%", top: "39%", width: "16%", height: "2.5%" },
+    style: { left: "14%", top: "44%", width: "14%", height: "2%" },
   },
   {
     href: "/signup",
     label: "Get started free",
     // PLACEHOLDER: founding join → signup until waitlist/billing exists
-    style: { left: "80%", top: "41.5%", width: "14%", height: "4%" },
+    style: { left: "80.5%", top: "42%", width: "13.5%", height: "3.5%" },
     className: "landing-cta-hit",
   },
   // Plan cards
@@ -71,28 +71,27 @@ const HITS: HitLink[] = [
     href: "/signup",
     label: "Start free trial — EmaX Pro",
     // PLACEHOLDER: plan selection → signup until billing exists
-    style: { left: "12%", top: "73.5%", width: "40%", height: "4.5%" },
+    style: { left: "13%", top: "74%", width: "38%", height: "3.5%" },
     className: "landing-cta-hit",
   },
   {
     href: "/faq",
     label: "Talk to us — EmaX Teams",
-    style: { left: "56%", top: "73.5%", width: "36%", height: "4.5%" },
+    style: { left: "58%", top: "74%", width: "32%", height: "3.5%" },
     className: "landing-cta-hit",
   },
   {
     href: "/signup",
     label: "Request founding access",
     // PLACEHOLDER: waitlist → signup until dedicated flow exists
-    style: { left: "60%", top: "81.5%", width: "32%", height: "3.5%" },
+    style: { left: "62%", top: "79.5%", width: "28%", height: "3%" },
   },
   {
     href: "/faq",
     label: "View FAQ",
-    style: { left: "68%", top: "91.5%", width: "24%", height: "4%" },
+    style: { left: "70%", top: "93%", width: "22%", height: "3.5%" },
   },
 ];
-
 export default function PricingInteractive() {
   return (
     <div className="absolute inset-0 z-10">
