@@ -24,48 +24,48 @@ const NAV_HITS: HitLink[] = [
   {
     href: "/",
     label: "EmaX home",
-    style: { left: "2.8%", top: "3.2%", width: "9.5%", height: "5.2%" },
+    style: { left: "3%", top: "3%", width: "11%", height: "5.5%" },
   },
   {
     href: "/",
     label: "Home",
-    style: { left: "36.5%", top: "3.8%", width: "5.2%", height: "4%" },
+    style: { left: "52.5%", top: "3.4%", width: "5.5%", height: "4.6%" },
   },
   {
     href: "/about",
     label: "About",
-    style: { left: "42.5%", top: "3.8%", width: "5.5%", height: "4%" },
+    style: { left: "59%", top: "3.4%", width: "6%", height: "4.6%" },
   },
   {
     href: "/features",
     label: "Features",
-    style: { left: "49%", top: "3.8%", width: "7%", height: "4%" },
+    style: { left: "66%", top: "3.4%", width: "7.2%", height: "4.6%" },
   },
   {
     href: "/pricing",
     label: "Pricing",
-    style: { left: "57%", top: "3.8%", width: "6.2%", height: "4%" },
+    style: { left: "74%", top: "3.4%", width: "6.2%", height: "4.6%" },
   },
   {
     href: "/faq",
     label: "FAQ",
-    style: { left: "64%", top: "3.8%", width: "4.2%", height: "4%" },
+    style: { left: "81%", top: "3.4%", width: "4.2%", height: "4.6%" },
   },
   {
     href: "/login",
     label: "Sign in",
-    style: { left: "85.5%", top: "3%", width: "11.5%", height: "5.5%" },
+    style: { left: "86%", top: "2.8%", width: "11%", height: "5.6%" },
   },
   {
     href: "/login",
     label: "Click to enter",
-    style: { left: "45.5%", top: "52%", width: "9%", height: "16%" },
+    style: { left: "45.5%", top: "53%", width: "9%", height: "15%" },
     className: "landing-cta-hit",
   },
   {
     href: "/login",
     label: "Continue to login",
-    style: { left: "88%", top: "89%", width: "9%", height: "6%" },
+    style: { left: "90%", top: "90.5%", width: "7%", height: "5.5%" },
   },
 ];
 
@@ -77,20 +77,19 @@ const VOICE_HITS: Array<{
   {
     topic: "projects",
     label: "01 Projects",
-    style: { left: "26%", top: "87%", width: "14%", height: "9%" },
+    style: { left: "41%", top: "88%", width: "12%", height: "9%" },
   },
   {
     topic: "suppliers",
     label: "02 Suppliers",
-    style: { left: "42%", top: "87%", width: "15%", height: "9%" },
+    style: { left: "54%", top: "88%", width: "13%", height: "9%" },
   },
   {
     topic: "customers",
     label: "03 Customers",
-    style: { left: "58.5%", top: "87%", width: "15.5%", height: "9%" },
+    style: { left: "68%", top: "88%", width: "13%", height: "9%" },
   },
 ];
-
 function VoiceWave({ active }: { active: boolean }) {
   return (
     <span
