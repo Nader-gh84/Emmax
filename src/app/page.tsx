@@ -2,8 +2,14 @@ import type { Metadata } from "next";
 import LandingInteractive from "@/components/landing/LandingInteractive";
 
 /**
- * Landing: raw Landing page 1.png (object-fit: contain) + transparent hit targets.
- * Baked-in mockup UI stays visible; interactive layer handles nav/CTA/voice only.
+ * Landing: raw Landing page 1.png + transparent hit targets.
+ *
+ * Scale rule (no letterboxing, no cropping of the asset):
+ * - Stage is always at least as wide as the viewport AND at least as tall
+ *   as the viewport, while keeping the native 1536×1024 aspect ratio.
+ * - Typical wide screens → width: 100vw, page scrolls vertically a bit.
+ * - Tall/narrow screens → height: 100dvh, page may scroll horizontally.
+ * - Full mockup remains in the document; nothing is clipped by object-fit.
  */
 
 export const metadata: Metadata = {
@@ -17,27 +23,24 @@ const MOCKUP_ASPECT = "1536 / 1024";
 
 export default function LandingPage() {
   return (
-    <main
-      className="box-border flex h-dvh min-h-dvh w-full items-center justify-center overflow-hidden bg-black"
-      style={{ height: "100dvh", minHeight: "100dvh" }}
-    >
+    <main className="box-border min-h-dvh w-full bg-black">
       {/*
-        Stage sized to the mockup aspect ratio inside the viewport so
-        object-fit:contain letterboxing and hit-target % coords stay aligned.
+        Fill the limiting viewport edge without contain-letterboxing.
+        width = max(100vw, 100dvh × aspect) keeps both axes covering the
+        visible window; overflow scrolls so the full image stays reachable.
       */}
       <div
-        className="relative max-h-full max-w-full"
+        className="relative mx-auto"
         style={{
           aspectRatio: MOCKUP_ASPECT,
-          width: "min(100vw, calc(100dvh * 1536 / 1024))",
-          height: "min(100dvh, calc(100vw * 1024 / 1536))",
+          width: "max(100vw, calc(100dvh * 1536 / 1024))",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- raw mockup asset, no optimization */}
         <img
           src="/images/Landing%20page%201.png"
           alt="EmaX — AI assistant for trades"
-          className="absolute inset-0 z-0 box-border h-full w-full object-contain object-center select-none"
+          className="pointer-events-none absolute inset-0 z-0 box-border h-full w-full select-none object-fill"
           draggable={false}
         />
 
