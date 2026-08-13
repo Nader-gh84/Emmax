@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import AboutInteractive from "@/components/landing/AboutInteractive";
-import MarketingMockupStage from "@/components/landing/MarketingMockupStage";
+import AboutPageContent from "@/components/marketing/about/AboutPageContent";
 
 /**
- * About: raw About.png (same stage sizing as landing / PR #98) + hit targets.
+ * About — exact port of public/About.html (approved design).
  */
 
 export const metadata: Metadata = {
@@ -13,14 +12,5 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
-  return (
-    <MarketingMockupStage
-      src="/images/About.png"
-      alt="About EmaX — Built for trades. Backed by AI."
-      widthPx={1536}
-      heightPx={1024}
-    >
-      <AboutInteractive />
-    </MarketingMockupStage>
-  );
+  return <AboutPageContent />;
 }

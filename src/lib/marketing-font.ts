@@ -7,7 +7,7 @@ import { DM_Sans } from "next/font/google";
  */
 export const marketingFont = DM_Sans({
   subsets: ["latin"],
-  weight: ["200", "300", "400", "500", "600"],
+  weight: ["200", "300", "400", "500", "600", "700"],
   style: ["normal"],
   display: "swap",
   variable: "--font-marketing",
