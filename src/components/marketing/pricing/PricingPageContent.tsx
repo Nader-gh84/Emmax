@@ -25,7 +25,6 @@ export default function PricingPageContent() {
             <Link href="/about">About</Link>
             <Link href="/features">Features</Link>
             <Link href="/pricing" className={styles.isActive} aria-current="page">Pricing</Link>
-            <Link href="/faq">FAQ</Link>
           </nav>
 
           <Link className={styles.signin} href="/login">
@@ -253,7 +252,7 @@ export default function PricingPageContent() {
             </ul>
 
             <div style={{marginTop: '56px'}}>
-              <Link className={styles.btnOutline} href="/faq">TALK TO US</Link>
+              <Link className={styles.btnOutline} href="/signup">TALK TO US</Link>
               <p className={styles.planFoot}>We&apos;ll help you find the right plan.</p>
             </div>
           </article>
@@ -336,26 +335,6 @@ export default function PricingPageContent() {
               <p>New features, fixes and improvements – always.</p>
             </div>
           </div>
-        </section>
-
-  
-        <section className={styles.faqCta}>
-          <span className={styles.faqAvatar}>
-            <img src="/Emmax.png" alt="" />
-          </span>
-
-          <div className={styles.faqCopy}>
-            <h3>Got questions before starting?</h3>
-            <p>Check out the FAQ or send me a message.</p>
-          </div>
-
-          <Link className={styles.faqBtn} href="/faq">
-            VIEW FAQ
-            <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
-              <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" strokeWidth="1.7"
-                    strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </Link>
         </section>
 
       </main>

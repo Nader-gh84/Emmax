@@ -43,11 +43,6 @@ const HITS: HitLink[] = [
     style: { left: "67%", top: "1.8%", width: "8%", height: "2.8%" },
   },
   {
-    href: "/faq",
-    label: "FAQ",
-    style: { left: "75.5%", top: "1.8%", width: "6%", height: "2.8%" },
-  },
-  {
     href: "/login",
     label: "Sign in",
     style: { left: "85%", top: "1.3%", width: "12%", height: "3.4%" },

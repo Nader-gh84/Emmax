@@ -47,11 +47,6 @@ const NAV_HITS: HitLink[] = [
     style: { left: "74%", top: "3.4%", width: "6.2%", height: "4.6%" },
   },
   {
-    href: "/faq",
-    label: "FAQ",
-    style: { left: "81%", top: "3.4%", width: "4.2%", height: "4.6%" },
-  },
-  {
     href: "/login",
     label: "Sign in",
     style: { left: "86%", top: "2.8%", width: "11%", height: "5.6%" },
