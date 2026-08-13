@@ -25,7 +25,6 @@ export default function FeaturesPageContent() {
             <Link href="/about">About</Link>
             <Link href="/features" className={styles.isActive} aria-current="page">Features</Link>
             <Link href="/pricing">Pricing</Link>
-            <Link href="/faq">FAQ</Link>
           </nav>
 
           <Link className={styles.signin} href="/login">

@@ -25,7 +25,6 @@ export default function AboutPageContent() {
             </Link>
             <Link href="/features">Features</Link>
             <Link href="/pricing">Pricing</Link>
-            <Link href="/faq">FAQ</Link>
           </nav>
 
           <Link className={styles.signin} href="/login">

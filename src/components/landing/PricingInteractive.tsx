@@ -45,11 +45,6 @@ const HITS: HitLink[] = [
     style: { left: "60%", top: "1.8%", width: "8%", height: "2.8%" },
   },
   {
-    href: "/faq",
-    label: "FAQ",
-    style: { left: "68.5%", top: "1.8%", width: "6%", height: "2.8%" },
-  },
-  {
     href: "/login",
     label: "Sign in",
     style: { left: "85%", top: "1.3%", width: "12%", height: "3.4%" },
@@ -76,7 +71,7 @@ const HITS: HitLink[] = [
     className: "landing-cta-hit",
   },
   {
-    href: "/faq",
+    href: "/signup",
     label: "Talk to us — EmaX Teams",
     style: { left: "58%", top: "74%", width: "32%", height: "3.5%" },
     className: "landing-cta-hit",
@@ -86,11 +81,6 @@ const HITS: HitLink[] = [
     label: "Request founding access",
     // PLACEHOLDER: waitlist → signup until dedicated flow exists
     style: { left: "62%", top: "79.5%", width: "28%", height: "3%" },
-  },
-  {
-    href: "/faq",
-    label: "View FAQ",
-    style: { left: "70%", top: "93%", width: "22%", height: "3.5%" },
   },
 ];
 export default function PricingInteractive() {
