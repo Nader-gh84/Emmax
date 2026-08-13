@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create your account — EmaX</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS — dusk theme (identical to the other pages)
+   ============================================================ */
+:root{
+  --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --night-900:  #08111F;
+  --night-800:  #0C1A2E;
+
+  --text:       #FFFFFF;
+  --text-soft:  #B9C8DF;
+  --text-mute:  #8296B4;
+
+  --blue:       #4D8DFF;
+  --blue-bright:#6BA4FF;
+  --blue-pale:  #A8C6FF;
+  --green:      #4ADE9B;
+  --glow:       rgba(77,141,255,0.55);
+
+  --glass-brd:  rgba(140,180,255,0.16);
+
+  --maxw: 1280px;
+  --pad: 48px;
+  --header-h: 96px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+
+body{
+  margin:0;
+  min-height:100vh;
+  display:flex; flex-direction:column;
+  font-family:var(--font-ui);
+  font-weight:400;
+  color:var(--text);
+  background:var(--night-900);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+a{ text-decoration:none; color:inherit; }
+img{ display:block; max-width:100%; }
+
+.shell{
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--pad);
+  width:100%;
+}
+
+/* ============================================================
+   PAGE BACKDROP
+   ============================================================ */
+.page{
+  position:relative;
+  flex:1;
+  display:flex; flex-direction:column;
+  overflow:hidden;
+  background:var(--night-800);
+}
+
+/* Background photo — drop your own file in as Background.png */
+.page-bg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover; object-position:center;
+  z-index:0; pointer-events:none;
+}
+
+.veil{
+  position:absolute; inset:0;
+  z-index:1; pointer-events:none;
+  background:
+    linear-gradient(180deg,
+      rgba(8,17,31,0.86) 0%,
+      rgba(8,17,31,0.74) 40%,
+      rgba(8,17,31,0.88) 100%),
+    radial-gradient(ellipse at 22% 46%,
+      rgba(77,141,255,0.10) 0%,
+      rgba(77,141,255,0) 58%);
+}
+
+.wave{
+  position:absolute;
+  left:-6%; bottom:-4%;
+  width:66%; height:46%;
+  z-index:2; pointer-events:none;
+  opacity:.32;
+  background:repeating-linear-gradient(172deg,
+    rgba(140,190,255,0.5) 0 1px,
+    transparent 1px 9px);
+  -webkit-mask-image:radial-gradient(ellipse at 26% 88%, #000 6%, transparent 66%);
+          mask-image:radial-gradient(ellipse at 26% 88%, #000 6%, transparent 66%);
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header{
+  position:relative; z-index:10;
+  height:var(--header-h); flex-shrink:0;
+}
+.site-header .shell{ height:100%; display:flex; align-items:center; }
+
+/* Logo — swap Logo.png for your own file */
+.logo{ display:flex; align-items:center; flex-shrink:0; }
+.logo img{ height:42px; width:auto; object-fit:contain; }
+
+.header-right{ margin-left:auto; display:flex; align-items:center; gap:20px; }
+.header-right .prompt{ font-size:14px; color:var(--text-soft); }
+
+.create-btn{
+  display:inline-flex; align-items:center; gap:12px;
+  height:44px; padding:0 22px;
+  border:1px solid rgba(107,164,255,0.55);
+  border-radius:999px;
+  font-size:14px; color:var(--blue-bright);
+  background:rgba(77,141,255,0.07);
+  transition:background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.create-btn:hover{
+  background:rgba(77,141,255,0.16);
+  box-shadow:0 0 26px -6px var(--glow);
+  transform:translateY(-1px);
+}
+.create-btn svg{ width:17px; height:11px; }
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+.main{
+  position:relative; z-index:5;
+  flex:1;
+  display:flex; align-items:center;
+  padding:20px 0 60px;
+}
+.main .shell{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 548px;
+  gap:60px; align-items:center;
+}
+
+/* ---------- left ---------- */
+.welcome{ padding-right:20px; }
+
+.brand-mark{
+  width:96px; height:96px;
+  margin-bottom:34px;
+  border-radius:50%;
+  border:1px solid rgba(140,190,255,0.30);
+  background:radial-gradient(circle at 42% 34%,
+    rgba(140,190,255,0.20) 0%,
+    rgba(77,141,255,0.10) 55%,
+    rgba(77,141,255,0.03) 100%);
+  display:grid; place-items:center;
+  padding:24px;
+  box-shadow:0 0 42px -14px var(--glow), inset 0 0 30px -14px rgba(160,200,255,0.8);
+}
+.brand-mark img{ width:100%; height:auto; object-fit:contain; }
+
+.welcome h1{
+  position:relative;
+  margin:0 0 6px; padding-bottom:16px;
+  font-size:44px; line-height:1.14;
+  font-weight:500; letter-spacing:-0.018em;
+  color:#fff;
+}
+.welcome h1 .accent{
+  color:var(--blue-bright);
+  text-shadow:0 0 34px rgba(107,164,255,0.45);
+}
+.welcome h1::after{
+  content:"";
+  position:absolute; left:0; bottom:0;
+  width:34px; height:3px; border-radius:2px;
+  background:var(--blue-bright);
+  box-shadow:0 0 14px rgba(107,164,255,0.75);
+}
+
+.welcome .lede{
+  margin:0 0 44px;
+  font-size:17px; color:var(--text-soft);
+}
+
+.perks{ display:flex; flex-direction:column; gap:26px; }
+.perk{ display:flex; align-items:flex-start; gap:18px; }
+.perk-icon{
+  flex-shrink:0;
+  width:52px; height:52px; border-radius:50%;
+  background:rgba(77,141,255,0.12);
+  border:1px solid rgba(107,164,255,0.26);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+  box-shadow:inset 0 0 20px -8px rgba(107,164,255,0.85);
+}
+.perk-icon svg{ width:22px; height:22px; }
+.perk h3{ margin:4px 0 6px; font-size:15.5px; font-weight:500; color:#fff; }
+.perk p{ margin:0; font-size:14px; line-height:1.5; color:var(--text-mute); }
+
+/* trial note under the perks */
+.trial-note{
+  margin-top:34px;
+  display:inline-flex; align-items:center; gap:11px;
+  padding:11px 18px;
+  border-radius:999px;
+  border:1px solid rgba(74,222,155,0.28);
+  background:rgba(74,222,155,0.08);
+  font-size:13.5px; color:var(--text-soft);
+}
+.trial-note svg{ width:17px; height:17px; color:var(--green); flex-shrink:0; }
+
+/* ---------- right: form card ---------- */
+.auth-card{
+  padding:38px 40px 40px;
+  border-radius:20px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(180deg, rgba(255,255,255,0.065) 0%, rgba(255,255,255,0.022) 100%);
+  backdrop-filter:blur(14px);
+  box-shadow:0 30px 70px -40px rgba(0,0,0,0.95);
+}
+
+.auth-card h2{
+  margin:0 0 8px;
+  font-size:25px; font-weight:500; letter-spacing:-0.012em; color:#fff;
+}
+.auth-card .sub{ margin:0 0 30px; font-size:14.5px; color:var(--text-mute); }
+
+.field{ margin-bottom:20px; }
+.field label{
+  display:block; margin-bottom:9px;
+  font-size:14px; font-weight:500; color:var(--text-soft);
+}
+
+.row-2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+.input-wrap{ position:relative; display:flex; align-items:center; }
+.input-wrap .lead-icon{
+  position:absolute; left:16px;
+  display:grid; place-items:center;
+  color:var(--text-mute); pointer-events:none;
+}
+.input-wrap .lead-icon svg{ width:18px; height:18px; }
+
+.input-wrap input{
+  width:100%; height:52px;
+  padding:0 48px;
+  border:1px solid rgba(140,180,255,0.20);
+  border-radius:11px;
+  background:rgba(255,255,255,0.05);
+  font-family:inherit; font-size:15px; color:#fff;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.input-wrap input::placeholder{ color:rgba(130,150,180,0.75); }
+.input-wrap input:focus{
+  outline:none;
+  border-color:rgba(107,164,255,0.62);
+  background:rgba(255,255,255,0.075);
+  box-shadow:0 0 0 3px rgba(77,141,255,0.14);
+}
+
+.toggle-eye{
+  position:absolute; right:14px;
+  width:32px; height:32px;
+  display:grid; place-items:center;
+  border:0; border-radius:8px;
+  background:transparent; color:var(--text-mute); cursor:pointer;
+  transition:color .18s ease, background .18s ease;
+}
+.toggle-eye:hover{ color:var(--blue-bright); background:rgba(77,141,255,0.10); }
+.toggle-eye svg{ width:19px; height:19px; }
+
+/* password strength meter */
+.strength{ margin-top:11px; }
+.strength-bars{ display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.strength-bars i{
+  height:4px; border-radius:2px;
+  background:rgba(255,255,255,0.10);
+  transition:background .2s ease;
+}
+.strength-bars i.on{ background:var(--blue-bright); }
+.strength small{
+  display:block; margin-top:8px;
+  font-size:12.5px; color:var(--text-mute);
+}
+
+/* terms checkbox */
+.terms{
+  display:flex; align-items:flex-start; gap:12px;
+  margin:22px 0 26px;
+  font-size:13.5px; line-height:1.6; color:var(--text-mute);
+  cursor:pointer;
+}
+.terms input{
+  flex-shrink:0;
+  appearance:none;
+  width:19px; height:19px; margin-top:1px;
+  border:1px solid rgba(140,180,255,0.34);
+  border-radius:5px;
+  background:rgba(255,255,255,0.05);
+  cursor:pointer;
+  display:grid; place-items:center;
+  transition:background .18s ease, border-color .18s ease;
+}
+.terms input::after{
+  content:"";
+  width:10px; height:6px;
+  border-left:2px solid #fff;
+  border-bottom:2px solid #fff;
+  transform:rotate(-45deg) scale(0);
+  transition:transform .16s ease;
+  margin-top:-2px;
+}
+.terms input:checked{
+  background:var(--blue);
+  border-color:var(--blue);
+}
+.terms input:checked::after{ transform:rotate(-45deg) scale(1); }
+.terms a{ color:var(--blue-bright); }
+.terms a:hover{ color:var(--blue-pale); }
+
+.btn-signup{
+  display:block; width:100%;
+  height:54px;
+  border:0; border-radius:11px;
+  background:var(--blue); color:#fff;
+  font-family:inherit; font-size:16px; font-weight:500;
+  cursor:pointer;
+  transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.btn-signup:hover{
+  background:var(--blue-bright);
+  transform:translateY(-2px);
+  box-shadow:0 0 38px -8px var(--glow);
+}
+
+.divider{
+  display:flex; align-items:center; gap:16px;
+  margin:26px 0 22px;
+  font-size:14px; color:var(--text-mute);
+}
+.divider::before, .divider::after{
+  content:""; flex:1; height:1px;
+  background:rgba(140,180,255,0.18);
+}
+
+.oauth{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.oauth a{
+  display:inline-flex; align-items:center; justify-content:center; gap:11px;
+  height:54px;
+  border:1px solid rgba(140,180,255,0.20);
+  border-radius:11px;
+  background:rgba(255,255,255,0.045);
+  font-size:14.5px; color:#fff;
+  transition:background .18s ease, border-color .18s ease, transform .18s ease;
+}
+.oauth a:hover{
+  background:rgba(255,255,255,0.08);
+  border-color:rgba(107,164,255,0.4);
+  transform:translateY(-1px);
+}
+.oauth svg{ width:20px; height:20px; flex-shrink:0; }
+
+.card-foot{
+  margin:26px 0 0;
+  text-align:center;
+  font-size:14px; color:var(--text-mute);
+}
+.card-foot a{ color:var(--blue-bright); }
+.card-foot a:hover{ color:var(--blue-pale); }
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.site-footer{
+  position:relative; z-index:10; flex-shrink:0;
+  border-top:1px solid rgba(140,180,255,0.12);
+  background:rgba(8,17,31,0.72);
+  backdrop-filter:blur(10px);
+  padding:26px 0;
+}
+.site-footer .shell{
+  display:grid; grid-template-columns:repeat(3,1fr);
+  gap:30px; align-items:center;
+}
+.foot-item{ display:flex; align-items:flex-start; gap:14px; }
+.foot-item .ic{ flex-shrink:0; color:var(--text-mute); margin-top:2px; }
+.foot-item .ic svg{ width:20px; height:20px; }
+.foot-item p{ margin:0; font-size:13.5px; line-height:1.6; color:var(--text-mute); }
+.foot-item p strong{ display:block; font-weight:400; color:var(--text-soft); }
+.foot-item a{
+  display:inline-flex; align-items:center; gap:7px;
+  color:var(--blue-bright); font-size:13.5px;
+  transition:gap .18s ease;
+}
+.foot-item a:hover{ gap:11px; }
+.foot-item a svg{ width:14px; height:10px; }
+
+.foot-copy{ text-align:right; }
+.foot-copy p{ margin:0; font-size:13.5px; line-height:1.6; color:var(--text-mute); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:1099px){
+  :root{ --pad:32px; }
+  .main .shell{ grid-template-columns:1fr; gap:44px; max-width:620px; }
+  .welcome{ padding-right:0; }
+  .brand-mark{ width:80px; height:80px; padding:20px; margin-bottom:26px; }
+  .welcome h1{ font-size:38px; }
+  .welcome .lede{ margin-bottom:34px; }
+
+  .site-footer .shell{ grid-template-columns:1fr; gap:18px; }
+  .foot-copy{ text-align:left; }
+}
+
+@media (max-width:767px){
+  :root{ --pad:20px; --header-h:76px; }
+
+  .header-right .prompt{ display:none; }
+  .logo img{ height:34px; }
+  .create-btn{ height:40px; padding:0 17px; font-size:13px; }
+
+  .welcome h1{ font-size:31px; }
+  .welcome .lede{ font-size:15.5px; }
+  .perk-icon{ width:46px; height:46px; }
+
+  .auth-card{ padding:28px 22px 30px; }
+  .auth-card h2{ font-size:22px; }
+  .row-2{ grid-template-columns:1fr; gap:20px; }
+  .oauth{ grid-template-columns:1fr; }
+  .wave{ display:none; }
+}
+
+a:focus-visible, button:focus-visible, input:focus-visible{
+  outline:2px solid var(--blue-bright); outline-offset:3px; border-radius:6px;
+}
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <!-- Background photo — replace Background.png with your own file -->
+  <img class="page-bg" src="Background.png" alt="" aria-hidden="true">
+  <div class="veil" aria-hidden="true"></div>
+  <div class="wave" aria-hidden="true"></div>
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="site-header">
+    <div class="shell">
+      <a class="logo" href="/" aria-label="EmaX home">
+        <!-- Replace Logo.png with your own logo file -->
+        <img src="Logo.png" alt="EmaX">
+      </a>
+
+      <div class="header-right">
+        <span class="prompt">Already have an account?</span>
+        <a class="create-btn" href="/login">
+          Sign in
+          <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+            <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN ==================== -->
+  <div class="main">
+    <div class="shell">
+
+      <!-- ---------- left ---------- -->
+      <section class="welcome">
+        <div class="brand-mark" aria-hidden="true">
+          <img src="Logo.png" alt="">
+        </div>
+
+        <h1>Start <span class="accent">free</span></h1>
+        <p class="lede">Your first project is minutes away.</p>
+
+        <div class="perks">
+          <div class="perk">
+            <span class="perk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <div>
+              <h3>Speak your first list</h3>
+              <p>Say what you need and I'll build the material list.</p>
+            </div>
+          </div>
+
+          <div class="perk">
+            <span class="perk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M5.5 2.5h8L18.5 7.5v14h-13v-19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M13.5 2.5v5h5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m8.5 14.5 2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <div>
+              <h3>Quote in minutes</h3>
+              <p>Supplier prices in, professional quote out.</p>
+            </div>
+          </div>
+
+          <div class="perk">
+            <span class="perk-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M12 2.8 4.8 5.6v6c0 4.3 3 7.9 7.2 9.1 4.2-1.2 7.2-4.8 7.2-9.1v-6L12 2.8Z"
+                      stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="m9 11.9 2.1 2.1 4-4" stroke="currentColor" stroke-width="1.7"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <div>
+              <h3>Nothing to lose</h3>
+              <p>No credit card. Cancel whenever you want.</p>
+            </div>
+          </div>
+        </div>
+
+        <span class="trial-note">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.6"/>
+            <path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.8"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          14-day free trial · No credit card required
+        </span>
+      </section>
+
+      <!-- ---------- right: form card ---------- -->
+      <section class="auth-card">
+        <h2>Create your account</h2>
+        <p class="sub">Set up EmaX for your trades business.</p>
+
+        <div class="field">
+          <label for="name">Full name</label>
+          <div class="input-wrap">
+            <span class="lead-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="7" r="3.2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M3.8 17c0-3.2 2.8-5.6 6.2-5.6s6.2 2.4 6.2 5.6"
+                      stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <input id="name" type="text" placeholder="Your name" autocomplete="name">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="business">Business name</label>
+          <div class="input-wrap">
+            <span class="lead-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
+                <rect x="2.6" y="6" width="14.8" height="11" rx="2.2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M7 6V4.6a1.8 1.8 0 0 1 1.8-1.8h2.4A1.8 1.8 0 0 1 13 4.6V6"
+                      stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <input id="business" type="text" placeholder="e.g. Klein Electric" autocomplete="organization">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="email">Email</label>
+          <div class="input-wrap">
+            <span class="lead-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
+                <rect x="2" y="4" width="16" height="12" rx="2.4" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m2.8 5.5 7.2 5.2 7.2-5.2" stroke="currentColor" stroke-width="1.5"
+                      stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <span class="lead-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
+                <rect x="3.6" y="8.4" width="12.8" height="9" rx="2.2" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M6.6 8.4V6a3.4 3.4 0 0 1 6.8 0v2.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <input id="password" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+            <button class="toggle-eye" type="button" aria-label="Show password" data-toggle-password>
+              <svg viewBox="0 0 20 20" fill="none">
+                <path d="M1.8 10S4.9 4.6 10 4.6 18.2 10 18.2 10 15.1 15.4 10 15.4 1.8 10 1.8 10Z"
+                      stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="strength">
+            <div class="strength-bars" aria-hidden="true">
+              <i></i><i></i><i></i><i></i>
+            </div>
+            <small data-strength-label>Use 8+ characters with a number or symbol.</small>
+          </div>
+        </div>
+
+        <label class="terms">
+          <input type="checkbox" id="terms">
+          <span>I agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a>.</span>
+        </label>
+
+        <button class="btn-signup" type="submit">Create account</button>
+
+        <div class="divider">or continue with</div>
+
+        <div class="oauth">
+          <a href="#" aria-label="Continue with Google">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M19.6 10.2c0-.7-.06-1.35-.18-2H10v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.75 3-4.3 3-7.3Z" fill="#4285F4"/>
+              <path d="M10 20c2.7 0 4.96-.9 6.6-2.4l-3.2-2.5c-.9.6-2.05.95-3.4.95-2.6 0-4.8-1.75-5.6-4.1H1.1v2.6A10 10 0 0 0 10 20Z" fill="#34A853"/>
+              <path d="M4.4 11.9a6 6 0 0 1 0-3.83V5.47H1.1a10 10 0 0 0 0 9.06l3.3-2.6Z" fill="#FBBC05"/>
+              <path d="M10 3.98c1.47 0 2.79.5 3.83 1.5l2.84-2.84C14.96.99 12.7 0 10 0A10 10 0 0 0 1.1 5.47l3.3 2.6C5.2 5.73 7.4 3.98 10 3.98Z" fill="#EA4335"/>
+            </svg>
+            Continue with Google
+          </a>
+
+          <a href="#" aria-label="Continue with Microsoft">
+            <svg viewBox="0 0 20 20" aria-hidden="true">
+              <rect x="1" y="1" width="8.4" height="8.4" fill="#F25022"/>
+              <rect x="10.6" y="1" width="8.4" height="8.4" fill="#7FBA00"/>
+              <rect x="1" y="10.6" width="8.4" height="8.4" fill="#00A4EF"/>
+              <rect x="10.6" y="10.6" width="8.4" height="8.4" fill="#FFB900"/>
+            </svg>
+            Continue with Microsoft
+          </a>
+        </div>
+
+        <p class="card-foot">Already have an account? <a href="/login">Sign in</a></p>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="site-footer">
+    <div class="shell">
+
+      <div class="foot-item">
+        <span class="ic" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none">
+            <rect x="3.6" y="8.4" width="12.8" height="9" rx="2.2" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M6.6 8.4V6a3.4 3.4 0 0 1 6.8 0v2.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <p>
+          <strong>Your data is safe with us.</strong>
+          We never share your information.
+        </p>
+      </div>
+
+      <div class="foot-item">
+        <span class="ic" aria-hidden="true">
+          <svg viewBox="0 0 20 20" fill="none">
+            <path d="M3.2 12.4V10a6.8 6.8 0 0 1 13.6 0v2.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <rect x="1.8" y="11.6" width="3.9" height="5.6" rx="1.7" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="14.3" y="11.6" width="3.9" height="5.6" rx="1.7" stroke="currentColor" stroke-width="1.5"/>
+          </svg>
+        </span>
+        <p>
+          <strong>Need help?</strong>
+          <a href="/support">
+            Contact support
+            <svg viewBox="0 0 14 10" fill="none" aria-hidden="true">
+              <path d="M0 5h12m0 0L8.5 1.5M12 5 8.5 8.5" stroke="currentColor" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+        </p>
+      </div>
+
+      <div class="foot-copy">
+        <p>© 2024 EmaX Inc.<br>All rights reserved.</p>
+      </div>
+
+    </div>
+  </footer>
+</div>
+
+<script>
+// show / hide password
+document.querySelector('[data-toggle-password]').addEventListener('click', function(){
+  const input = document.getElementById('password');
+  const shown = input.type === 'text';
+  input.type = shown ? 'password' : 'text';
+  this.setAttribute('aria-label', shown ? 'Show password' : 'Hide password');
+});
+
+// live password strength
+const pw    = document.getElementById('password');
+const bars  = document.querySelectorAll('.strength-bars i');
+const label = document.querySelector('[data-strength-label]');
+const copy  = ['Use 8+ characters with a number or symbol.','Weak password','Fair password','Good password','Strong password'];
+
+pw.addEventListener('input', () => {
+  const v = pw.value;
+  let score = 0;
+  if (v.length >= 8)               score++;
+  if (/[A-Z]/.test(v))             score++;
+  if (/[0-9]/.test(v))             score++;
+  if (/[^A-Za-z0-9]/.test(v))      score++;
+  if (!v) score = 0;
+
+  bars.forEach((b, i) => b.classList.toggle('on', i < score));
+  label.textContent = copy[score];
+});
+</script>
+
+</body>
+</html>

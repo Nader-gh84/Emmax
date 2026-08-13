@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing — EmaX</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS — dusk theme (identical to About)
+   ============================================================ */
+:root{
+  --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --night-900:  #08111F;
+  --night-800:  #0C1A2E;
+  --night-700:  #12263D;
+
+  --text:       #FFFFFF;
+  --text-soft:  #B9C8DF;
+  --text-mute:  #8296B4;
+
+  --blue:       #4D8DFF;
+  --blue-bright:#6BA4FF;
+  --blue-pale:  #A8C6FF;
+  --green:      #4ADE9B;
+  --glow:       rgba(77,141,255,0.55);
+
+  --glass:      rgba(255,255,255,0.045);
+  --glass-brd:  rgba(140,180,255,0.16);
+
+  --maxw: 1180px;
+  --pad: 48px;
+  --header-h: 88px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+
+body{
+  margin:0;
+  font-family:var(--font-ui);
+  font-weight:400;
+  color:var(--text);
+  background:var(--night-900);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+a{ text-decoration:none; color:inherit; }
+img{ display:block; max-width:100%; }
+ul{ margin:0; padding:0; list-style:none; }
+
+.shell{
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--pad);
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header{
+  position:absolute;
+  top:0; left:0; right:0;
+  z-index:40;
+  height:var(--header-h);
+}
+.site-header .shell{
+  height:100%;
+  display:flex; align-items:center; gap:40px;
+}
+
+/* Logo — swap Logo.png for your own file */
+.logo{ display:flex; align-items:center; flex-shrink:0; }
+.logo img{
+  height:40px;          /* ← adjust to taste */
+  width:auto;
+  object-fit:contain;
+}
+
+.nav{ margin-left:auto; display:flex; align-items:center; gap:40px; height:100%; }
+.nav a{
+  position:relative; height:100%;
+  display:flex; align-items:center;
+  font-size:13px; font-weight:400;
+  letter-spacing:0.11em; text-transform:uppercase;
+  color:rgba(255,255,255,0.78);
+  transition:color .2s ease;
+}
+.nav a:hover{ color:#fff; }
+.nav a.is-active{ color:#fff; }
+.nav a.is-active::after{
+  content:""; position:absolute;
+  left:-4px; right:-4px; bottom:26px;
+  height:1.5px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, #fff 20%, #fff 80%, transparent);
+}
+
+.signin{
+  margin-left:32px;
+  display:inline-flex; align-items:center; gap:15px;
+  height:42px; padding:0 23px;
+  border:1px solid rgba(255,255,255,0.42);
+  border-radius:999px;
+  font-size:12px; font-weight:400;
+  letter-spacing:0.14em; text-transform:uppercase;
+  color:#fff;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.signin:hover{
+  border-color:var(--blue-bright);
+  background:rgba(77,141,255,0.12);
+  box-shadow:0 0 24px -6px var(--glow);
+  transform:translateY(-1px);
+}
+.signin svg{ width:17px; height:11px; }
+
+.menu-btn{
+  display:none; margin-left:auto;
+  width:40px; height:40px; place-items:center;
+  border:1px solid rgba(255,255,255,0.28);
+  border-radius:11px;
+  background:rgba(255,255,255,0.04);
+  color:#fff; cursor:pointer;
+}
+.menu-btn svg{ width:18px; height:13px; }
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero{
+  position:relative;
+  overflow:hidden;
+  padding-top:var(--header-h);
+  background:var(--night-800);
+}
+
+/* Background photo — drop your own file in as Background.png */
+.hero-bg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover;
+  object-position:center bottom;
+  z-index:0; pointer-events:none;
+}
+
+.veil{
+  position:absolute; inset:0;
+  z-index:1; pointer-events:none;
+  background:
+    linear-gradient(96deg,
+      rgba(8,17,31,0.90) 0%,
+      rgba(8,17,31,0.70) 26%,
+      rgba(8,17,31,0.28) 42%,
+      rgba(8,17,31,0) 56%),
+    linear-gradient(180deg,
+      rgba(8,17,31,0.48) 0%,
+      rgba(8,17,31,0) 26%,
+      rgba(8,17,31,0) 74%,
+      rgba(8,17,31,0.85) 100%);
+}
+
+.hero-inner{
+  position:relative; z-index:3;
+  display:grid;
+  grid-template-columns:minmax(0,45%) minmax(0,55%);
+  align-items:end;
+  min-height:430px;
+}
+
+.hero-copy{ padding:34px 0 44px; }
+
+.eyebrow{
+  margin:0 0 20px;
+  font-size:12.5px; font-weight:400;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--blue-pale);
+}
+
+.hero-title{
+  margin:0;
+  font-size:42px; line-height:1.24;
+  font-weight:400; letter-spacing:-0.012em;
+  color:#fff;
+  text-shadow:0 2px 30px rgba(6,14,26,0.55);
+}
+.hero-title .accent{
+  color:var(--blue-bright);
+  text-shadow:0 0 34px rgba(77,141,255,0.45);
+}
+
+.hero-lede{
+  margin:22px 0 0; max-width:340px;
+  font-size:15.5px; line-height:1.66; color:var(--text-soft);
+}
+
+/* three benefits */
+.benefits{ display:flex; margin-top:38px; }
+.benefit{
+  flex:0 0 auto;
+  padding-right:30px; margin-right:30px;
+  border-right:1px solid rgba(140,180,255,0.18);
+}
+.benefit:last-child{ border-right:0; margin-right:0; padding-right:0; }
+
+.benefit-icon{
+  width:38px; height:38px; border-radius:50%;
+  background:rgba(77,141,255,0.14);
+  border:1px solid rgba(107,164,255,0.28);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+  box-shadow:inset 0 0 16px -8px rgba(107,164,255,0.8);
+  margin-bottom:14px;
+}
+.benefit-icon svg{ width:17px; height:17px; }
+
+.benefit h4{ margin:0 0 6px; font-size:13.5px; font-weight:500; color:#fff; }
+.benefit p{ margin:0; font-size:12.5px; line-height:1.58; color:var(--text-mute); max-width:122px; }
+
+/* hero photo */
+.hero-figure{
+  position:relative;
+  align-self:end;
+  display:flex; align-items:flex-end; justify-content:center;
+  min-height:430px;
+}
+.hero-photo{
+  position:relative; z-index:2;
+  width:100%; max-width:530px; height:auto;
+  object-fit:contain; object-position:bottom center;
+  filter:drop-shadow(0 24px 60px rgba(4,10,20,0.6));
+}
+
+/* ============================================================
+   PAGE BODY BACKDROP
+   ============================================================ */
+.page-body{
+  position:relative;
+  background:linear-gradient(180deg, #0A1524 0%, #0A1322 60%, #08111F 100%);
+  padding-bottom:44px;
+}
+
+/* ============================================================
+   FOUNDING CREW BANNER
+   ============================================================ */
+.founding{
+  margin-top:28px;
+  padding:30px 34px;
+  border-radius:20px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%);
+  backdrop-filter:blur(10px);
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.02fr) 172px;
+  gap:30px;
+  align-items:start;
+}
+
+.founding-lead{ display:flex; gap:18px; }
+
+.crown-badge{
+  flex-shrink:0;
+  width:62px; height:62px; border-radius:50%;
+  background:rgba(77,141,255,0.14);
+  border:1px solid rgba(107,164,255,0.32);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+  box-shadow:inset 0 0 22px -8px rgba(107,164,255,0.9), 0 0 24px -12px var(--glow);
+}
+.crown-badge svg{ width:30px; height:30px; }
+
+.founding-kicker{
+  margin:2px 0 10px;
+  font-size:12.5px; font-weight:500;
+  letter-spacing:0.1em; color:var(--blue-pale);
+}
+.founding-lead h2{
+  margin:0 0 12px;
+  font-size:22px; line-height:1.36; font-weight:500;
+  color:#fff; letter-spacing:-0.008em;
+}
+.founding-lead p{
+  margin:0 0 16px; max-width:340px;
+  font-size:13px; line-height:1.7; color:var(--text-mute);
+}
+.how-link{
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:13.5px; color:var(--blue-bright);
+  transition:gap .18s ease;
+}
+.how-link:hover{ gap:12px; }
+.how-link svg{ width:15px; height:11px; }
+
+/* progress column */
+.founding-progress .claimed{ margin:0 0 12px; font-size:14px; color:var(--text-soft); }
+.founding-progress .claimed strong{ color:var(--blue-bright); font-weight:500; }
+
+.pips{
+  display:grid; grid-template-columns:repeat(20,1fr);
+  gap:3px; margin-bottom:18px;
+}
+.pips i{ height:11px; border-radius:2px; background:rgba(255,255,255,0.10); }
+.pips i.on{
+  background:var(--blue-bright);
+  box-shadow:0 0 10px -2px rgba(107,164,255,0.8);
+}
+
+.on-list{
+  display:flex; align-items:center; gap:9px;
+  margin:0 0 8px;
+  font-size:14.5px; font-weight:500; color:var(--green);
+}
+.on-list svg{ width:17px; height:17px; flex-shrink:0; }
+
+.founding-progress .secured{ margin:0 0 12px; font-size:13px; color:#fff; }
+.founding-progress .note{ margin:0; font-size:12.5px; line-height:1.72; color:var(--text-mute); }
+
+/* spots-left card */
+.spots-card{
+  padding:18px 16px 20px;
+  border-radius:16px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(140,180,255,0.20);
+  box-shadow:0 18px 40px -28px rgba(0,0,0,0.9);
+  text-align:center;
+}
+.spots-card .label{ margin:0; font-size:12.5px; color:var(--text-mute); }
+.spots-card .count{
+  margin:2px 0;
+  font-size:42px; font-weight:500; line-height:1.15;
+  color:var(--blue-bright);
+  text-shadow:0 0 30px rgba(107,164,255,0.5);
+}
+.spots-card .urge{ margin:0 0 14px; font-size:12.5px; color:var(--text-soft); }
+
+.btn-solid{
+  display:block; width:100%;
+  padding:11px 10px;
+  border:0; border-radius:8px;
+  background:var(--blue); color:#fff;
+  font-family:inherit;
+  font-size:11.5px; font-weight:600; letter-spacing:0.06em;
+  text-align:center; cursor:pointer;
+  transition:background .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.btn-solid:hover{
+  background:var(--blue-bright);
+  transform:translateY(-1px);
+  box-shadow:0 0 28px -6px var(--glow);
+}
+
+/* ============================================================
+   PLAN CARDS
+   ============================================================ */
+.plans{
+  margin-top:28px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:30px; align-items:start;
+}
+
+.plan{
+  border-radius:18px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%);
+  backdrop-filter:blur(10px);
+  padding:26px 28px 28px;
+}
+.plan--featured{
+  border:1.5px solid rgba(107,164,255,0.55);
+  background:linear-gradient(180deg, rgba(77,141,255,0.10) 0%, rgba(255,255,255,0.02) 100%);
+  box-shadow:0 0 44px -18px var(--glow);
+}
+
+.plan-badge{
+  display:inline-block;
+  padding:6px 12px; margin-bottom:14px;
+  border-radius:6px;
+  background:rgba(77,141,255,0.16);
+  border:1px solid rgba(107,164,255,0.26);
+  font-size:10.5px; font-weight:500; letter-spacing:0.09em;
+  color:var(--blue-pale); text-transform:uppercase;
+}
+
+.plan h3{
+  margin:0 0 8px;
+  font-size:25px; font-weight:500; letter-spacing:-0.012em; color:#fff;
+}
+.plan .sub{ margin:0 0 22px; font-size:13.5px; color:var(--text-mute); }
+
+.price{ display:flex; align-items:baseline; gap:9px; margin-bottom:22px; }
+.price .amount{
+  font-size:48px; font-weight:500; line-height:1;
+  color:var(--blue-bright); letter-spacing:-0.02em;
+  text-shadow:0 0 34px rgba(107,164,255,0.4);
+}
+.price .period{ font-size:14px; color:var(--text-soft); }
+.price--custom .amount{ font-size:36px; }
+
+.plan-body{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 142px;
+  gap:22px; align-items:start;
+}
+
+.feature-list li{
+  display:flex; align-items:flex-start; gap:9px;
+  margin-bottom:11px;
+  font-size:13px; line-height:1.44; color:var(--text-soft);
+}
+.feature-list li:last-child{ margin-bottom:0; }
+.feature-list svg{
+  width:15px; height:15px; flex-shrink:0;
+  margin-top:1px; color:var(--blue-bright);
+}
+
+.trial-box{
+  padding:20px 14px;
+  border-radius:14px;
+  background:rgba(77,141,255,0.10);
+  border:1px solid rgba(107,164,255,0.22);
+  text-align:center;
+}
+.trial-box .ico{
+  width:42px; height:42px; margin:0 auto 12px;
+  border-radius:11px;
+  background:rgba(255,255,255,0.07);
+  border:1px solid rgba(140,180,255,0.2);
+  display:grid; place-items:center; color:var(--blue-bright);
+}
+.trial-box .ico svg{ width:20px; height:20px; }
+.trial-box h4{ margin:0 0 8px; font-size:14.5px; font-weight:500; color:var(--blue-pale); }
+.trial-box p{ margin:0; font-size:12.5px; line-height:1.52; color:var(--text-mute); }
+
+.btn-primary{
+  display:block; width:100%;
+  margin-top:24px; padding:14px 10px;
+  border:0; border-radius:9px;
+  background:var(--blue); color:#fff;
+  font-family:inherit;
+  font-size:13px; font-weight:600; letter-spacing:0.09em;
+  text-align:center; cursor:pointer;
+  transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.btn-primary:hover{
+  background:var(--blue-bright);
+  transform:translateY(-2px);
+  box-shadow:0 0 36px -6px var(--glow);
+}
+
+.btn-outline{
+  display:block; width:100%;
+  padding:13px 10px;
+  border:1px solid rgba(107,164,255,0.5);
+  border-radius:9px;
+  background:rgba(77,141,255,0.06); color:var(--blue-bright);
+  font-family:inherit;
+  font-size:12.5px; font-weight:500; letter-spacing:0.09em;
+  text-align:center; cursor:pointer;
+  transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.btn-outline:hover{
+  background:rgba(77,141,255,0.16);
+  transform:translateY(-1px);
+  box-shadow:0 0 26px -8px var(--glow);
+}
+
+.plan-foot{ margin:12px 0 0; text-align:center; font-size:12.5px; color:var(--text-mute); }
+
+.teams-head{ display:flex; align-items:center; gap:14px; margin-bottom:20px; }
+.teams-icon{ width:38px; height:38px; flex-shrink:0; display:grid; place-items:center; color:var(--blue-bright); }
+.teams-icon svg{ width:26px; height:26px; }
+.teams-head h3{ margin:0 0 4px; }
+.teams-head .sub{ margin:0; }
+
+/* ============================================================
+   WAITLIST STRIP
+   ============================================================ */
+.waitlist{
+  margin-top:28px;
+  padding:26px 32px;
+  border-radius:18px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(120deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.018) 100%);
+  backdrop-filter:blur(10px);
+  display:grid;
+  grid-template-columns:78px minmax(0,1fr) 250px;
+  gap:22px; align-items:center;
+}
+.hourglass{
+  width:70px; height:70px; border-radius:50%;
+  background:rgba(77,141,255,0.12);
+  border:1px solid rgba(107,164,255,0.28);
+  display:grid; place-items:center; color:var(--blue-bright);
+  box-shadow:inset 0 0 22px -8px rgba(107,164,255,0.8);
+}
+.hourglass svg{ width:30px; height:30px; }
+
+.waitlist-copy .k{ margin:0 0 3px; font-size:14.5px; color:var(--blue-bright); }
+.waitlist-copy h3{ margin:0 0 10px; font-size:15px; font-weight:500; color:#fff; }
+.waitlist-copy p{ margin:0; max-width:420px; font-size:12.5px; line-height:1.72; color:var(--text-mute); }
+
+.waitlist-cta{ text-align:center; }
+.waitlist-cta .btn-outline{ margin-bottom:10px; }
+.waitlist-cta small{ font-size:12px; color:var(--text-mute); }
+
+/* ============================================================
+   TRUST ROW
+   ============================================================ */
+.trust{
+  margin-top:36px;
+  display:grid; grid-template-columns:repeat(4,1fr); gap:26px;
+}
+.trust-item{ display:flex; gap:13px; align-items:flex-start; }
+.trust-item .ic{ flex-shrink:0; color:var(--blue-bright); margin-top:1px; }
+.trust-item .ic svg{ width:22px; height:22px; }
+.trust-item h4{ margin:0 0 5px; font-size:13.5px; font-weight:500; color:#fff; }
+.trust-item p{ margin:0; font-size:12.5px; line-height:1.62; color:var(--text-mute); }
+
+/* ============================================================
+   FAQ FOOTER CTA
+   ============================================================ */
+.faq-cta{
+  margin:32px 0 0;
+  padding:16px 22px 16px 16px;
+  border-radius:16px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(120deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.02) 100%);
+  backdrop-filter:blur(10px);
+  display:flex; align-items:center; gap:20px;
+}
+.faq-avatar{
+  width:62px; height:62px; flex-shrink:0;
+  border-radius:50%; overflow:hidden;
+  border:1px solid rgba(140,180,255,0.3);
+  background:rgba(77,141,255,0.12);
+  box-shadow:0 0 24px -10px var(--glow);
+}
+.faq-avatar img{ width:100%; height:100%; object-fit:cover; object-position:center 18%; }
+
+.faq-copy{ flex:1; }
+.faq-copy h3{ margin:0 0 5px; font-size:16px; font-weight:500; color:#fff; }
+.faq-copy p{ margin:0; font-size:13px; color:var(--text-mute); }
+
+.faq-btn{
+  flex-shrink:0;
+  display:inline-flex; align-items:center; gap:12px;
+  padding:12px 22px;
+  border:1px solid rgba(107,164,255,0.5);
+  border-radius:999px;
+  font-size:12.5px; font-weight:500; letter-spacing:0.1em;
+  color:#fff; background:rgba(77,141,255,0.08);
+  transition:background .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.faq-btn:hover{
+  background:rgba(77,141,255,0.18);
+  transform:translateY(-1px);
+  box-shadow:0 0 28px -8px var(--glow);
+}
+.faq-btn svg{ width:16px; height:11px; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:1023px){
+  :root{ --pad:28px; }
+
+  .nav{ gap:22px; }
+  .nav a{ font-size:12px; letter-spacing:0.08em; }
+  .signin{ margin-left:18px; padding:0 17px; }
+  .logo img{ height:34px; }
+
+  .hero-inner{ grid-template-columns:1fr; }
+  .hero-copy{ padding-bottom:20px; }
+  .hero-figure{ min-height:0; }
+  .hero-lede{ max-width:none; }
+  .veil{
+    background:linear-gradient(180deg,
+      rgba(8,17,31,0.90) 0%,
+      rgba(8,17,31,0.55) 42%,
+      rgba(8,17,31,0.10) 70%,
+      rgba(8,17,31,0.9) 100%);
+  }
+
+  .founding{ grid-template-columns:1fr; gap:24px; }
+  .spots-card{ max-width:220px; }
+
+  .plans{ grid-template-columns:1fr; gap:22px; }
+
+  .waitlist{ grid-template-columns:1fr; text-align:left; }
+  .waitlist-cta{ text-align:left; }
+  .waitlist-cta .btn-outline{ max-width:280px; }
+
+  .trust{ grid-template-columns:repeat(2,1fr); gap:22px; }
+}
+
+@media (max-width:767px){
+  :root{ --pad:20px; --header-h:70px; }
+
+  .nav, .signin{ display:none; }
+  .menu-btn{ display:grid; }
+  .logo img{ height:30px; }
+
+  .hero-title{ font-size:31px; }
+
+  .benefits{ flex-wrap:wrap; gap:22px 0; }
+  .benefit{ flex:0 0 50%; padding-right:16px; margin-right:0; border-right:0; }
+  .benefit p{ max-width:none; }
+
+  .founding{ padding:22px 20px; }
+  .founding-lead{ flex-direction:column; gap:14px; }
+  .plan{ padding:22px 20px 24px; }
+  .plan-body{ grid-template-columns:1fr; }
+
+  .trust{ grid-template-columns:1fr; }
+
+  .faq-cta{ flex-direction:column; align-items:flex-start; gap:14px; }
+  .faq-btn{ width:100%; justify-content:center; }
+}
+
+a:focus-visible, button:focus-visible{
+  outline:2px solid var(--blue-bright); outline-offset:3px; border-radius:6px;
+}
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="site-header">
+  <div class="shell">
+    <a class="logo" href="/" aria-label="EmaX home">
+      <!-- Replace Logo.png with your own logo file -->
+      <img src="Logo.png" alt="EmaX">
+    </a>
+
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/features">Features</a>
+      <a href="/pricing" class="is-active" aria-current="page">Pricing</a>
+      <a href="/faq">FAQ</a>
+    </nav>
+
+    <a class="signin" href="/login">
+      Sign in
+      <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+        <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+
+    <button class="menu-btn" aria-label="Open menu">
+      <svg viewBox="0 0 20 14" fill="none" aria-hidden="true">
+        <path d="M0 1h20M0 7h20M0 13h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <!-- Background photo — replace Background.png with your own file -->
+  <img class="hero-bg" src="Background.png" alt="" aria-hidden="true">
+  <div class="veil" aria-hidden="true"></div>
+
+  <div class="shell">
+    <div class="hero-inner">
+
+      <div class="hero-copy">
+        <p class="eyebrow">Pricing</p>
+
+        <h1 class="hero-title">
+          Less paperwork.<br>
+          More time to <span class="accent">build.</span>
+        </h1>
+
+        <p class="hero-lede">
+          I handle the busy work so you can focus on what really matters.
+        </p>
+
+        <div class="benefits">
+          <div class="benefit">
+            <span class="benefit-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z"
+                      stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <h4>Quick setup</h4>
+            <p>Get started in minutes</p>
+          </div>
+
+          <div class="benefit">
+            <span class="benefit-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
+                      stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <h4>Voice-first</h4>
+            <p>Talk, I'll handle the rest</p>
+          </div>
+
+          <div class="benefit">
+            <span class="benefit-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2.8 4.8 5.6v6c0 4.3 3 7.9 7.2 9.1 4.2-1.2 7.2-4.8 7.2-9.1v-6L12 2.8Z"
+                      stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+                <path d="m9 11.9 2.1 2.1 4-4"
+                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <h4>Secure &amp; Private</h4>
+            <p>Your data stays yours</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-figure">
+        <!-- Replace Emmax.png with your own transparent cut-out -->
+        <img class="hero-photo" src="Emmax.png"
+             alt="Ema, the EmaX AI assistant, working at a laptop">
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="page-body">
+<main class="shell">
+
+  <!-- ==================== FOUNDING CREW ==================== -->
+  <section class="founding">
+
+    <div class="founding-lead">
+      <span class="crown-badge" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none">
+          <path d="M6 12.5 9.6 16l3.2-5.2L16 15l3.2-4.2L22.4 16 26 12.5v7.2H6v-7.2Z"
+                stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <circle cx="16" cy="7" r="1.7" fill="currentColor"/>
+          <path d="M9.5 23.5c1.6-1.9 3.9-2.9 6.5-2.9s4.9 1 6.5 2.9"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+
+      <div>
+        <p class="founding-kicker">FOUNDING CREW · 20 SPOTS ONLY</p>
+        <h2>Help shape EmaX.<br>Get EmaX free for life.</h2>
+        <p>Join my early user program, use EmaX on real jobs and help me improve through regular feedback.</p>
+        <a class="how-link" href="/about">
+          How it works
+          <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+            <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.6"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+      </div>
+    </div>
+
+    <div class="founding-progress">
+      <p class="claimed"><strong>18 / 20</strong> spots claimed</p>
+
+      <div class="pips" aria-hidden="true">
+        <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+        <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+        <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+        <i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i>
+      </div>
+
+      <p class="on-list">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="10" cy="10" r="8.6" stroke="currentColor" stroke-width="1.6"/>
+          <path d="m6.4 10.2 2.4 2.4 4.8-4.8" stroke="currentColor" stroke-width="1.8"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        You're #18 on the list!
+      </p>
+
+      <p class="secured">You've secured your spot in the EmaX Founding Crew.</p>
+      <p class="note">Your EmaX access stays free as long as you remain an active Founding Crew member and provide regular product feedback.</p>
+    </div>
+
+    <div class="spots-card">
+      <p class="label">Spots left</p>
+      <p class="count">2</p>
+      <p class="urge">Don't miss it!</p>
+      <a class="btn-solid" href="/signup">GET STARTED FREE</a>
+    </div>
+
+  </section>
+
+  <!-- ==================== PLANS ==================== -->
+  <section class="plans">
+
+    <article class="plan plan--featured">
+      <span class="plan-badge">Full EmaX Experience</span>
+      <h3>EmaX Pro</h3>
+      <p class="sub">Everything you need to run your jobs smarter.</p>
+
+      <div class="price">
+        <span class="amount">$29</span>
+        <span class="period">CAD / month</span>
+      </div>
+
+      <div class="plan-body">
+        <ul class="feature-list">
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Voice material lists</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Supplier RFQ &amp; pricing</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Smart inbox for all replies</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Quotes &amp; pre-invoices</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Customer management</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Project management</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Employees &amp; work hours</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Project financial tracking</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Today – daily assistant</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Email &amp; in-app notifications</li>
+          <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Continuous updates</li>
+        </ul>
+
+        <div class="trial-box">
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="3" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M12 12.5v4.5M9.75 14.75h4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <h4>14-Day Free Trial</h4>
+          <p>No credit card required.</p>
+        </div>
+      </div>
+
+      <a class="btn-primary" href="/signup">START FREE TRIAL</a>
+      <p class="plan-foot">Cancel anytime. No commitment.</p>
+    </article>
+
+    <article class="plan">
+      <div class="teams-head">
+        <span class="teams-icon" aria-hidden="true">
+          <svg viewBox="0 0 28 28" fill="none">
+            <circle cx="10.5" cy="9.5" r="3.6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M3.5 21c0-3.6 3.1-6.2 7-6.2s7 2.6 7 6.2"
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M18.5 7.2a3.4 3.4 0 0 1 0 6.6M20 14.9c2.6.6 4.5 2.9 4.5 5.7"
+                  stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <div>
+          <h3>EmaX Teams</h3>
+          <p class="sub">For growing crews and businesses.</p>
+        </div>
+      </div>
+
+      <div class="price price--custom">
+        <span class="amount">Custom</span>
+      </div>
+      <p class="sub">Flexible plans for teams of any size.</p>
+
+      <ul class="feature-list" style="margin-top:22px">
+        <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Everything in Pro</li>
+        <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Multiple team members</li>
+        <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Advanced permissions</li>
+        <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Priority support</li>
+        <li><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8.4" stroke="currentColor" stroke-width="1.5"/><path d="m6.5 10.2 2.3 2.3 4.7-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>Custom onboarding</li>
+      </ul>
+
+      <div style="margin-top:56px">
+        <a class="btn-outline" href="/faq">TALK TO US</a>
+        <p class="plan-foot">We'll help you find the right plan.</p>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- ==================== WAITLIST ==================== -->
+  <section class="waitlist">
+    <span class="hourglass" aria-hidden="true">
+      <svg viewBox="0 0 32 32" fill="none">
+        <path d="M9 4h14M9 28h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <path d="M10.5 4v4.2c0 2.4 1.4 4.5 3.5 5.5l2 1 2-1c2.1-1 3.5-3.1 3.5-5.5V4M10.5 28v-4.2c0-2.4 1.4-4.5 3.5-5.5l2-1 2 1c2.1 1 3.5 3.1 3.5 5.5V28"
+              stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      </svg>
+    </span>
+
+    <div class="waitlist-copy">
+      <p class="k">Missed the first 20?</p>
+      <h3>You may still have a chance.</h3>
+      <p>We occasionally open additional Founding Crew spots for active tradespeople who can help us improve EmaX through real-world use and feedback.</p>
+    </div>
+
+    <div class="waitlist-cta">
+      <a class="btn-outline" href="/signup">REQUEST FOUNDING ACCESS</a>
+      <small>We'll review your request and get back to you.</small>
+    </div>
+  </section>
+
+  <!-- ==================== TRUST ROW ==================== -->
+  <section class="trust">
+    <div class="trust-item">
+      <span class="ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M20.5 3.5V9H15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Cancel Anytime</h4>
+        <p>You're in control. Cancel whenever you want.</p>
+      </div>
+    </div>
+
+    <div class="trust-item">
+      <span class="ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="4.5" y="10" width="15" height="11" rx="2.6" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Safe &amp; Secure</h4>
+        <p>Bank-level security for your business data.</p>
+      </div>
+    </div>
+
+    <div class="trust-item">
+      <span class="ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M4 15v-3a8 8 0 0 1 16 0v3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <rect x="2.5" y="14" width="4.5" height="6.5" rx="2" stroke="currentColor" stroke-width="1.7"/>
+          <rect x="17" y="14" width="4.5" height="6.5" rx="2" stroke="currentColor" stroke-width="1.7"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Real Human Support</h4>
+        <p>We're here when you need us.</p>
+      </div>
+    </div>
+
+    <div class="trust-item">
+      <span class="ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z"
+                stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Always Improving</h4>
+        <p>New features, fixes and improvements – always.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== FAQ CTA ==================== -->
+  <section class="faq-cta">
+    <span class="faq-avatar">
+      <img src="Emmax.png" alt="">
+    </span>
+
+    <div class="faq-copy">
+      <h3>Got questions before starting?</h3>
+      <p>Check out the FAQ or send me a message.</p>
+    </div>
+
+    <a class="faq-btn" href="/faq">
+      VIEW FAQ
+      <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+        <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.7"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+  </section>
+
+</main>
+</div>
+
+</body>
+</html>

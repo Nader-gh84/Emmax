@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Features — EmaX</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS — dusk theme (identical to About / Pricing)
+   ============================================================ */
+:root{
+  --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --night-900:  #08111F;
+  --night-800:  #0C1A2E;
+
+  --text:       #FFFFFF;
+  --text-soft:  #B9C8DF;
+  --text-mute:  #8296B4;
+
+  --blue:       #4D8DFF;
+  --blue-bright:#6BA4FF;
+  --blue-pale:  #A8C6FF;
+  --glow:       rgba(77,141,255,0.55);
+
+  --glass-brd:  rgba(140,180,255,0.16);
+
+  --maxw: 1180px;
+  --pad: 48px;
+  --header-h: 88px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+
+body{
+  margin:0;
+  font-family:var(--font-ui);
+  font-weight:400;
+  color:var(--text);
+  background:var(--night-900);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+a{ text-decoration:none; color:inherit; }
+img{ display:block; max-width:100%; }
+ul{ margin:0; padding:0; list-style:none; }
+
+.shell{
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--pad);
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header{
+  position:absolute; top:0; left:0; right:0;
+  z-index:40; height:var(--header-h);
+}
+.site-header .shell{
+  height:100%; display:flex; align-items:center; gap:40px;
+}
+
+/* Logo — swap Logo.png for your own file */
+.logo{ display:flex; align-items:center; flex-shrink:0; }
+.logo img{ height:40px; width:auto; object-fit:contain; }
+
+.nav{ margin-left:auto; display:flex; align-items:center; gap:40px; height:100%; }
+.nav a{
+  position:relative; height:100%;
+  display:flex; align-items:center;
+  font-size:13px; font-weight:400;
+  letter-spacing:0.11em; text-transform:uppercase;
+  color:rgba(255,255,255,0.78);
+  transition:color .2s ease;
+}
+.nav a:hover{ color:#fff; }
+.nav a.is-active{ color:#fff; }
+.nav a.is-active::after{
+  content:""; position:absolute;
+  left:-4px; right:-4px; bottom:26px;
+  height:1.5px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, #fff 20%, #fff 80%, transparent);
+}
+
+.signin{
+  margin-left:32px;
+  display:inline-flex; align-items:center; gap:15px;
+  height:42px; padding:0 23px;
+  border:1px solid rgba(255,255,255,0.42);
+  border-radius:999px;
+  font-size:12px; font-weight:400;
+  letter-spacing:0.14em; text-transform:uppercase;
+  color:#fff;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.signin:hover{
+  border-color:var(--blue-bright);
+  background:rgba(77,141,255,0.12);
+  box-shadow:0 0 24px -6px var(--glow);
+  transform:translateY(-1px);
+}
+.signin svg{ width:17px; height:11px; }
+
+.menu-btn{
+  display:none; margin-left:auto;
+  width:40px; height:40px; place-items:center;
+  border:1px solid rgba(255,255,255,0.28);
+  border-radius:11px;
+  background:rgba(255,255,255,0.04);
+  color:#fff; cursor:pointer;
+}
+.menu-btn svg{ width:18px; height:13px; }
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero{
+  position:relative; overflow:hidden;
+  padding-top:var(--header-h);
+  background:var(--night-800);
+}
+
+/* Background photo — drop your own file in as Background.png */
+.hero-bg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover; object-position:center bottom;
+  z-index:0; pointer-events:none;
+}
+
+.veil{
+  position:absolute; inset:0;
+  z-index:1; pointer-events:none;
+  background:
+    linear-gradient(96deg,
+      rgba(8,17,31,0.92) 0%,
+      rgba(8,17,31,0.74) 28%,
+      rgba(8,17,31,0.30) 44%,
+      rgba(8,17,31,0) 58%),
+    linear-gradient(180deg,
+      rgba(8,17,31,0.48) 0%,
+      rgba(8,17,31,0) 26%,
+      rgba(8,17,31,0) 72%,
+      rgba(8,17,31,0.88) 100%);
+}
+
+.hero-inner{
+  position:relative; z-index:3;
+  display:grid;
+  grid-template-columns:minmax(0,52%) minmax(0,48%);
+  align-items:end;
+  min-height:420px;
+}
+
+.hero-copy{ padding:34px 0 44px; }
+
+.eyebrow{
+  margin:0 0 20px;
+  font-size:12.5px; font-weight:400;
+  letter-spacing:0.24em; text-transform:uppercase;
+  color:var(--blue-pale);
+}
+
+.hero-title{
+  margin:0;
+  font-size:44px; line-height:1.22;
+  font-weight:400; letter-spacing:-0.014em;
+  color:#fff;
+  text-shadow:0 2px 30px rgba(6,14,26,0.55);
+}
+.hero-title .accent{
+  color:var(--blue-bright);
+  text-shadow:0 0 34px rgba(77,141,255,0.45);
+}
+
+.hero-lede{
+  margin:22px 0 0; max-width:400px;
+  font-size:15.5px; line-height:1.66; color:var(--text-soft);
+}
+
+/* ---------- workflow strip ---------- */
+.flow{
+  display:flex; align-items:flex-start;
+  margin-top:38px;
+}
+.flow-step{ text-align:center; width:88px; flex-shrink:0; }
+.flow-icon{
+  width:46px; height:46px; margin:0 auto 12px;
+  border-radius:50%;
+  background:rgba(77,141,255,0.12);
+  border:1px solid rgba(107,164,255,0.26);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+  box-shadow:inset 0 0 18px -8px rgba(107,164,255,0.8);
+}
+.flow-icon svg{ width:20px; height:20px; }
+.flow-step span{
+  display:block;
+  font-size:11.5px; line-height:1.4; color:var(--text-mute);
+}
+.flow-arrow{
+  flex-shrink:0;
+  width:24px; margin-top:16px;
+  display:grid; place-items:center;
+  color:rgba(140,180,255,0.45);
+}
+.flow-arrow svg{ width:14px; height:9px; }
+
+/* ---------- hero photo ---------- */
+.hero-figure{
+  position:relative; align-self:end;
+  display:flex; align-items:flex-end; justify-content:center;
+  min-height:420px;
+}
+.hero-photo{
+  position:relative; z-index:2;
+  width:100%; max-width:500px; height:auto;
+  object-fit:contain; object-position:bottom center;
+  filter:drop-shadow(0 24px 60px rgba(4,10,20,0.6));
+}
+
+/* ============================================================
+   PAGE BODY
+   ============================================================ */
+.page-body{
+  position:relative;
+  background:linear-gradient(180deg, #0A1524 0%, #0A1322 55%, #08111F 100%);
+  padding-bottom:56px;
+}
+
+/* ---------- section label with dots ---------- */
+.section-label{
+  display:flex; align-items:center; justify-content:center; gap:16px;
+  margin:44px 0 26px;
+}
+.section-label span{
+  font-size:15px; font-weight:500;
+  letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--blue-bright);
+  text-shadow:0 0 26px rgba(107,164,255,0.4);
+}
+.section-label i{
+  display:flex; gap:7px;
+}
+.section-label i::before,
+.section-label i::after,
+.section-label i em{
+  content:""; display:block;
+  width:4px; height:4px; border-radius:50%;
+  background:var(--blue-bright); opacity:.55;
+}
+.section-label i em{ opacity:.3; }
+
+/* ============================================================
+   FEATURE CARDS — 8 numbered
+   ============================================================ */
+.feature-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:18px;
+}
+
+.fcard{
+  position:relative;
+  padding:22px 22px 24px;
+  border:1px solid var(--glass-brd);
+  border-radius:16px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.055) 0%, rgba(255,255,255,0.018) 100%);
+  backdrop-filter:blur(10px);
+  transition:transform .22s ease, border-color .22s ease, box-shadow .22s ease, background .22s ease;
+}
+.fcard:hover{
+  transform:translateY(-4px);
+  border-color:rgba(107,164,255,0.42);
+  background:linear-gradient(180deg, rgba(77,141,255,0.10) 0%, rgba(255,255,255,0.02) 100%);
+  box-shadow:0 18px 40px -26px rgba(0,0,0,0.9), 0 0 30px -12px var(--glow);
+}
+
+.fcard-top{
+  display:flex; align-items:flex-start; justify-content:space-between;
+  margin-bottom:18px;
+}
+.fcard-icon{
+  width:48px; height:48px; border-radius:50%;
+  background:rgba(77,141,255,0.13);
+  border:1px solid rgba(107,164,255,0.26);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+  box-shadow:inset 0 0 18px -8px rgba(107,164,255,0.85);
+}
+.fcard-icon svg{ width:22px; height:22px; }
+.fcard-num{
+  font-size:17px; font-weight:500;
+  color:var(--blue-bright);
+  text-shadow:0 0 20px rgba(107,164,255,0.4);
+}
+
+.fcard h3{
+  margin:0 0 10px;
+  font-size:15.5px; font-weight:500;
+  line-height:1.32; color:#fff;
+}
+.fcard p{
+  margin:0 0 16px;
+  font-size:12.5px; line-height:1.72; color:var(--text-mute);
+}
+
+.tag{
+  display:inline-flex; align-items:center; gap:7px;
+  padding:5px 11px;
+  border-radius:6px;
+  background:rgba(77,141,255,0.13);
+  border:1px solid rgba(107,164,255,0.2);
+  font-size:9.5px; font-weight:500;
+  letter-spacing:0.1em; text-transform:uppercase;
+  color:var(--blue-pale);
+}
+.tag svg{ width:12px; height:12px; }
+
+/* ============================================================
+   CAPABILITY ROW
+   ============================================================ */
+.capability{
+  margin-top:20px;
+  padding:24px 28px;
+  border-radius:18px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.015) 100%);
+  backdrop-filter:blur(10px);
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:26px;
+}
+.cap-item{ display:flex; gap:14px; align-items:flex-start; }
+.cap-icon{
+  flex-shrink:0; width:38px; height:38px;
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+}
+.cap-icon svg{ width:30px; height:30px; }
+.cap-item h4{ margin:0 0 6px; font-size:13.5px; font-weight:500; color:#fff; }
+.cap-item p{ margin:0; font-size:12px; line-height:1.68; color:var(--text-mute); }
+
+/* ============================================================
+   COMING NEXT
+   ============================================================ */
+.coming-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:18px;
+}
+.ccard{
+  display:flex; gap:18px; align-items:flex-start;
+  padding:22px 22px 24px;
+  border:1px dashed rgba(140,180,255,0.22);
+  border-radius:16px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.012) 100%);
+}
+.ccard-icon{
+  flex-shrink:0;
+  width:58px; height:58px; border-radius:50%;
+  background:rgba(77,141,255,0.10);
+  border:1px solid rgba(107,164,255,0.22);
+  display:grid; place-items:center;
+  color:var(--blue-bright);
+}
+.ccard-icon svg{ width:26px; height:26px; }
+.ccard h3{ margin:0 0 8px; font-size:15px; font-weight:500; color:#fff; }
+.ccard p{ margin:0 0 14px; font-size:12.5px; line-height:1.7; color:var(--text-mute); }
+
+.tag--soon{
+  background:rgba(255,255,255,0.05);
+  border-color:rgba(140,180,255,0.2);
+  color:var(--text-soft);
+}
+
+/* ============================================================
+   ROADMAP BANNER
+   ============================================================ */
+.roadmap{
+  position:relative; overflow:hidden;
+  margin-top:26px;
+  padding:34px 36px;
+  border-radius:20px;
+  border:1px solid var(--glass-brd);
+  background:linear-gradient(120deg, rgba(77,141,255,0.10) 0%, rgba(255,255,255,0.02) 60%);
+  backdrop-filter:blur(10px);
+  display:flex; align-items:center; gap:30px;
+}
+
+.roadmap-mark{
+  flex-shrink:0;
+  width:104px; height:104px; border-radius:50%;
+  background:radial-gradient(circle at 42% 34%,
+    rgba(140,190,255,0.30) 0%,
+    rgba(77,141,255,0.18) 55%,
+    rgba(77,141,255,0.06) 100%);
+  border:1px solid rgba(140,190,255,0.34);
+  display:grid; place-items:center;
+  box-shadow:0 0 46px -14px var(--glow), inset 0 0 34px -14px rgba(160,200,255,0.9);
+  padding:24px;
+}
+.roadmap-mark img{ width:100%; height:auto; object-fit:contain; }
+
+.roadmap-copy{ flex:1; position:relative; z-index:2; }
+.roadmap-copy h2{
+  margin:0 0 12px;
+  font-size:26px; font-weight:400; letter-spacing:-0.012em; color:#fff;
+}
+.roadmap-copy p{
+  margin:0; font-size:14.5px; line-height:1.72; color:var(--text-soft);
+}
+.roadmap-copy .num{
+  color:var(--blue-bright); font-weight:500;
+  text-shadow:0 0 22px rgba(107,164,255,0.45);
+}
+
+/* decorative wave on the right */
+.roadmap-wave{
+  position:absolute; right:0; top:0; bottom:0;
+  width:44%;
+  pointer-events:none; opacity:.5;
+  background:
+    repeating-linear-gradient(115deg,
+      rgba(140,190,255,0.16) 0 1px,
+      transparent 1px 13px);
+  -webkit-mask-image:radial-gradient(ellipse at 100% 50%, #000 10%, transparent 72%);
+          mask-image:radial-gradient(ellipse at 100% 50%, #000 10%, transparent 72%);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:1023px){
+  :root{ --pad:28px; }
+
+  .nav{ gap:22px; }
+  .nav a{ font-size:12px; letter-spacing:0.08em; }
+  .signin{ margin-left:18px; padding:0 17px; }
+  .logo img{ height:34px; }
+
+  .hero-inner{ grid-template-columns:1fr; }
+  .hero-copy{ padding-bottom:20px; }
+  .hero-figure{ min-height:0; }
+  .hero-lede{ max-width:none; }
+  .veil{
+    background:linear-gradient(180deg,
+      rgba(8,17,31,0.90) 0%,
+      rgba(8,17,31,0.55) 42%,
+      rgba(8,17,31,0.10) 70%,
+      rgba(8,17,31,0.9) 100%);
+  }
+
+  .flow{ overflow-x:auto; padding-bottom:8px; }
+
+  .feature-grid{ grid-template-columns:repeat(2,1fr); }
+  .capability{ grid-template-columns:repeat(2,1fr); }
+  .coming-grid{ grid-template-columns:1fr; }
+}
+
+@media (max-width:767px){
+  :root{ --pad:20px; --header-h:70px; }
+
+  .nav, .signin{ display:none; }
+  .menu-btn{ display:grid; }
+  .logo img{ height:30px; }
+
+  .hero-title{ font-size:32px; }
+
+  .feature-grid{ grid-template-columns:1fr; }
+  .capability{ grid-template-columns:1fr; padding:22px 20px; }
+
+  .section-label span{ font-size:13px; letter-spacing:0.16em; }
+
+  .roadmap{ flex-direction:column; align-items:flex-start; gap:20px; padding:26px 22px; }
+  .roadmap-mark{ width:82px; height:82px; padding:18px; }
+  .roadmap-copy h2{ font-size:21px; }
+  .roadmap-copy p{ font-size:13.5px; }
+}
+
+a:focus-visible, button:focus-visible{
+  outline:2px solid var(--blue-bright); outline-offset:3px; border-radius:6px;
+}
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== HEADER ==================== -->
+<header class="site-header">
+  <div class="shell">
+    <a class="logo" href="/" aria-label="EmaX home">
+      <!-- Replace Logo.png with your own logo file -->
+      <img src="Logo.png" alt="EmaX">
+    </a>
+
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/features" class="is-active" aria-current="page">Features</a>
+      <a href="/pricing">Pricing</a>
+      <a href="/faq">FAQ</a>
+    </nav>
+
+    <a class="signin" href="/login">
+      Sign in
+      <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+        <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </a>
+
+    <button class="menu-btn" aria-label="Open menu">
+      <svg viewBox="0 0 20 14" fill="none" aria-hidden="true">
+        <path d="M0 1h20M0 7h20M0 13h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero">
+  <!-- Background photo — replace Background.png with your own file -->
+  <img class="hero-bg" src="Background.png" alt="" aria-hidden="true">
+  <div class="veil" aria-hidden="true"></div>
+
+  <div class="shell">
+    <div class="hero-inner">
+
+      <div class="hero-copy">
+        <p class="eyebrow">Features</p>
+
+        <h1 class="hero-title">
+          One assistant.<br>
+          Your whole <span class="accent">workflow.</span>
+        </h1>
+
+        <p class="hero-lede">
+          From the first material list to the final payment,<br>
+          I handle everything for your trades business.
+        </p>
+
+        <div class="flow">
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span>Voice List</span>
+          </div>
+
+          <div class="flow-arrow"><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M2.5 6.5h10v9h-10v-9ZM12.5 9.5h4l3 3.2v2.8h-7v-6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <circle cx="6" cy="17.5" r="1.9" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="16.5" cy="17.5" r="1.9" stroke="currentColor" stroke-width="1.5"/>
+              </svg>
+            </span>
+            <span>Supplier Pricing</span>
+          </div>
+
+          <div class="flow-arrow"><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5.5 2.5h8L18.5 7.5v14h-13v-19Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M13.5 2.5v5h5M8.5 12h7M8.5 16h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span>Pre-Invoice</span>
+          </div>
+
+          <div class="flow-arrow"><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m7.8 12.2 2.7 2.7 5.5-5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span>Customer Confirm</span>
+          </div>
+
+          <div class="flow-arrow"><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5.5 2.5h8L18.5 7.5v14h-13v-19Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+                <path d="M13.5 2.5v5h5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              </svg>
+            </span>
+            <span>Project Created</span>
+          </div>
+
+          <div class="flow-arrow"><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+
+          <div class="flow-step">
+            <span class="flow-icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3.5 19.5h17M6 16V9M11 16V5.5M16 16v-4.5M20.5 4.5 15 10l-3-2.6L7 12"
+                      stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span>Done</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-figure">
+        <!-- Replace Emmax.png with your own transparent cut-out -->
+        <img class="hero-photo" src="Emmax.png"
+             alt="Ema, the EmaX AI assistant, working at a laptop">
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="page-body">
+<main class="shell">
+
+  <!-- ==================== AVAILABLE NOW ==================== -->
+  <div class="section-label">
+    <i aria-hidden="true"><em></em></i>
+    <span>Available Now</span>
+    <i aria-hidden="true"><em></em></i>
+  </div>
+
+  <section class="feature-grid">
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </span>
+        <span class="fcard-num">01</span>
+      </div>
+      <h3>Voice Material List</h3>
+      <p>Just speak and I'll capture your material list with part number, description, brand and quantity.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M2 7v0M4.5 4.5v5M7 2.5v9M9.5 4.5v5M12 7v0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Voice Powered
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M21 3 10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8 21 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="fcard-num">02</span>
+      </div>
+      <h3>Send to Suppliers</h3>
+      <p>I send your list to suppliers instantly and track every request for you.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M2 7v0M4.5 4.5v5M7 2.5v9M9.5 4.5v5M12 7v0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Automated
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M3 13.5 5.5 4.5h13L21 13.5v6H3v-6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M3 13.5h5l1 2.5h6l1-2.5h5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="fcard-num">03</span>
+      </div>
+      <h3>Supplier Inbox</h3>
+      <p>Supplier pricing comes to your inbox inside the app. No more emails to search.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.3"/><path d="M7 4.2v3l2 1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Organized
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5.5 2.5h8L18.5 7.5v14h-13v-19Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M13.5 2.5v5h5" stroke="currentColor" stroke-width="1.4"/><path d="m8.5 14.5 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="fcard-num">04</span>
+      </div>
+      <h3>Confirm &amp; Create<br>Pre-Invoice</h3>
+      <p>Review, confirm and I'll create a professional pre-invoice with one click.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="7" r="1.8" fill="currentColor"/></svg>
+        One Click
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M21 3 10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8 21 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="fcard-num">05</span>
+      </div>
+      <h3>Send to Customer</h3>
+      <p>Pre-invoice is sent to your customer by email in seconds. You look professional.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M2 7v0M4.5 4.5v5M7 2.5v9M9.5 4.5v5M12 7v0" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        Easy Share
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m7.8 12.2 2.7 2.7 5.5-5.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="fcard-num">06</span>
+      </div>
+      <h3>Customer Confirm</h3>
+      <p>Customer confirmation comes back to your inbox. Everything stays connected.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.3"/><path d="M7 4.2v3l2 1.2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Real-Time
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="7" width="18" height="13" rx="2.4" stroke="currentColor" stroke-width="1.5"/><path d="M8.5 7V5.4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        </span>
+        <span class="fcard-num">07</span>
+      </div>
+      <h3>Project Created</h3>
+      <p>Project is created automatically. Crew, tasks, schedule and details are ready to go.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><path d="M7 1.5 8 5l3.5 1L8 7l-1 3.5L6 7 2.5 6 6 5l1-3.5Z" fill="currentColor"/></svg>
+        Auto Setup
+      </span>
+    </article>
+
+    <article class="fcard">
+      <div class="fcard-top">
+        <span class="fcard-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V13M9.3 20V8.5M14.7 20v-6M20 20V4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </span>
+        <span class="fcard-num">08</span>
+      </div>
+      <h3>Track &amp; Complete</h3>
+      <p>Track work hours, costs and payments. Finish the job and mark it done with success.</p>
+      <span class="tag">
+        <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="7" r="1.8" fill="currentColor"/></svg>
+        Stay in Control
+      </span>
+    </article>
+
+  </section>
+
+  <!-- ==================== CAPABILITY ROW ==================== -->
+  <section class="capability">
+    <div class="cap-item">
+      <span class="cap-icon" aria-hidden="true">
+        <svg viewBox="0 0 30 30" fill="none">
+          <circle cx="11" cy="10.5" r="3.8" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M3.5 23c0-3.8 3.3-6.6 7.5-6.6s7.5 2.8 7.5 6.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <path d="M19.5 8a3.5 3.5 0 0 1 0 6.9M21 16c2.8.7 4.8 3.1 4.8 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Employees &amp; Hours</h4>
+        <p>Assign your crew and track work hours on every project.</p>
+      </div>
+    </div>
+
+    <div class="cap-item">
+      <span class="cap-icon" aria-hidden="true">
+        <svg viewBox="0 0 30 30" fill="none">
+          <circle cx="15" cy="15" r="11" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M18.4 11.2c-.7-1-2-1.6-3.4-1.6-2 0-3.4 1-3.4 2.5s1.3 2.2 3.4 2.6c2.1.4 3.6 1.1 3.6 2.7 0 1.6-1.6 2.6-3.6 2.6-1.6 0-3-.6-3.7-1.7M15 7.5v15"
+                stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Supplier Accounting</h4>
+        <p>Track purchases, payments and balances per supplier.</p>
+      </div>
+    </div>
+
+    <div class="cap-item">
+      <span class="cap-icon" aria-hidden="true">
+        <svg viewBox="0 0 30 30" fill="none">
+          <path d="M7 3.5h10L23 9.5v17H7v-23Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M17 3.5v6h6" stroke="currentColor" stroke-width="1.4"/>
+          <path d="m11 18.5 2.4 2.4 5-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Customer &amp; Payments</h4>
+        <p>Track customer payments, outstanding balances and history.</p>
+      </div>
+    </div>
+
+    <div class="cap-item">
+      <span class="cap-icon" aria-hidden="true">
+        <svg viewBox="0 0 30 30" fill="none">
+          <rect x="5.5" y="4.5" width="19" height="21" rx="2.5" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 10.5h2M10 15h2M10 19.5h2M15 10.5h5M15 15h5M15 19.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div>
+        <h4>Today – Your Day</h4>
+        <p>All your tasks, pickups, site visits, payments and reminders in one place.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================== COMING NEXT ==================== -->
+  <div class="section-label">
+    <i aria-hidden="true"><em></em></i>
+    <span>Coming Next</span>
+    <i aria-hidden="true"><em></em></i>
+  </div>
+
+  <section class="coming-grid">
+
+    <article class="ccard">
+      <span class="ccard-icon" aria-hidden="true">
+        <svg viewBox="0 0 26 26" fill="none">
+          <path d="M5 9.5h16v12H5v-12ZM5 9.5 8 4.5h10l3 5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <path d="M15.5 15.5a3 3 0 1 1-.9-2.2m0 0V11m0 2.3H12.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h3>Smart Material Returns</h3>
+        <p>I'll help you identify and return unused materials so you don't lose money.</p>
+        <span class="tag tag--soon">
+          <svg viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Coming Soon
+        </span>
+      </div>
+    </article>
+
+    <article class="ccard">
+      <span class="ccard-icon" aria-hidden="true">
+        <svg viewBox="0 0 26 26" fill="none">
+          <path d="M3 13v0M6.5 9v8M10 5.5v15M13.5 8v10M17 4.5v17M20.5 9.5v7M24 13v0"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <div>
+        <h3>Smarter Voice Assistant</h3>
+        <p>More natural conversations and even more control with your voice.</p>
+        <span class="tag tag--soon">
+          <svg viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Coming Soon
+        </span>
+      </div>
+    </article>
+
+    <article class="ccard">
+      <span class="ccard-icon" aria-hidden="true">
+        <svg viewBox="0 0 26 26" fill="none">
+          <circle cx="13" cy="13" r="10" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M13 3v10h10" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <div>
+        <h3>Advanced Business Insights</h3>
+        <p>Deeper insights into your projects, costs and performance to grow your profit.</p>
+        <span class="tag tag--soon">
+          <svg viewBox="0 0 14 14" fill="none"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          Coming Soon
+        </span>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- ==================== ROADMAP BANNER ==================== -->
+  <section class="roadmap">
+    <div class="roadmap-wave" aria-hidden="true"></div>
+
+    <span class="roadmap-mark" aria-hidden="true">
+      <img src="Logo.png" alt="">
+    </span>
+
+    <div class="roadmap-copy">
+      <h2>And I'm just getting started.</h2>
+      <p>
+        <span class="num">20+</span> more capabilities are already on my roadmap.<br>
+        More automation. More intelligence. Less work for you.
+      </p>
+    </div>
+  </section>
+
+</main>
+</div>
+
+</body>
+</html>

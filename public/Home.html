@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EmaX — AI Assistant for Trades</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,200;9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   DESIGN TOKENS — dusk theme (shared across all pages)
+   ============================================================ */
+:root{
+  --font-ui: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --night-900:  #08111F;
+  --night-800:  #0C1A2E;
+
+  --text:       #FFFFFF;
+  --text-soft:  #B9C8DF;
+  --text-mute:  #8296B4;
+
+  --blue:       #4D8DFF;
+  --blue-bright:#6BA4FF;
+  --blue-pale:  #A8C6FF;
+  --glow:       rgba(77,141,255,0.55);
+
+  --maxw: 1440px;
+  --pad: 56px;
+  --header-h: 96px;
+}
+
+*,*::before,*::after{ box-sizing:border-box; }
+html{ -webkit-text-size-adjust:100%; }
+
+body{
+  margin:0;
+  font-family:var(--font-ui);
+  font-weight:400;
+  color:var(--text);
+  background:var(--night-900);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+a{ text-decoration:none; color:inherit; }
+img{ display:block; max-width:100%; }
+
+.shell{
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--pad);
+  width:100%;
+}
+
+/* ============================================================
+   STAGE
+   ============================================================ */
+.stage{
+  position:relative;
+  min-height:100vh;
+  min-height:100dvh;
+  overflow:hidden;
+  background:var(--night-800);
+  display:flex; flex-direction:column;
+}
+
+/* Background photo — drop your own file in as Background.png */
+.stage-bg{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:cover; object-position:center;
+  z-index:0; pointer-events:none;
+}
+
+.veil{
+  position:absolute; inset:0;
+  z-index:1; pointer-events:none;
+  background:
+    linear-gradient(180deg,
+      rgba(8,17,31,0.62) 0%,
+      rgba(8,17,31,0.10) 22%,
+      rgba(8,17,31,0.10) 62%,
+      rgba(8,17,31,0.80) 100%),
+    linear-gradient(90deg,
+      rgba(8,17,31,0.55) 0%,
+      rgba(8,17,31,0) 34%);
+}
+
+/* Ema — left side, anchored to the bottom */
+.ema{
+  position:absolute;
+  left:0; bottom:0;
+  z-index:2;
+  width:46%;
+  max-width:720px;
+  height:auto;
+  object-fit:contain; object-position:left bottom;
+  pointer-events:none;
+  filter:drop-shadow(0 24px 70px rgba(4,10,20,0.6));
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.site-header{
+  position:relative; z-index:20;
+  height:var(--header-h); flex-shrink:0;
+}
+.site-header .shell{ height:100%; display:flex; align-items:center; gap:40px; }
+
+/* Logo — swap Logo.png for your own file */
+.logo{ display:flex; align-items:center; flex-shrink:0; }
+.logo img{ height:44px; width:auto; object-fit:contain; }
+
+.nav{ margin-left:auto; display:flex; align-items:center; gap:44px; height:100%; }
+.nav a{
+  position:relative; height:100%;
+  display:flex; align-items:center;
+  font-size:13px; font-weight:400;
+  letter-spacing:0.13em; text-transform:uppercase;
+  color:rgba(255,255,255,0.78);
+  transition:color .2s ease;
+}
+.nav a:hover{ color:#fff; }
+.nav a.is-active{ color:#fff; }
+.nav a.is-active::after{
+  content:""; position:absolute;
+  left:-4px; right:-4px; bottom:30px;
+  height:1.5px; border-radius:2px;
+  background:linear-gradient(90deg, transparent, #fff 20%, #fff 80%, transparent);
+}
+
+.signin{
+  margin-left:34px;
+  display:inline-flex; align-items:center; gap:16px;
+  height:46px; padding:0 26px;
+  border:1px solid rgba(255,255,255,0.42);
+  border-radius:999px;
+  font-size:12.5px; font-weight:400;
+  letter-spacing:0.15em; text-transform:uppercase;
+  color:#fff;
+  transition:border-color .2s ease, background .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+.signin:hover{
+  border-color:var(--blue-bright);
+  background:rgba(77,141,255,0.12);
+  box-shadow:0 0 26px -6px var(--glow);
+  transform:translateY(-1px);
+}
+.signin svg{ width:18px; height:12px; }
+
+.menu-btn{
+  display:none; margin-left:auto;
+  width:42px; height:42px; place-items:center;
+  border:1px solid rgba(255,255,255,0.28);
+  border-radius:12px;
+  background:rgba(255,255,255,0.04);
+  color:#fff; cursor:pointer;
+}
+.menu-btn svg{ width:20px; height:14px; }
+
+/* ============================================================
+   CENTREPIECE — label / triangle / wordmark / enter
+   ============================================================ */
+.centre{
+  position:relative; z-index:10;
+  flex:1;
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  padding:10px 0 40px;
+  text-align:center;
+}
+
+.kicker{
+  margin:0 0 26px;
+  font-size:13px; font-weight:300;
+  letter-spacing:0.44em; text-transform:uppercase;
+  color:rgba(255,255,255,0.82);
+  text-indent:0.44em;
+}
+
+/* wordmark stacking box */
+.mark-stack{
+  position:relative;
+  display:flex; flex-direction:column; align-items:center;
+}
+
+.wordmark{
+  position:relative; z-index:2;
+  margin:0;
+  font-size:104px; line-height:1;
+  font-weight:300; letter-spacing:0.14em;
+  color:#fff;
+  text-indent:0.14em;
+  text-shadow:0 4px 46px rgba(6,14,26,0.55);
+}
+.wordmark .x{
+  color:var(--blue-pale);
+  text-shadow:0 0 44px rgba(120,170,255,0.55);
+}
+
+/* enter button */
+.enter{
+  position:relative; z-index:2;
+  margin-top:44px;
+  display:flex; flex-direction:column; align-items:center; gap:22px;
+}
+
+.enter-circle{
+  position:relative;
+  width:112px; height:112px;
+  border-radius:50%;
+  display:grid; place-items:center;
+  color:#fff;
+  border:1px solid rgba(180,210,255,0.55);
+  background:radial-gradient(circle at 50% 50%,
+    rgba(77,141,255,0.16) 0%,
+    rgba(77,141,255,0.05) 62%,
+    rgba(77,141,255,0) 100%);
+  backdrop-filter:blur(2px);
+  box-shadow:0 0 42px -10px rgba(120,170,255,0.6),
+             inset 0 0 30px -14px rgba(180,215,255,0.9);
+  transition:transform .28s cubic-bezier(.2,.7,.3,1), box-shadow .28s ease, border-color .28s ease;
+}
+.enter-circle::after{        /* thin outer glow ring */
+  content:"";
+  position:absolute; inset:-7px;
+  border-radius:50%;
+  border:1px solid rgba(140,190,255,0.28);
+  opacity:.75;
+  transition:inset .28s ease, opacity .28s ease;
+}
+.enter-circle svg{ width:26px; height:26px; }
+
+.enter:hover .enter-circle{
+  transform:translateY(-3px) scale(1.045);
+  border-color:rgba(200,225,255,0.85);
+  box-shadow:0 0 66px -8px rgba(130,180,255,0.85),
+             inset 0 0 34px -12px rgba(200,225,255,1);
+}
+.enter:hover .enter-circle::after{ inset:-12px; opacity:1; }
+
+.enter-label{
+  font-size:12px; font-weight:300;
+  letter-spacing:0.36em; text-transform:uppercase;
+  color:rgba(255,255,255,0.8);
+  text-indent:0.36em;
+}
+
+/* ============================================================
+   TAGLINE — right side
+   ============================================================ */
+.tagline{
+  position:absolute;
+  right:var(--pad); bottom:210px;
+  z-index:12;
+  text-align:right;
+  max-width:min(430px, 40vw);
+}
+.tagline h2{
+  margin:0 0 18px;
+  font-size:42px; line-height:1.22;
+  font-weight:300; letter-spacing:-0.008em;
+  color:#fff;
+  text-shadow:0 3px 34px rgba(6,14,26,0.6);
+}
+.tagline h2 .u{
+  color:var(--blue-bright);
+  border-bottom:2px solid var(--blue-bright);
+  padding-bottom:3px;
+  text-shadow:0 0 32px rgba(107,164,255,0.5);
+}
+.tagline .steps{
+  margin:0;
+  font-size:12px; font-weight:300;
+  letter-spacing:0.19em; text-transform:uppercase;
+  color:rgba(255,255,255,0.72);
+}
+.tagline .steps i{
+  font-style:normal;
+  color:rgba(255,255,255,0.32);
+  padding:0 9px;
+}
+
+/* ============================================================
+   BOTTOM BAR — dots / three topics / arrow
+   ============================================================ */
+.bottom{
+  position:relative; z-index:14;
+  flex-shrink:0;
+  padding-bottom:38px;
+}
+.bottom .shell{
+  display:grid;
+  grid-template-columns:150px minmax(0,1fr) 96px;
+  gap:24px;
+  align-items:end;
+}
+
+/* decorative dots (non-interactive) */
+.dots{
+  display:flex; align-items:center; gap:11px;
+  padding-bottom:6px;
+}
+.dots .bar{
+  width:34px; height:2px; border-radius:2px;
+  background:#fff;
+}
+.dots span{
+  width:4.5px; height:4.5px; border-radius:50%;
+  background:rgba(255,255,255,0.55);
+}
+.dots span:last-child{ margin-left:14px; opacity:.45; }
+
+/* three topics */
+.topics{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+}
+.topic{
+  position:relative;
+  text-align:left;
+  padding:0 26px;
+  border-left:1px solid rgba(255,255,255,0.16);
+  background:none; border-top:0; border-right:0; border-bottom:0;
+  font-family:inherit; color:inherit;
+  cursor:pointer;
+  transition:transform .2s ease;
+}
+.topic:first-child{ border-left:0; padding-left:0; }
+.topic:hover{ transform:translateY(-2px); }
+
+.topic .num{
+  display:block; margin-bottom:5px;
+  font-size:12px; font-weight:300;
+  letter-spacing:0.12em;
+  color:rgba(255,255,255,0.5);
+}
+.topic .name{
+  display:flex; align-items:center; gap:12px;
+  margin-bottom:5px;
+  font-size:21px; font-weight:400; color:#fff;
+  transition:color .2s ease, text-shadow .2s ease;
+}
+.topic .desc{
+  display:block;
+  font-size:13px; color:rgba(255,255,255,0.56);
+  transition:color .2s ease;
+}
+.topic:hover .name{ color:var(--blue-pale); }
+.topic:hover .desc{ color:rgba(255,255,255,0.78); }
+
+/* voice-wave indicator — only visible while speaking / thinking */
+.wave{
+  display:inline-flex; align-items:center; gap:2.5px;
+  height:17px; opacity:0;
+  transition:opacity .22s ease;
+}
+.wave i{
+  width:2.5px; height:5px; border-radius:2px;
+  background:var(--blue-bright);
+  box-shadow:0 0 8px rgba(107,164,255,0.9);
+}
+
+/* thinking: slow, dim pulse */
+.topic.is-thinking .wave{ opacity:.6; }
+.topic.is-thinking .wave i{ animation:think 1.15s ease-in-out infinite; }
+.topic.is-thinking .wave i:nth-child(2){ animation-delay:.14s; }
+.topic.is-thinking .wave i:nth-child(3){ animation-delay:.28s; }
+.topic.is-thinking .wave i:nth-child(4){ animation-delay:.42s; }
+
+/* speaking: lively bars + glow on the row */
+.topic.is-speaking .wave{ opacity:1; }
+.topic.is-speaking .wave i{ animation:speak .62s ease-in-out infinite; }
+.topic.is-speaking .wave i:nth-child(2){ animation-delay:.11s; }
+.topic.is-speaking .wave i:nth-child(3){ animation-delay:.22s; }
+.topic.is-speaking .wave i:nth-child(4){ animation-delay:.33s; }
+
+.topic.is-speaking .name{
+  color:#fff;
+  text-shadow:0 0 26px rgba(107,164,255,0.85);
+}
+.topic.is-speaking .desc{ color:rgba(255,255,255,0.85); }
+.topic.is-speaking::after{
+  content:"";
+  position:absolute; left:0; right:14px; bottom:-14px;
+  height:1.5px; border-radius:2px;
+  background:linear-gradient(90deg, var(--blue-bright), transparent);
+  box-shadow:0 0 14px rgba(107,164,255,0.8);
+}
+.topic:first-child.is-speaking::after{ left:0; }
+
+@keyframes speak{
+  0%,100%{ height:5px; }
+  50%    { height:16px; }
+}
+@keyframes think{
+  0%,100%{ height:5px; opacity:.5; }
+  50%    { height:9px;  opacity:1; }
+}
+
+/* bottom-right arrow */
+.next{
+  justify-self:end;
+  display:inline-flex; align-items:center; gap:16px;
+  padding-bottom:8px;
+  color:rgba(255,255,255,0.85);
+  transition:gap .22s ease, color .22s ease;
+}
+.next .line{
+  width:56px; height:1px;
+  background:rgba(255,255,255,0.45);
+  transition:background .22s ease;
+}
+.next:hover{ color:#fff; gap:11px; }
+.next:hover .line{ background:#fff; }
+.next svg{ width:24px; height:14px; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width:1279px){
+  :root{ --pad:36px; }
+
+  .nav{ gap:26px; }
+  .nav a{ font-size:11.5px; letter-spacing:0.09em; }
+  .signin{ margin-left:20px; padding:0 19px; }
+  .logo img{ height:36px; }
+
+  .wordmark{ font-size:74px; }
+  .enter-circle{ width:96px; height:96px; }
+
+  .tagline{ bottom:230px; }
+  .tagline h2{ font-size:33px; }
+
+  .ema{ width:42%; }
+}
+
+@media (max-width:899px){
+  .tagline{
+    position:static;
+    max-width:none; text-align:center;
+    margin:34px auto 0;
+    padding-inline:var(--pad);
+  }
+  .centre{ padding-bottom:20px; }
+  .ema{ width:58%; opacity:.5; }
+  .veil{
+    background:
+      linear-gradient(180deg,
+        rgba(8,17,31,0.72) 0%,
+        rgba(8,17,31,0.30) 26%,
+        rgba(8,17,31,0.55) 62%,
+        rgba(8,17,31,0.92) 100%);
+  }
+
+  .bottom .shell{ grid-template-columns:1fr; gap:26px; }
+  .dots{ justify-content:center; }
+  .next{ justify-self:center; }
+}
+
+@media (max-width:767px){
+  :root{ --pad:20px; --header-h:74px; }
+
+  .nav, .signin{ display:none; }
+  .menu-btn{ display:grid; }
+  .logo img{ height:32px; }
+
+  .kicker{ font-size:10.5px; letter-spacing:0.3em; text-indent:0.3em; margin-bottom:18px; }
+  .wordmark{ font-size:47px; letter-spacing:0.1em; text-indent:0.1em; }
+  .enter{ margin-top:32px; gap:16px; }
+  .enter-circle{ width:82px; height:82px; }
+  .enter-circle svg{ width:21px; height:21px; }
+  .enter-label{ font-size:10.5px; letter-spacing:0.28em; text-indent:0.28em; }
+
+  .tagline h2{ font-size:26px; }
+  .tagline .steps{ font-size:10.5px; letter-spacing:0.13em; }
+
+  .topics{ grid-template-columns:1fr; gap:20px; }
+  .topic{
+    border-left:0; padding:0 0 0 16px;
+    border-left:1px solid rgba(255,255,255,0.16);
+  }
+  .topic:first-child{ padding-left:16px; border-left:1px solid rgba(255,255,255,0.16); }
+  .topic .name{ font-size:18px; }
+  .topic.is-speaking::after{ right:0; bottom:-8px; }
+
+  .ema{ width:74%; opacity:.34; }
+}
+
+a:focus-visible, button:focus-visible{
+  outline:2px solid var(--blue-bright); outline-offset:4px; border-radius:8px;
+}
+@media (prefers-reduced-motion:reduce){
+  *{ transition:none !important; animation:none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- Background photo — replace Background.png with your own file -->
+  <img class="stage-bg" src="Background.png" alt="" aria-hidden="true">
+  <div class="veil" aria-hidden="true"></div>
+
+  <!-- Ema — replace Emmax.png with your own transparent cut-out -->
+  <img class="ema" src="Emmax.png" alt="Ema, the EmaX AI assistant" aria-hidden="true">
+
+  <!-- ==================== HEADER ==================== -->
+  <header class="site-header">
+    <div class="shell">
+      <a class="logo" href="/" aria-label="EmaX home">
+        <!-- Replace Logo.png with your own logo file -->
+        <img src="Logo.png" alt="EmaX">
+      </a>
+
+      <nav class="nav" aria-label="Main">
+        <a href="/" class="is-active" aria-current="page">Home</a>
+        <a href="/about">About</a>
+        <a href="/features">Features</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/faq">FAQ</a>
+      </nav>
+
+      <a class="signin" href="/login">
+        Sign in
+        <svg viewBox="0 0 18 12" fill="none" aria-hidden="true">
+          <path d="M1 6h15m0 0-5-5m5 5-5 5" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+
+      <button class="menu-btn" aria-label="Open menu">
+        <svg viewBox="0 0 20 14" fill="none" aria-hidden="true">
+          <path d="M0 1h20M0 7h20M0 13h20" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== CENTREPIECE ==================== -->
+  <div class="centre">
+    <p class="kicker">AI Assistant for Trades</p>
+
+    <div class="mark-stack">
+      <h1 class="wordmark">E M &#923; <span class="x">X</span></h1>
+
+      <a class="enter" href="/login">
+        <span class="enter-circle">
+          <svg viewBox="0 0 26 26" fill="none" aria-hidden="true">
+            <path d="M9 3.5 19 13 9 22.5" stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="enter-label">Click to enter</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- ==================== TAGLINE ==================== -->
+  <div class="tagline">
+    <h2>Work <span class="u">smarter,</span><br>not harder.</h2>
+    <p class="steps">Plan <i>/</i> Quote <i>/</i> Manage <i>/</i> Get Paid</p>
+  </div>
+
+  <!-- ==================== BOTTOM BAR ==================== -->
+  <div class="bottom">
+    <div class="shell">
+
+      <!-- decorative, non-interactive -->
+      <div class="dots" aria-hidden="true">
+        <span class="bar"></span>
+        <span></span><span></span><span></span><span></span>
+        <span></span>
+      </div>
+
+      <div class="topics">
+
+        <button class="topic" type="button" data-topic="projects">
+          <span class="num">01</span>
+          <span class="name">
+            Projects
+            <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          </span>
+          <span class="desc">All in one place</span>
+        </button>
+
+        <button class="topic" type="button" data-topic="suppliers">
+          <span class="num">02</span>
+          <span class="name">
+            Suppliers
+            <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          </span>
+          <span class="desc">Best prices, faster</span>
+        </button>
+
+        <button class="topic" type="button" data-topic="customers">
+          <span class="num">03</span>
+          <span class="name">
+            Customers
+            <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          </span>
+          <span class="desc">Happy and informed</span>
+        </button>
+
+      </div>
+
+      <a class="next" href="/login" aria-label="Enter EmaX">
+        <span class="line" aria-hidden="true"></span>
+        <svg viewBox="0 0 24 14" fill="none" aria-hidden="true">
+          <path d="M0 7h21m0 0-6-6m6 6-6 6" stroke="currentColor" stroke-width="1.4"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </a>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   VOICE INTERACTION — one active voice at a time
+   States per topic: idle → thinking → speaking → idle
+   ------------------------------------------------------------
+   The two fetch calls below are the only pieces that need a
+   backend. Everything else (state machine, single-active rule,
+   wave + glow) already works.
+   ============================================================ */
+
+const audio   = new Audio();
+let activeBtn = null;      // topic currently thinking or speaking
+let abortCtrl = null;      // cancels an in-flight request
+
+function setState(btn, state){
+  if(!btn) return;
+  btn.classList.remove('is-thinking','is-speaking');
+  if(state) btn.classList.add('is-' + state);
+}
+
+function stopAll(){
+  audio.pause();
+  audio.currentTime = 0;
+  if(abortCtrl) abortCtrl.abort();
+  setState(activeBtn, null);
+  activeBtn = null;
+}
+
+async function speak(btn){
+  const topic = btn.dataset.topic;
+
+  activeBtn = btn;
+  setState(btn, 'thinking');
+
+  abortCtrl = new AbortController();
+
+  try{
+    // 1 — approved facts in, freshly worded script out
+    const scriptRes = await fetch('/api/landing-voice', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ topic }),
+      signal : abortCtrl.signal
+    });
+    const { text } = await scriptRes.json();
+
+    // 2 — script to audio (nova)
+    const ttsRes = await fetch('/api/tts', {
+      method : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body   : JSON.stringify({ text, voice: 'nova' }),
+      signal : abortCtrl.signal
+    });
+    const blob = await ttsRes.blob();
+
+    if(activeBtn !== btn) return;      // user switched while we waited
+
+    audio.src = URL.createObjectURL(blob);
+    await audio.play();
+    setState(btn, 'speaking');
+
+  }catch(err){
+    if(err.name !== 'AbortError'){
+      console.error('Voice failed:', err);
+    }
+    if(activeBtn === btn) stopAll();
+  }
+}
+
+document.querySelectorAll('.topic').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if(activeBtn === btn){ stopAll(); return; }   // same one → stop
+    stopAll();                                    // different one → swap
+    speak(btn);
+  });
+});
+
+audio.addEventListener('ended', stopAll);
+</script>
+
+</body>
+</html>
