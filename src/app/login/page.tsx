@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { AuthSplitLayout } from "@/components/auth/auth-split-layout";
-import { LoginForm } from "@/components/auth/login-form";
+import LoginPageContent from "@/components/marketing/login/LoginPageContent";
+
+/**
+ * Login — exact port of public/Login.html (approved design) + Supabase auth.
+ */
 
 export const metadata: Metadata = {
-  title: "Log in",
+  title: "Sign in — EmaX",
+  description: "Sign in to your EmaX account.",
 };
 
 export default function LoginPage() {
-  return (
-    <AuthSplitLayout>
-      <LoginForm />
-    </AuthSplitLayout>
-  );
+  return <LoginPageContent />;
 }

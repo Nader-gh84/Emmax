@@ -31,7 +31,7 @@ export function AuthToast({
 export function useComingSoonToast() {
   const [toast, setToast] = useState<string | null>(null);
 
-  function showComingSoon(provider: "Google" | "Apple") {
+  function showComingSoon(provider: "Google" | "Apple" | "Microsoft") {
     setToast(`${provider} sign-in coming soon`);
   }
 
