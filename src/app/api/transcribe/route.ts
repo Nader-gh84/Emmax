@@ -5,6 +5,10 @@ import {
   QUOTE_EXTRACTION_SYSTEM_PROMPT,
   mapExtractionToLineItems,
 } from "@/lib/quote-extraction";
+import {
+  guardWhisperTranscript,
+  type WhisperVerboseResult,
+} from "@/lib/whisper-guard";
 
 interface GptExtraction {
   materials?: ExtractedMaterialPayload[];
@@ -53,10 +57,15 @@ async function extractQuoteData(
   return JSON.parse(content) as GptExtraction;
 }
 
-async function transcribeAudio(audio: File, apiKey: string): Promise<string> {
+async function transcribeAudio(
+  audio: File,
+  apiKey: string
+): Promise<WhisperVerboseResult> {
   const whisperForm = new FormData();
   whisperForm.append("file", audio, audio.name || "recording.webm");
   whisperForm.append("model", "whisper-1");
+  whisperForm.append("language", "en");
+  whisperForm.append("response_format", "verbose_json");
 
   const whisperResponse = await fetch(
     "https://api.openai.com/v1/audio/transcriptions",
@@ -74,8 +83,14 @@ async function transcribeAudio(audio: File, apiKey: string): Promise<string> {
     throw new Error(`Transcription failed: ${error}`);
   }
 
-  const whisperData = await whisperResponse.json();
-  return whisperData.text ?? "";
+  return (await whisperResponse.json()) as WhisperVerboseResult;
+}
+
+function noSpeechResponse() {
+  return NextResponse.json({
+    transcript: "",
+    noSpeech: true,
+  });
 }
 
 export async function POST(request: Request) {
@@ -100,10 +115,17 @@ export async function POST(request: Request) {
       extractFlag === null || extractFlag === "true" || extractFlag === "1";
 
     let transcript = manualText?.trim() ?? "";
+    let fromAudio = false;
 
     if (!transcript && audio && audio.size > 0) {
+      fromAudio = true;
       try {
-        transcript = await transcribeAudio(audio, apiKey);
+        const whisperResult = await transcribeAudio(audio, apiKey);
+        const guarded = guardWhisperTranscript(whisperResult);
+        if (!guarded.ok) {
+          return noSpeechResponse();
+        }
+        transcript = guarded.transcript;
       } catch (error) {
         return NextResponse.json(
           {
@@ -116,14 +138,27 @@ export async function POST(request: Request) {
     }
 
     if (!transcript) {
+      // Empty manual text, or empty audio with no usable speech
+      if (fromAudio || (audio && audio.size > 0)) {
+        return noSpeechResponse();
+      }
       return NextResponse.json(
         { error: "No audio or text provided" },
         { status: 400 }
       );
     }
 
+    // Manual text path: still reject obvious CJK / artifact paste-through
+    if (!fromAudio) {
+      const guarded = guardWhisperTranscript({ text: transcript });
+      if (!guarded.ok) {
+        return noSpeechResponse();
+      }
+      transcript = guarded.transcript;
+    }
+
     if (!shouldExtract) {
-      return NextResponse.json({ transcript });
+      return NextResponse.json({ transcript, noSpeech: false });
     }
 
     const extracted = await extractQuoteData(transcript, apiKey);
@@ -135,6 +170,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       transcript,
+      noSpeech: false,
       materials: mapped.materials.map(
         ({ item, brand, quantity, unit, unitPrice }) => ({
           item,
