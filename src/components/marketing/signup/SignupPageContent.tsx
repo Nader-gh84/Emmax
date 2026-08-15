@@ -126,10 +126,6 @@ export default function SignupPageContent() {
         <div className={styles.main}>
           <div className={styles.shell}>
             <section className={styles.welcome}>
-              <div className={styles.brandMark} aria-hidden="true">
-                <img src="/Logo.png" alt="" />
-              </div>
-
               <h1>
                 Start <span className={styles.accent}>free</span>
               </h1>
