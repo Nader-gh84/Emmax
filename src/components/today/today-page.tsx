@@ -290,10 +290,12 @@ export function TodayPage({
     error: recorderError,
     startRecording,
     stopRecording,
+    levels: micLevels,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
     preSpeechSilenceMs: 7000,
     postSpeechSilenceMs: 1500,
+    barCount: 4,
   });
 
   const isRecording = recorderStatus === "recording";
@@ -1290,7 +1292,9 @@ export function TodayPage({
                 <div className="relative flex items-center gap-4">
                   <EmaAvatar
                     size="lg"
-                    speaking={briefTts.isPlaying || isRecording}
+                    speaking={briefTts.isPlaying && !isRecording}
+                    listening={isRecording}
+                    levels={micLevels}
                   />
                   <button
                     ref={briefMicRef}

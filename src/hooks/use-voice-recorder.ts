@@ -33,10 +33,19 @@ interface UseVoiceRecorderOptions {
   silenceDurationMs?: number;
   /** Minimum speech ms to mark hasSpeech (default from whisper-guard). */
   minSpeechDurationMs?: number;
+  /** Number of live waveform bars to expose (default 7). */
+  barCount?: number;
 }
 
 const DEFAULT_PRE_SPEECH_SILENCE_MS = 7000;
 const DEFAULT_POST_SPEECH_SILENCE_MS = 1500;
+const DEFAULT_BAR_COUNT = 7;
+/** EMA factor for bar height smoothing (higher = smoother / less flicker). */
+const LEVEL_SMOOTHING = 0.72;
+
+function flatLevels(count: number, value = 0.04): number[] {
+  return Array.from({ length: count }, () => value);
+}
 
 export function useVoiceRecorder({
   onRecordingComplete,
@@ -45,6 +54,7 @@ export function useVoiceRecorder({
   postSpeechSilenceMs,
   silenceDurationMs,
   minSpeechDurationMs = MIN_SPEECH_DURATION_MS,
+  barCount = DEFAULT_BAR_COUNT,
 }: UseVoiceRecorderOptions) {
   const resolvedPreSpeech =
     preSpeechSilenceMs ?? silenceDurationMs ?? DEFAULT_PRE_SPEECH_SILENCE_MS;
@@ -56,6 +66,9 @@ export function useVoiceRecorder({
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const rafRef = useRef<number | null>(null);
   const silenceStartRef = useRef<number | null>(null);
@@ -65,16 +78,23 @@ export function useVoiceRecorder({
   const peakRmsRef = useRef(0);
   const lastSpeechSampleAtRef = useRef<number | null>(null);
   const heardSpeechRef = useRef(false);
+  const smoothedLevelsRef = useRef<number[]>(flatLevels(barCount));
 
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
+  const [levels, setLevels] = useState<number[]>(() => flatLevels(barCount));
 
   useEffect(() => {
     onCompleteRef.current = onRecordingComplete;
   }, [onRecordingComplete]);
 
-  const stopAnalyser = useCallback(() => {
+  useEffect(() => {
+    smoothedLevelsRef.current = flatLevels(barCount);
+    setLevels(flatLevels(barCount));
+  }, [barCount]);
+
+  const stopAnalyserLoop = useCallback(() => {
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -90,12 +110,36 @@ export function useVoiceRecorder({
     }
   }, []);
 
+  const disconnectAudioGraph = useCallback(() => {
+    try {
+      sourceNodeRef.current?.disconnect();
+    } catch {
+      // already disconnected
+    }
+    try {
+      analyserRef.current?.disconnect();
+    } catch {
+      // already disconnected
+    }
+    sourceNodeRef.current = null;
+    analyserRef.current = null;
+
+    const ctx = audioContextRef.current;
+    audioContextRef.current = null;
+    if (ctx) {
+      void ctx.close().catch(() => undefined);
+    }
+  }, []);
+
   const cleanupStream = useCallback(() => {
-    stopAnalyser();
+    stopAnalyserLoop();
     clearTimer();
+    disconnectAudioGraph();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-  }, [clearTimer, stopAnalyser]);
+    smoothedLevelsRef.current = flatLevels(barCount);
+    setLevels(flatLevels(barCount));
+  }, [barCount, clearTimer, disconnectAudioGraph, stopAnalyserLoop]);
 
   useEffect(() => {
     return () => {
@@ -114,8 +158,8 @@ export function useVoiceRecorder({
     if (!recorder || recorder.state !== "recording") return;
 
     recorder.stop();
-    stopAnalyser();
-  }, [stopAnalyser]);
+    stopAnalyserLoop();
+  }, [stopAnalyserLoop]);
 
   const startRecording = useCallback(async () => {
     setError(null);
@@ -124,6 +168,8 @@ export function useVoiceRecorder({
     peakRmsRef.current = 0;
     lastSpeechSampleAtRef.current = null;
     heardSpeechRef.current = false;
+    smoothedLevelsRef.current = flatLevels(barCount);
+    setLevels(flatLevels(barCount));
     setSeconds(0);
 
     try {
@@ -131,9 +177,13 @@ export function useVoiceRecorder({
       streamRef.current = stream;
 
       const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
       const source = audioContext.createMediaStreamSource(stream);
+      sourceNodeRef.current = source;
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.65;
+      analyserRef.current = analyser;
       source.connect(analyser);
 
       const mediaRecorder = new MediaRecorder(stream);
@@ -145,12 +195,6 @@ export function useVoiceRecorder({
 
       mediaRecorder.onstop = async () => {
         cleanupStream();
-        try {
-          await audioContext.close();
-        } catch {
-          // AudioContext may already be closed.
-        }
-
         setStatus("idle");
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         const speechDurationMs = speechDurationMsRef.current;
@@ -165,21 +209,42 @@ export function useVoiceRecorder({
         }
       };
 
-      const dataArray = new Uint8Array(analyser.fftSize);
+      const timeData = new Uint8Array(analyser.fftSize);
+      const freqData = new Uint8Array(analyser.frequencyBinCount);
 
-      const monitorSilence = () => {
-        analyser.getByteTimeDomainData(dataArray);
+      const monitor = () => {
+        analyser.getByteTimeDomainData(timeData);
         let sum = 0;
-        for (let i = 0; i < dataArray.length; i += 1) {
-          const normalized = (dataArray[i] - 128) / 128;
+        for (let i = 0; i < timeData.length; i += 1) {
+          const normalized = (timeData[i]! - 128) / 128;
           sum += normalized * normalized;
         }
-        const volume = Math.sqrt(sum / dataArray.length);
+        const volume = Math.sqrt(sum / timeData.length);
         const now = Date.now();
 
         if (volume > peakRmsRef.current) {
           peakRmsRef.current = volume;
         }
+
+        // Live waveform bars from frequency bins (speech band–weighted)
+        analyser.getByteFrequencyData(freqData);
+        const usableBins = Math.floor(freqData.length * 0.45);
+        const chunk = Math.max(1, Math.floor(usableBins / barCount));
+        const next = smoothedLevelsRef.current.slice();
+        for (let bar = 0; bar < barCount; bar += 1) {
+          const start = bar * chunk;
+          let bucket = 0;
+          for (let j = 0; j < chunk; j += 1) {
+            bucket += freqData[start + j] ?? 0;
+          }
+          const raw = Math.min(1, bucket / (chunk * 255));
+          // Soft gate: near-silence collapses toward a flat floor
+          const gated = raw < 0.045 ? 0.03 : Math.pow(raw, 0.85);
+          next[bar] =
+            next[bar]! * LEVEL_SMOOTHING + gated * (1 - LEVEL_SMOOTHING);
+        }
+        smoothedLevelsRef.current = next;
+        setLevels(next.slice());
 
         if (volume >= silenceThreshold) {
           if (lastSpeechSampleAtRef.current != null) {
@@ -206,12 +271,12 @@ export function useVoiceRecorder({
           }
         }
 
-        rafRef.current = requestAnimationFrame(monitorSilence);
+        rafRef.current = requestAnimationFrame(monitor);
       };
 
       mediaRecorder.start();
       setStatus("recording");
-      rafRef.current = requestAnimationFrame(monitorSilence);
+      rafRef.current = requestAnimationFrame(monitor);
       timerRef.current = setInterval(() => {
         setSeconds((value) => value + 1);
       }, 1000);
@@ -221,6 +286,7 @@ export function useVoiceRecorder({
       cleanupStream();
     }
   }, [
+    barCount,
     cleanupStream,
     finishRecording,
     minSpeechDurationMs,
@@ -233,6 +299,8 @@ export function useVoiceRecorder({
     status,
     error,
     seconds,
+    /** Smoothed 0–1 bar heights; live while recording, flat when idle. */
+    levels,
     startRecording,
     stopRecording: finishRecording,
     setError,

@@ -3,39 +3,18 @@
 import { useCallback, useEffect, useRef } from "react";
 import { IconMicrophone } from "@/components/dashboard/icons";
 import { useEmCall } from "@/components/em-call/em-call-provider";
+import { LiveVoiceWave } from "@/components/ui/live-voice-wave";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 import {
   EM_CALL_TTS_INSTRUCTIONS,
   EM_CALL_TTS_VOICE,
 } from "@/lib/em-call/greeting";
-import { NO_SPEECH_USER_MESSAGE, MAX_CONSECUTIVE_NO_SPEECH } from "@/lib/whisper-guard";
-import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
-
-function VoiceWave({ active }: { active: boolean }) {
-  return (
-    <div
-      className="flex h-10 items-end justify-center gap-1"
-      aria-hidden="true"
-    >
-      {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-        <span
-          key={i}
-          className={`w-1 rounded-full bg-cyan-300/90 ${
-            active ? "em-call-wave" : "h-2 opacity-40"
-          }`}
-          style={
-            active
-              ? {
-                  animationDelay: `${i * 0.08}s`,
-                }
-              : undefined
-          }
-        />
-      ))}
-    </div>
-  );
-}
+import {
+  MAX_CONSECUTIVE_NO_SPEECH,
+  NO_SPEECH_USER_MESSAGE,
+} from "@/lib/whisper-guard";
 
 function phaseLabel(
   phase: string,
@@ -230,13 +209,23 @@ export function EmCallOverlay() {
     startRecording,
     stopRecording,
     error: recorderError,
+    levels: micLevels,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
     preSpeechSilenceMs: 7000,
     postSpeechSilenceMs: 1500,
+    barCount: 7,
   });
 
   const isRecording = recorderStatus === "recording";
+  const emaSpeaking =
+    (phase === "greeting" || phase === "speaking") &&
+    (tts.isPlaying || tts.isLoading);
+  const waveMode = isRecording
+    ? "listening"
+    : emaSpeaking
+      ? "speaking"
+      : "idle";
 
   const handleEndCall = useCallback(async () => {
     sessionLocalRef.current += 1;
@@ -396,12 +385,6 @@ export function EmCallOverlay() {
   if (!isOpen) return null;
 
   const label = phaseLabel(phase, isRecording, tts.isLoading);
-  const waveActive =
-    isRecording ||
-    phase === "listening" ||
-    phase === "greeting" ||
-    phase === "speaking";
-
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-8"
@@ -427,7 +410,11 @@ export function EmCallOverlay() {
             className="mx-auto h-[min(52vh,420px)] w-auto max-w-full object-contain drop-shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
           />
           <div className="pointer-events-none absolute bottom-[18%] left-1/2 w-40 -translate-x-1/2 sm:bottom-[20%]">
-            <VoiceWave active={waveActive} />
+            <LiveVoiceWave
+              mode={waveMode}
+              levels={micLevels}
+              barCount={7}
+            />
           </div>
         </div>
 
