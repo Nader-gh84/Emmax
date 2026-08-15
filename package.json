@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test:entity-resolve": "npx tsx scripts/smoke-entity-resolve.ts",
-    "test:em-call-reads": "npx tsx scripts/smoke-em-call-read-tools.ts"
+    "test:em-call-reads": "npx tsx scripts/smoke-em-call-read-tools.ts",
+    "diag:em-call-project-financials": "npx tsx scripts/diag-em-call-project-financials.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
