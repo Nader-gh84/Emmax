@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import {
   appendEmCallMessage,
   getEmCallSession,
-  openAiMessagesFromSession,
 } from "@/lib/em-call/session-store";
+import { runEmCallTurnWithTools } from "@/lib/em-call/tools/run-turn";
 import { createClient } from "@/lib/supabase/server";
 
 type RequestBody = {
@@ -60,58 +60,42 @@ export async function POST(request: Request) {
 
     appendEmCallMessage(session, { role: "user", content: transcript });
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        temperature: 0.7,
-        max_tokens: 220,
-        messages: openAiMessagesFromSession(session),
-      }),
-    });
+    try {
+      const result = await runEmCallTurnWithTools({
+        apiKey,
+        session,
+        supabase,
+        userId: user.id,
+      });
 
-    if (!response.ok) {
-      const details = await response.text();
-      // Roll back the user turn on model failure so retries don't double-append
+      appendEmCallMessage(session, {
+        role: "assistant",
+        content: result.reply,
+      });
+
+      return NextResponse.json({
+        sessionId: session.id,
+        reply: result.reply,
+        usedTools: result.usedTools,
+        toolNames: result.toolNames,
+        turnCount: session.messages.filter((m) => m.role === "user").length,
+      });
+    } catch (err) {
+      // Roll back the user turn on model/tool failure so retries don't double-append
       const last = session.messages[session.messages.length - 1];
       if (last?.role === "user" && last.content === transcript) {
         session.messages.pop();
       }
-      return NextResponse.json(
-        { error: "Em Call reply failed", details },
-        { status: 500 }
-      );
+      throw err;
     }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const reply = data.choices?.[0]?.message?.content?.trim();
-
-    if (!reply) {
-      return NextResponse.json(
-        { error: "Empty reply from model" },
-        { status: 500 }
-      );
-    }
-
-    appendEmCallMessage(session, { role: "assistant", content: reply });
-
-    return NextResponse.json({
-      sessionId: session.id,
-      reply,
-      turnCount: session.messages.filter((m) => m.role === "user").length,
-    });
   } catch (error) {
     console.error("Em Call turn error:", error);
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Failed to process Em Call turn",
+          error instanceof Error
+            ? error.message
+            : "Failed to process Em Call turn",
       },
       { status: 500 }
     );
