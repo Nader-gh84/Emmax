@@ -256,3 +256,20 @@
     opacity: 1;
   }
 }
+
+/* Em Call with Ema — listening / speaking wave */
+@keyframes em-call-bar {
+  0%,
+  100% {
+    height: 0.35rem;
+    opacity: 0.45;
+  }
+  50% {
+    height: 1.75rem;
+    opacity: 1;
+  }
+}
+
+.em-call-wave {
+  animation: em-call-bar 0.85s ease-in-out infinite;
+}

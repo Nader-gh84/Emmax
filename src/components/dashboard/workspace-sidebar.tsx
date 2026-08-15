@@ -4,14 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { IconMicrophone } from "@/components/dashboard/icons";
 import { UserMenu } from "@/components/dashboard/user-menu";
-import { IconWaveform } from "@/components/dashboard/workspace-icons";
 import {
   isWorkspaceNavItemActive,
   workspaceNavItems,
 } from "@/components/dashboard/workspace-nav";
 import { UnreadCountBadge } from "@/components/dashboard/unread-count-badge";
+import { EmCallSidebarLauncher } from "@/components/em-call/em-call-launcher";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 
 function WorkspaceSidebarNav() {
@@ -53,9 +52,6 @@ function WorkspaceSidebarNav() {
 }
 
 export function WorkspaceSidebar() {
-  const pathname = usePathname();
-  const hideEmaWidget = pathname === "/dashboard/today";
-
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-[#14263D] lg:flex">
       <div className="border-b border-white/10 px-5 py-5">
@@ -97,37 +93,7 @@ export function WorkspaceSidebar() {
       </Suspense>
 
       <div className="space-y-3 p-3">
-        {!hideEmaWidget ? (
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/10 to-white/[0.03] p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-accent to-cyan-400 text-sm font-bold text-white shadow-lg shadow-accent/30">
-                Ema
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">Hi! I&apos;m Ema</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-slate-400">
-                  Your AI teammate. Ask me anything.
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/30 transition hover:bg-blue-600"
-                aria-label="Start voice input"
-              >
-                <IconMicrophone className="h-5 w-5" />
-              </button>
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-white/10 bg-navy/60 px-3 py-2">
-                <IconWaveform className="h-4 w-4 shrink-0 text-cyan-400" />
-                <span className="truncate text-xs font-medium text-slate-300">
-                  Listening...
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : null}
+        <EmCallSidebarLauncher />
 
         <div className="rounded-xl border border-white/10 bg-white/[0.03] px-1.5 py-1">
           <UserMenu variant="sidebar" menuAlign="left" />
