@@ -29,6 +29,7 @@ import type { MaterialOrder } from "@/types/material-order";
 import type { ScheduleItem } from "@/types/schedule-item";
 import type { AppNotification } from "@/types/notification";
 import type { EmCallReadToolName } from "@/lib/em-call/tools/definitions";
+import { loadCustomerFinancialRollup } from "@/lib/em-call/tools/customer-financial-rollup";
 import {
   rankEntityMatches,
   resolveFromRanked,
@@ -458,22 +459,34 @@ async function toolGetCustomer(ctx: ToolCtx, args: { customer_id?: string }) {
   const customerId = String(args.customer_id ?? "").trim();
   if (!customerId) return { error: "customer_id is required" };
 
-  const { data: customer } = await ctx.supabase
+  const { data: customer, error: customerError } = await ctx.supabase
     .from("customers")
     .select("*")
     .eq("user_id", ctx.userId)
     .eq("id", customerId)
     .maybeSingle();
 
+  if (customerError) {
+    return { error: `Failed to load customer: ${customerError.message}` };
+  }
   if (!customer) return { error: "Customer not found" };
 
-  const { data: projects } = await ctx.supabase
-    .from("projects")
-    .select("id, project_name, status, value")
-    .eq("user_id", ctx.userId)
-    .eq("customer_id", customerId)
-    .order("updated_at", { ascending: false })
-    .limit(30);
+  const rollup = await loadCustomerFinancialRollup(
+    ctx.supabase,
+    ctx.userId,
+    customerId
+  );
+  if (!rollup.ok) return { error: rollup.error };
+
+  const outstandingTotal = rollup.data.outstanding?.totalOutstanding ?? 0;
+  const paymentStatus =
+    outstandingTotal > 0
+      ? "has_outstanding_balance"
+      : rollup.data.totals.customerPayments > 0
+        ? "paid_up"
+        : rollup.data.projectCount > 0
+          ? "no_payments_recorded"
+          : "no_projects";
 
   return {
     id: customer.id,
@@ -481,15 +494,22 @@ async function toolGetCustomer(ctx: ToolCtx, args: { customer_id?: string }) {
       first_name: String(customer.first_name ?? ""),
       last_name: String(customer.last_name ?? ""),
     }),
-    email: customer.email,
-    phone: customer.phone,
-    address: customer.address,
+    email: customer.email ?? null,
+    phone: customer.phone ?? null,
+    address: customer.address ?? null,
     customerType: customer.customer_type,
-    projects: (projects ?? []).map((p) => ({
-      id: p.id,
-      name: resolveProjectDisplayName(String(p.project_name ?? "")),
+    paymentStatus,
+    outstandingBalance: money(outstandingTotal),
+    contractValue: rollup.data.totals.contractValue,
+    customerPayments: rollup.data.totals.customerPayments,
+    projects: rollup.data.projects.map((p) => ({
+      id: p.projectId,
+      name: p.projectName,
       status: p.status,
-      value: money(Number(p.value ?? 0)),
+      value: p.contractValue,
+      paymentStatus: p.paymentStatus,
+      outstanding: p.outstandingCustomerBalance,
+      paymentsReceived: p.customerPayments,
     })),
   };
 }
@@ -631,6 +651,58 @@ async function toolGetFinancialSummary(
   const scope = String(args.scope ?? "").trim();
   const id = String(args.id ?? "").trim();
 
+  if (scope === "customer") {
+    if (!id) return { error: "id (customer_id) is required for customer scope" };
+
+    const { data: customer, error: customerError } = await ctx.supabase
+      .from("customers")
+      .select("id, first_name, last_name")
+      .eq("user_id", ctx.userId)
+      .eq("id", id)
+      .maybeSingle();
+
+    if (customerError) {
+      return { error: `Failed to load customer: ${customerError.message}` };
+    }
+    if (!customer) return { error: "Customer not found" };
+
+    const rollup = await loadCustomerFinancialRollup(
+      ctx.supabase,
+      ctx.userId,
+      id
+    );
+    if (!rollup.ok) return { error: rollup.error };
+
+    const customerName = getCustomerDisplayName({
+      first_name: String(customer.first_name ?? ""),
+      last_name: String(customer.last_name ?? ""),
+    });
+
+    return {
+      scope: "customer",
+      customerId: id,
+      customerName,
+      projectCount: rollup.data.projectCount,
+      contractValue: rollup.data.totals.contractValue,
+      customerPayments: rollup.data.totals.customerPayments,
+      outstandingCustomerBalance: rollup.data.totals.outstanding,
+      totalProjectCost: rollup.data.totals.totalCosts,
+      grossProfit: rollup.data.totals.grossProfit,
+      projectsWithBalance: rollup.data.outstanding?.projectCount ?? 0,
+      projects: rollup.data.projects.map((p) => ({
+        projectId: p.projectId,
+        projectName: p.projectName,
+        status: p.status,
+        contractValue: p.contractValue,
+        customerPayments: p.customerPayments,
+        outstandingCustomerBalance: p.outstandingCustomerBalance,
+        totalProjectCost: p.totalProjectCost,
+        grossProfit: p.grossProfit,
+        paymentStatus: p.paymentStatus,
+      })),
+    };
+  }
+
   if (scope === "project") {
     if (!id) return { error: "id (project_id) is required for project scope" };
     const loaded = await loadProjectFinancialInputs(ctx, id);
@@ -710,7 +782,9 @@ async function toolGetFinancialSummary(
     };
   }
 
-  return { error: "scope must be project, supplier, or portfolio" };
+  return {
+    error: "scope must be customer, project, supplier, or portfolio",
+  };
 }
 
 export async function executeEmCallReadTool(
