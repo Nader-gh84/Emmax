@@ -28,9 +28,6 @@ export function buildEmCallGreeting(firstName: string): string {
   return `Hey ${name}, how can I help you?`;
 }
 
-/** Chunk 0 canned reply — real tool answers come in later chunks. */
-export const EM_CALL_CHUNK0_REPLY = "Got it.";
-
 export const EM_CALL_TTS_VOICE = "nova";
 
 export const EM_CALL_TTS_INSTRUCTIONS =

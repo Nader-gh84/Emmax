@@ -6,8 +6,6 @@ import { useEmCall } from "@/components/em-call/em-call-provider";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import {
-  buildEmCallGreeting,
-  EM_CALL_CHUNK0_REPLY,
   EM_CALL_TTS_INSTRUCTIONS,
   EM_CALL_TTS_VOICE,
 } from "@/lib/em-call/greeting";
@@ -46,7 +44,7 @@ function phaseLabel(
     return "Ema is speaking…";
   }
   if (phase === "listening" || isRecording) return "Listening…";
-  if (phase === "thinking") return "Got your words — one moment…";
+  if (phase === "thinking") return "Thinking…";
   if (phase === "speaking") return "Ema is speaking…";
   if (phase === "closing") return "Ending call…";
   return "Em Call with Ema";
@@ -56,44 +54,70 @@ export function EmCallOverlay() {
   const {
     isOpen,
     phase,
-    greetingName,
+    sessionId,
     transcript,
+    assistantLine,
     statusMessage,
     error,
     endCall,
     setPhase,
+    setSessionId,
     setTranscript,
+    setAssistantLine,
     setStatusMessage,
     setError,
   } = useEmCall();
 
   const tts = useTtsPlayback();
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sessionRef = useRef(0);
-  const greetingRequestedRef = useRef(false);
-  const listenStartedRef = useRef(false);
-  const replyRequestedRef = useRef(false);
-  const pendingReplyRef = useRef(false);
-  const sawReplyPlayingRef = useRef(false);
+  const sessionLocalRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
+  const bootstrapRequestedRef = useRef(false);
+  const listenAfterSpeechRef = useRef(false);
+  const sawSpeechPlayingRef = useRef(false);
+  const pendingSpeakTextRef = useRef<string | null>(null);
 
-  const clearCloseTimer = useCallback(() => {
-    if (closeTimerRef.current) {
-      clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
-    }
-  }, []);
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
-  const finishAndClose = useCallback(() => {
-    clearCloseTimer();
-    setPhase("closing");
-    closeTimerRef.current = setTimeout(() => {
-      endCall();
-    }, 450);
-  }, [clearCloseTimer, endCall, setPhase]);
+  const beginListening = useCallback(
+    async (startRec: () => Promise<void>) => {
+      setPhase("listening");
+      setStatusMessage(null);
+      try {
+        await startRec();
+      } catch {
+        setStatusMessage("Tap the mic to speak");
+      }
+    },
+    [setPhase, setStatusMessage]
+  );
+
+  const speakLine = useCallback(
+    (text: string) => {
+      pendingSpeakTextRef.current = text;
+      sawSpeechPlayingRef.current = false;
+      listenAfterSpeechRef.current = true;
+      setAssistantLine(text);
+      setPhase("speaking");
+      void tts.play(text, {
+        voice: EM_CALL_TTS_VOICE,
+        instructions: EM_CALL_TTS_INSTRUCTIONS,
+      });
+    },
+    [setAssistantLine, setPhase, tts]
+  );
 
   const handleRecordingComplete = useCallback(
     async (blob: Blob) => {
-      const session = sessionRef.current;
+      const local = sessionLocalRef.current;
+      const activeSessionId = sessionIdRef.current;
+      if (!activeSessionId) {
+        setError("Call session missing — end and start again.");
+        setPhase("listening");
+        return;
+      }
+
       setPhase("thinking");
       setStatusMessage("Transcribing…");
       setError(null);
@@ -103,33 +127,54 @@ export function EmCallOverlay() {
         form.append("audio", blob, "em-call.webm");
         form.append("extract", "false");
 
-        const response = await fetch("/api/transcribe", {
+        const sttResponse = await fetch("/api/transcribe", {
           method: "POST",
           body: form,
         });
-        const data = (await response.json().catch(() => null)) as {
+        const sttData = (await sttResponse.json().catch(() => null)) as {
           transcript?: string;
           error?: string;
         } | null;
 
-        if (session !== sessionRef.current) return;
+        if (local !== sessionLocalRef.current) return;
 
-        if (!response.ok || !data?.transcript?.trim()) {
-          throw new Error(data?.error || "Couldn't catch that — try again.");
+        if (!sttResponse.ok || !sttData?.transcript?.trim()) {
+          throw new Error(sttData?.error || "Couldn't catch that — try again.");
         }
 
-        setTranscript(data.transcript.trim());
+        const text = sttData.transcript.trim();
+        setTranscript(text);
+        setStatusMessage("Thinking…");
+
+        const turnResponse = await fetch("/api/em-call/turn", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: activeSessionId,
+            transcript: text,
+          }),
+        });
+        const turnData = (await turnResponse.json().catch(() => null)) as {
+          reply?: string;
+          error?: string;
+        } | null;
+
+        if (local !== sessionLocalRef.current) return;
+
+        if (!turnResponse.ok || !turnData?.reply?.trim()) {
+          throw new Error(turnData?.error || "Ema couldn't reply just now.");
+        }
+
         setStatusMessage(null);
-        pendingReplyRef.current = true;
-        setPhase("speaking");
+        speakLine(turnData.reply.trim());
       } catch (err) {
-        if (session !== sessionRef.current) return;
+        if (local !== sessionLocalRef.current) return;
         setError(err instanceof Error ? err.message : "Something went wrong");
         setPhase("listening");
         setStatusMessage("Tap the mic to try again");
       }
     },
-    [setError, setPhase, setStatusMessage, setTranscript]
+    [setError, setPhase, setStatusMessage, setTranscript, speakLine]
   );
 
   const {
@@ -144,103 +189,116 @@ export function EmCallOverlay() {
 
   const isRecording = recorderStatus === "recording";
 
-  const handleEndCall = useCallback(() => {
-    sessionRef.current += 1;
-    clearCloseTimer();
-    greetingRequestedRef.current = false;
-    listenStartedRef.current = false;
-    replyRequestedRef.current = false;
-    pendingReplyRef.current = false;
-    sawReplyPlayingRef.current = false;
+  const handleEndCall = useCallback(async () => {
+    sessionLocalRef.current += 1;
+    bootstrapRequestedRef.current = false;
+    listenAfterSpeechRef.current = false;
+    sawSpeechPlayingRef.current = false;
+    pendingSpeakTextRef.current = null;
     tts.stop();
+
     if (recorderStatus === "recording") {
       void stopRecording();
     }
-    endCall();
-  }, [clearCloseTimer, endCall, recorderStatus, stopRecording, tts]);
 
-  // Open → kick off greeting TTS
+    const id = sessionIdRef.current;
+    if (id) {
+      void fetch("/api/em-call/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+      }).catch(() => undefined);
+    }
+
+    endCall();
+  }, [endCall, recorderStatus, stopRecording, tts]);
+  // Bootstrap session + greeting when overlay opens
   useEffect(() => {
     if (!isOpen) {
-      greetingRequestedRef.current = false;
-      listenStartedRef.current = false;
-      replyRequestedRef.current = false;
-      pendingReplyRef.current = false;
-      sawReplyPlayingRef.current = false;
-      clearCloseTimer();
+      bootstrapRequestedRef.current = false;
+      listenAfterSpeechRef.current = false;
+      sawSpeechPlayingRef.current = false;
+      pendingSpeakTextRef.current = null;
       tts.stop();
       return;
     }
 
-    if (greetingRequestedRef.current) return;
-    greetingRequestedRef.current = true;
-    sessionRef.current += 1;
+    if (bootstrapRequestedRef.current) return;
+    bootstrapRequestedRef.current = true;
+    sessionLocalRef.current += 1;
+    const local = sessionLocalRef.current;
+
     setPhase("greeting");
-    setStatusMessage(null);
-    void tts.play(buildEmCallGreeting(greetingName), {
-      voice: EM_CALL_TTS_VOICE,
-      instructions: EM_CALL_TTS_INSTRUCTIONS,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- start once per open
-  }, [isOpen]);
+    setStatusMessage("Connecting…");
+    setError(null);
+    setTranscript(null);
+    setAssistantLine(null);
 
-  // Greeting finished → start listening
-  useEffect(() => {
-    if (!isOpen) return;
-    if (phase !== "greeting") return;
-    if (tts.status !== "ended" && tts.status !== "error") return;
-    if (listenStartedRef.current) return;
-
-    listenStartedRef.current = true;
-    setPhase("listening");
     void (async () => {
       try {
-        await startRecording();
-      } catch {
-        setStatusMessage("Tap the mic to speak");
+        const response = await fetch("/api/em-call/session", {
+          method: "POST",
+        });
+        const data = (await response.json().catch(() => null)) as {
+          sessionId?: string;
+          greeting?: string;
+          error?: string;
+        } | null;
+
+        if (local !== sessionLocalRef.current) return;
+
+        if (!response.ok || !data?.sessionId || !data.greeting) {
+          throw new Error(data?.error || "Couldn't start Em Call.");
+        }
+
+        setSessionId(data.sessionId);
+        sessionIdRef.current = data.sessionId;
+        setStatusMessage(null);
+        speakLine(data.greeting);
+      } catch (err) {
+        if (local !== sessionLocalRef.current) return;
+        setError(err instanceof Error ? err.message : "Couldn't start Em Call");
+        setStatusMessage("Tap End call and try again");
+        setPhase("idle");
       }
     })();
-  }, [isOpen, phase, setPhase, setStatusMessage, startRecording, tts.status]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open
+  }, [isOpen]);
 
-  // After transcript → play canned reply
+  // After Ema finishes speaking → listen again (multi-turn)
   useEffect(() => {
     if (!isOpen) return;
-    if (phase !== "speaking") return;
-    if (!pendingReplyRef.current) return;
-    if (replyRequestedRef.current) return;
-
-    replyRequestedRef.current = true;
-    pendingReplyRef.current = false;
-    sawReplyPlayingRef.current = false;
-    void tts.play(EM_CALL_CHUNK0_REPLY, {
-      voice: EM_CALL_TTS_VOICE,
-      instructions: EM_CALL_TTS_INSTRUCTIONS,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, phase]);
-
-  // Track reply playback then close when it finishes (not leftover greeting "ended")
-  useEffect(() => {
-    if (!isOpen) return;
-    if (phase !== "speaking") return;
-    if (!replyRequestedRef.current) return;
+    if (phase !== "greeting" && phase !== "speaking") return;
+    if (!listenAfterSpeechRef.current) return;
 
     if (tts.isLoading || tts.isPlaying) {
-      sawReplyPlayingRef.current = true;
+      sawSpeechPlayingRef.current = true;
       return;
     }
 
-    if (sawReplyPlayingRef.current && tts.status === "ended") {
-      finishAndClose();
-    }
-  }, [finishAndClose, isOpen, phase, tts.isLoading, tts.isPlaying, tts.status]);
+    if (!sawSpeechPlayingRef.current) return;
+    if (tts.status !== "ended" && tts.status !== "error") return;
+
+    listenAfterSpeechRef.current = false;
+    sawSpeechPlayingRef.current = false;
+    pendingSpeakTextRef.current = null;
+    void beginListening(startRecording);
+  }, [
+    beginListening,
+    isOpen,
+    phase,
+    startRecording,
+    tts.isLoading,
+    tts.isPlaying,
+    tts.status,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        handleEndCall();
+        void handleEndCall();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -258,18 +316,24 @@ export function EmCallOverlay() {
 
   const onMicClick = async () => {
     if (!isOpen) return;
+
+    // Interrupt TTS and take the floor
     if (tts.isPlaying || tts.isLoading) {
       tts.stop();
+      listenAfterSpeechRef.current = false;
+      sawSpeechPlayingRef.current = false;
+      pendingSpeakTextRef.current = null;
     }
+
     if (isRecording) {
       await stopRecording();
       return;
     }
+
+    if (phase === "thinking") return;
+
     setError(null);
     setTranscript(null);
-    replyRequestedRef.current = false;
-    pendingReplyRef.current = false;
-    sawReplyPlayingRef.current = false;
     setPhase("listening");
     await startRecording();
   };
@@ -318,7 +382,12 @@ export function EmCallOverlay() {
         ) : null}
         {transcript ? (
           <p className="mt-3 max-w-md rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm leading-relaxed text-white/90">
-            “{transcript}”
+            You: “{transcript}”
+          </p>
+        ) : null}
+        {assistantLine && phase !== "greeting" ? (
+          <p className="mt-2 max-w-md text-sm leading-relaxed text-cyan-100/90">
+            Ema: {assistantLine}
           </p>
         ) : null}
         {error || recorderError ? (
@@ -329,18 +398,25 @@ export function EmCallOverlay() {
           <button
             type="button"
             onClick={() => void onMicClick()}
-            className={`flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition ${
+            disabled={phase === "thinking"}
+            className={`flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition disabled:opacity-50 ${
               isRecording
                 ? "bg-rose-500 shadow-rose-500/40 ring-4 ring-rose-400/30"
                 : "bg-accent shadow-accent/30 hover:bg-blue-600"
             }`}
-            aria-label={isRecording ? "Stop listening" : "Start speaking"}
+            aria-label={
+              isRecording
+                ? "Stop listening"
+                : tts.isPlaying || tts.isLoading
+                  ? "Interrupt and speak"
+                  : "Start speaking"
+            }
           >
             <IconMicrophone className="h-6 w-6" />
           </button>
           <button
             type="button"
-            onClick={handleEndCall}
+            onClick={() => void handleEndCall()}
             className="rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white"
           >
             End call
