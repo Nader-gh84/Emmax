@@ -332,7 +332,7 @@ export function OrderMaterialsPage({
   return (
     <div className="relative flex w-full flex-1 flex-col pb-36">
       {/* Header — same pattern as Project Detail */}
-      <div className="border-b border-white/10 bg-[#0B1220]/80 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="border-b border-white/10 bg-[#14263D]/80 px-4 py-5 sm:px-6 lg:px-8">
         <nav className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-500">
           <Link href="/dashboard" className="transition hover:text-accent">
             Dashboard
@@ -806,7 +806,7 @@ export function OrderMaterialsPage({
       </div>
 
       {/* Sticky bottom action bar */}
-      <div className="sticky bottom-16 z-30 border-t border-white/10 bg-[#0B1220]/95 px-4 py-4 backdrop-blur sm:px-6 lg:bottom-0 lg:px-8">
+      <div className="sticky bottom-16 z-30 border-t border-white/10 bg-[#14263D]/95 px-4 py-4 backdrop-blur sm:px-6 lg:bottom-0 lg:px-8">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href={projectHref}
@@ -861,7 +861,7 @@ export function OrderMaterialsPage({
       <button
         type="button"
         onClick={noop("Ema AI speak")}
-        className="fixed bottom-24 left-4 z-40 flex items-center gap-3 rounded-2xl border border-accent/30 bg-[#0B1220]/95 px-3.5 py-3 shadow-xl shadow-black/40 backdrop-blur transition hover:border-accent/50 hover:bg-[#0B1220] lg:bottom-6 lg:left-[16.5rem]"
+        className="fixed bottom-24 left-4 z-40 flex items-center gap-3 rounded-2xl border border-accent/30 bg-[#14263D]/95 px-3.5 py-3 shadow-xl shadow-black/40 backdrop-blur transition hover:border-accent/50 hover:bg-[#14263D] lg:bottom-6 lg:left-[16.5rem]"
       >
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-accent to-cyan-400 text-sm font-bold text-white shadow-md shadow-accent/30">
           E

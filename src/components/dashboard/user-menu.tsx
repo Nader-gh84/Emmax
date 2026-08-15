@@ -127,7 +127,7 @@ export function UserMenu({
       {isOpen && (
         <div
           role="menu"
-          className={`absolute z-50 w-64 overflow-hidden rounded-xl border border-white/10 bg-[#0B1220] shadow-xl ${
+          className={`absolute z-50 w-64 overflow-hidden rounded-xl border border-white/10 bg-[#14263D] shadow-xl ${
             menuAlign === "right" ? "right-0" : "left-0"
           } ${
             variant === "sidebar"

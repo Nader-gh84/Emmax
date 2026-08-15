@@ -50,7 +50,7 @@ function OutstandingDonut({
         style={{ background: gradient }}
         aria-hidden="true"
       >
-        <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0B1220]">
+        <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#14263D]">
           <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             Outstanding
           </span>

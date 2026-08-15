@@ -8,8 +8,8 @@
   --font-ui: var(--font-marketing), "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-text-size-adjust:100%;
 
-  --night-900:  #08111F;
-  --night-800:  #0C1A2E;
+  --night-900:  #0F1E33;
+  --night-800:  #14263D;
 
   --text:       #FFFFFF;
   --text-soft:  #B9C8DF;
@@ -134,15 +134,15 @@
   z-index:1; pointer-events:none;
   background:
     linear-gradient(96deg,
-      rgba(8,17,31,0.92) 0%,
-      rgba(8,17,31,0.74) 28%,
-      rgba(8,17,31,0.30) 44%,
-      rgba(8,17,31,0) 58%),
+      rgba(8, 17, 31, 0.76) 0%,
+      rgba(8, 17, 31, 0.61) 28%,
+      rgba(8, 17, 31, 0.25) 44%,
+      rgba(8, 17, 31, 0.0) 58%),
     linear-gradient(180deg,
-      rgba(8,17,31,0.48) 0%,
-      rgba(8,17,31,0) 26%,
-      rgba(8,17,31,0) 72%,
-      rgba(8,17,31,0.88) 100%);
+      rgba(8, 17, 31, 0.4) 0%,
+      rgba(8, 17, 31, 0.0) 26%,
+      rgba(8, 17, 31, 0.0) 72%,
+      rgba(8, 17, 31, 0.73) 100%);
 }
 
 .heroInner{
@@ -225,7 +225,7 @@
    ============================================================ */
 .pageBody{
   position:relative;
-  background:linear-gradient(180deg, #0A1524 0%, #0A1322 55%, #08111F 100%);
+  background:linear-gradient(180deg, #0A1524 0%, #0A1322 55%, #0F1E33 100%);
   padding-bottom:56px;
 }
 
@@ -446,10 +446,10 @@
   .heroLede{ max-width:none; }
   .veil{
     background:linear-gradient(180deg,
-      rgba(8,17,31,0.90) 0%,
-      rgba(8,17,31,0.55) 42%,
-      rgba(8,17,31,0.10) 70%,
-      rgba(8,17,31,0.9) 100%);
+      rgba(8, 17, 31, 0.74) 0%,
+      rgba(8, 17, 31, 0.45) 42%,
+      rgba(8, 17, 31, 0.08) 70%,
+      rgba(8, 17, 31, 0.74) 100%);
   }
 
   .flow{ overflow-x:auto; padding-bottom:8px; }

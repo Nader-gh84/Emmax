@@ -1158,7 +1158,7 @@ function VoiceQuoteBuilderInner({
     >
       {isLoadingQuote && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/70 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#0B1220] px-4 py-3 text-sm text-slate-300">
+          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#14263D] px-4 py-3 text-sm text-slate-300">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
             Loading draft…
           </div>
@@ -2075,7 +2075,7 @@ function VoiceQuoteBuilderInner({
       </div>
 
       {!embedded && showSidebar && (
-        <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#0B1220] xl:flex">
+        <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#14263D] xl:flex">
           <VoiceQuoteDetailsPanel
             quoteNumber={quoteNumber}
             quoteStatus={quoteStatus}
