@@ -17,13 +17,13 @@ export const EM_CALL_READ_TOOLS: EmCallToolDefinition[] = [
     function: {
       name: "resolve_entity",
       description:
-        "Resolve a spoken name to a customer, supplier, project, or employee. Call this before other tools when the user names someone or a job. If multiple matches or low confidence, ask the user to clarify — never guess.",
+        "Resolve a spoken name to a customer, supplier, project, or employee using fuzzy + phonetic matching (voice transcripts are imperfect). Always prefer this before other tools when the user names someone or a job. If needs_clarification is true, ask the short clarification question returned — never guess. Use kind=any when unsure whether the name is a person or a project. Treat names that sound like Ema/Emma as possible customer/employee names — do not ignore them as references to you.",
       parameters: {
         type: "object",
         properties: {
           kind: {
             type: "string",
-            enum: ["customer", "supplier", "project", "employee"],
+            enum: ["customer", "supplier", "project", "employee", "any"],
           },
           query: {
             type: "string",

@@ -31,11 +31,10 @@ import type { AppNotification } from "@/types/notification";
 import type { EmCallReadToolName } from "@/lib/em-call/tools/definitions";
 import { loadCustomerFinancialRollup } from "@/lib/em-call/tools/customer-financial-rollup";
 import {
-  rankEntityMatches,
-  resolveFromRanked,
+  resolveEntityQuery,
   type EntityCandidate,
   type EntityKind,
-} from "@/lib/em-call/tools/resolve";
+} from "@/lib/entity-resolve";
 
 type ToolCtx = {
   supabase: SupabaseClient;
@@ -146,26 +145,54 @@ async function toolResolveEntity(
   ctx: ToolCtx,
   args: { kind?: string; query?: string; limit?: number }
 ) {
-  const kind = args.kind as EntityKind;
+  const kindRaw = String(args.kind ?? "").trim();
   const query = String(args.query ?? "").trim();
   const limit = Math.min(10, Math.max(1, Number(args.limit) || 5));
+  const allowed = ["customer", "supplier", "project", "employee", "any"] as const;
 
-  if (!query || !["customer", "supplier", "project", "employee"].includes(kind)) {
+  if (!query || !(allowed as readonly string[]).includes(kindRaw)) {
     return { error: "kind and query are required" };
   }
 
-  const candidates = await loadEntityCandidates(ctx, kind);
-  const ranked = rankEntityMatches(query, candidates, limit);
-  const resolved = resolveFromRanked(ranked);
+  const kind = kindRaw as EntityKind | "any";
+  const kindsToLoad: EntityKind[] =
+    kind === "any"
+      ? ["customer", "supplier", "project", "employee"]
+      : [kind];
+
+  const candidateLists = await Promise.all(
+    kindsToLoad.map((k) => loadEntityCandidates(ctx, k))
+  );
+  const candidates = candidateLists.flat();
+
+  // When a specific kind is weak, also score other kinds (e.g. project named after a person).
+  let crossKindCandidates: EntityCandidate[] | undefined;
+  if (kind !== "any") {
+    const otherKinds = (
+      ["customer", "supplier", "project", "employee"] as EntityKind[]
+    ).filter((k) => k !== kind);
+    const otherLists = await Promise.all(
+      otherKinds.map((k) => loadEntityCandidates(ctx, k))
+    );
+    crossKindCandidates = otherLists.flat();
+  }
+
+  const resolved = resolveEntityQuery(query, candidates, {
+    kind,
+    optionLimit: limit,
+    crossKindCandidates,
+  });
 
   return {
     kind,
     query,
     needs_clarification: resolved.needs_clarification,
     reason: resolved.reason,
+    clarification: resolved.clarification,
     match: resolved.match
       ? {
           id: resolved.match.id,
+          kind: resolved.match.kind,
           label: resolved.match.label,
           meta: resolved.match.meta,
           score: resolved.match.score,
@@ -173,10 +200,19 @@ async function toolResolveEntity(
       : null,
     options: resolved.options.map((o) => ({
       id: o.id,
+      kind: o.kind,
       label: o.label,
       meta: o.meta,
       score: o.score,
     })),
+    available:
+      resolved.reason === "below_floor" || resolved.reason === "no_candidates"
+        ? resolved.available.slice(0, 20).map((a) => ({
+            id: a.id,
+            kind: a.kind,
+            label: a.label,
+          }))
+        : undefined,
   };
 }
 
