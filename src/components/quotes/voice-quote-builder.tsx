@@ -32,6 +32,7 @@ import {
 } from "@/components/quotes/ui";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
+import { LiveVoiceWave } from "@/components/ui/live-voice-wave";
 import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
 import {
   saveQuoteDraft,
@@ -536,10 +537,12 @@ function VoiceQuoteBuilderInner({
     seconds,
     startRecording,
     stopRecording,
+    levels: micLevels,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
     preSpeechSilenceMs: 7000,
     postSpeechSilenceMs: 1500,
+    barCount: embedded ? 20 : 24,
   });
 
   const isRecording = recorderStatus === "recording";
@@ -1305,22 +1308,17 @@ function VoiceQuoteBuilderInner({
                 </p>
 
                 <div
-                  className={`mt-5 flex w-full items-end justify-center gap-1 rounded-xl border border-white/10 bg-navy/50 px-3 py-2 ${
+                  className={`mt-5 flex w-full items-end justify-center rounded-xl border border-white/10 bg-navy/50 px-3 py-2 ${
                     embedded ? "h-10" : "h-12"
                   }`}
                 >
-                  {Array.from({ length: embedded ? 20 : 24 }).map((_, index) => (
-                    <span
-                      key={index}
-                      className={`w-1 rounded-full bg-cyan-400/80 ${
-                        isRecording ? "animate-waveform" : "opacity-40"
-                      }`}
-                      style={{
-                        height: `${20 + ((index * 17) % 60)}%`,
-                        animationDelay: `${index * 0.05}s`,
-                      }}
-                    />
-                  ))}
+                  <LiveVoiceWave
+                    mode={isRecording ? "listening" : "idle"}
+                    levels={micLevels}
+                    barCount={embedded ? 20 : 24}
+                    className={embedded ? "h-8 w-full gap-0.5" : "h-10 w-full gap-0.5"}
+                    barClassName="bg-cyan-400/80"
+                  />
                 </div>
 
                 <p

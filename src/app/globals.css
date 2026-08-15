@@ -273,3 +273,20 @@
 .em-call-wave {
   animation: em-call-bar 0.85s ease-in-out infinite;
 }
+
+/* Distinct TTS “Ema speaking” pulse — not mic-reactive */
+@keyframes em-call-ema-speak {
+  0%,
+  100% {
+    height: 0.4rem;
+    opacity: 0.4;
+  }
+  50% {
+    height: 1.1rem;
+    opacity: 0.95;
+  }
+}
+
+.em-call-ema-speak {
+  animation: em-call-ema-speak 1.1s ease-in-out infinite;
+}

@@ -13,6 +13,7 @@ import {
   IconUsers,
 } from "@/components/dashboard/icons";
 import { IconPhone, IconProjects } from "@/components/dashboard/workspace-icons";
+import { LiveVoiceWave } from "@/components/ui/live-voice-wave";
 import {
   agendaPriorityLabel,
   type AgendaPriority,
@@ -100,20 +101,28 @@ export function PriorityBadge({ priority }: { priority: AgendaPriority }) {
 export function EmaAvatar({
   size = "md",
   speaking = false,
+  listening = false,
+  levels = null,
 }: {
   size?: "sm" | "md" | "lg";
   speaking?: boolean;
+  /** True while the mic is open — drives live reactive bars. */
+  listening?: boolean;
+  /** Smoothed 0–1 mic levels from useVoiceRecorder. */
+  levels?: number[] | null;
 }) {
   const dim =
     size === "lg" ? "h-24 w-24" : size === "sm" ? "h-10 w-10" : "h-14 w-14";
   const px = size === "lg" ? 96 : size === "sm" ? 40 : 56;
+  const barCount = 4;
+  const waveMode = listening ? "listening" : speaking ? "speaking" : "idle";
 
   return (
     <div className="relative shrink-0">
       <div
         className={`relative overflow-hidden rounded-full bg-gradient-to-br from-accent/30 to-cyan-400/30 shadow-lg shadow-accent/25 ring-2 ring-white/10 ${dim} ${
-          speaking ? "animate-pulse ring-accent/60" : ""
-        }`}
+          speaking && !listening ? "animate-pulse ring-accent/60" : ""
+        } ${listening ? "ring-accent/60" : ""}`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- static public placeholder asset */}
         <img
@@ -124,18 +133,16 @@ export function EmaAvatar({
           className="h-full w-full object-cover"
         />
       </div>
-      {speaking ? (
-        <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              className="inline-block w-1 animate-pulse rounded-full bg-accent"
-              style={{
-                height: `${8 + (i % 3) * 4}px`,
-                animationDelay: `${i * 0.12}s`,
-              }}
-            />
-          ))}
+      {listening || speaking ? (
+        <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2">
+          <LiveVoiceWave
+            mode={waveMode}
+            levels={levels}
+            barCount={barCount}
+            className="h-5 gap-0.5"
+            barClassName="bg-accent"
+            speakingBarClassName="bg-accent"
+          />
         </span>
       ) : null}
     </div>
