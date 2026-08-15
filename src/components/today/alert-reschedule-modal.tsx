@@ -38,7 +38,7 @@ export function AlertRescheduleModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="alert-reschedule-title"
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-navy p-5 shadow-xl"
+        className="w-full max-w-md rounded-2xl border border-glass bg-navy p-5 shadow-xl"
       >
         <h2
           id="alert-reschedule-title"
@@ -46,11 +46,11 @@ export function AlertRescheduleModal({
         >
           Reschedule onto Today
         </h2>
-        <p className="mt-1 text-sm text-slate-400 line-clamp-2">{draft.title}</p>
+        <p className="mt-1 text-sm text-mute line-clamp-2">{draft.title}</p>
 
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-mute">
               Date
             </span>
             <input
@@ -62,7 +62,7 @@ export function AlertRescheduleModal({
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-mute">
               Time
             </span>
             <input
@@ -72,7 +72,7 @@ export function AlertRescheduleModal({
               onChange={(e) => setTimeHm(e.target.value)}
               disabled={busy}
             />
-            <span className="mt-1 block text-xs text-slate-500">
+            <span className="mt-1 block text-xs text-mute">
               Leave empty for all-day.
             </span>
           </label>

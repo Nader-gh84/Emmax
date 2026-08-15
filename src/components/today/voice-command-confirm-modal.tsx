@@ -82,13 +82,13 @@ export function VoiceCommandConfirmModal({
           if (!busy) onCancel();
         }}
       />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl">
+      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-glass bg-navy p-6 shadow-xl">
         {showingConflicts ? (
           <>
             <h2 className="text-xl font-semibold text-white">
               Schedule conflict
             </h2>
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-soft">
               That time is close to something else. You can still proceed.
             </p>
             <ul className="mt-4 space-y-2">
@@ -105,7 +105,7 @@ export function VoiceCommandConfirmModal({
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-sm text-slate-400">{summary}</p>
+            <p className="mt-4 text-sm text-mute">{summary}</p>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
@@ -128,16 +128,16 @@ export function VoiceCommandConfirmModal({
         ) : (
           <>
             <h2 className="text-xl font-semibold text-white">{intentLabel}</h2>
-            <p className="mt-2 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-mute">
               Heard:{" "}
-              <span className="font-medium text-slate-200">
+              <span className="font-medium text-soft">
                 “{transcript}”
               </span>
             </p>
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+            <div className="mt-4 emax-card px-3 py-3">
               <p className="text-sm font-medium text-white">{summary}</p>
               {command.notes ? (
-                <p className="mt-1 text-xs text-slate-400">{command.notes}</p>
+                <p className="mt-1 text-xs text-mute">{command.notes}</p>
               ) : null}
               {command.clarification ? (
                 <p className="mt-2 text-xs text-amber-200">
@@ -145,7 +145,7 @@ export function VoiceCommandConfirmModal({
                 </p>
               ) : null}
               {keepAsPersonal ? (
-                <p className="mt-2 text-xs text-slate-400">
+                <p className="mt-2 text-xs text-mute">
                   Will save as a personal item (no project link).
                 </p>
               ) : null}
@@ -159,14 +159,14 @@ export function VoiceCommandConfirmModal({
 
             {showProjectClarify ? (
               <div className="mt-4">
-                <p className="text-sm font-medium text-slate-200">
+                <p className="text-sm font-medium text-soft">
                   Link to a project
                   {command.projectQuery
                     ? ` (heard “${command.projectQuery}”)`
                     : ""}
                 </p>
                 {projectChoices.length === 0 ? (
-                  <p className="mt-2 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-mute">
                     No active projects found. Keep as personal or cancel.
                   </p>
                 ) : (
@@ -177,13 +177,13 @@ export function VoiceCommandConfirmModal({
                           type="button"
                           disabled={busy}
                           onClick={() => onSelectProject(project.id)}
-                          className="flex w-full flex-col rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-accent/10"
+                          className="flex w-full flex-col emax-card px-3 py-2.5 text-left transition hover:border-accent/40 hover:bg-accent/10"
                         >
                           <span className="text-sm font-semibold text-white">
                             {project.projectName}
                           </span>
                           {project.customerName ? (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-mute">
                               {project.customerName}
                             </span>
                           ) : null}
@@ -196,7 +196,7 @@ export function VoiceCommandConfirmModal({
                   type="button"
                   disabled={busy}
                   onClick={onKeepAsPersonal}
-                  className="mt-3 text-xs font-semibold text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                  className="mt-3 text-xs font-semibold text-mute underline-offset-2 hover:text-soft hover:underline"
                 >
                   Keep as personal instead
                 </button>

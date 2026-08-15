@@ -38,6 +38,7 @@ import { QuickAddLadderModal } from "@/components/today/quick-add-ladder";
 import {
   touchBtnSecondary,
 } from "@/components/quotes/ui";
+import { marketingFont } from "@/lib/marketing-font";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import {
@@ -971,13 +972,15 @@ export function TodayPage({
   }
 
   return (
-    <div className="flex w-full flex-1 flex-col">
+    <div
+      className={`emax-theme flex w-full flex-1 flex-col ${marketingFont.variable} ${marketingFont.className}`}
+    >
       {/* —— Header —— */}
-      <div className="border-b border-white/10 px-4 py-5 sm:px-6 lg:px-8">
+      <div className="border-b border-glass px-4 py-5 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight text-white">Today</h1>
-            <p className="mt-1 text-sm text-slate-400">
+            <h1 className="text-3xl font-medium tracking-tight text-white">Today</h1>
+            <p className="mt-1 text-sm text-mute">
               Your daily overview and tasks
             </p>
           </div>
@@ -986,7 +989,7 @@ export function TodayPage({
             <button
               type="button"
               onClick={openQuickAdd}
-              className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+              className="rounded-lg p-2 text-mute hover:bg-white/5 hover:text-white"
               title="Quick add"
               aria-label="Quick add"
             >

@@ -70,7 +70,7 @@ function typeVisual(type: ScheduleTaskType): {
       };
     default:
       return {
-        box: "bg-white/10 text-slate-300",
+        box: "bg-white/10 text-soft",
         Icon: IconCalendar,
       };
   }

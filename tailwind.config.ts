@@ -1,5 +1,10 @@
 import type { Config } from "tailwindcss";
 
+/**
+ * Colors resolve through CSS variables (see globals.css).
+ * Defaults on :root keep the legacy palette; `.emax-theme` opts into
+ * the marketing (dusk) palette for a scoped pilot.
+ */
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,8 +14,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        navy: "#0F172A",
-        accent: "#3B82F6",
+        navy: "var(--emax-navy)",
+        accent: "var(--emax-accent)",
+        surface: "var(--emax-surface)",
+        soft: "var(--emax-text-soft)",
+        mute: "var(--emax-text-mute)",
+        glass: "var(--emax-glass-brd)",
+        "blue-bright": "var(--emax-blue-bright)",
+        "blue-pale": "var(--emax-blue-pale)",
+      },
+      fontFamily: {
+        sans: ["var(--font-app)", "DM Sans", "system-ui", "sans-serif"],
+      },
+      borderRadius: {
+        card: "16px",
+        field: "11px",
       },
       keyframes: {
         waveform: {

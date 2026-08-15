@@ -51,11 +51,11 @@ export function QuickAddLadderModal({
           if (!busy) onClose();
         }}
       />
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-navy p-5 shadow-xl sm:p-6">
+      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-glass bg-navy p-5 shadow-xl sm:p-6">
         {step === "ladder" ? (
           <>
             <h2 className="text-xl font-semibold text-white">Quick Add</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-mute">
               Fastest first — voice, quick text, or the full form.
             </p>
 
@@ -73,7 +73,7 @@ export function QuickAddLadderModal({
                   <span className="block text-sm font-semibold text-white">
                     Voice
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-400">
+                  <span className="mt-0.5 block text-xs text-mute">
                     Jump to Ema’s mic — tap for brief, hold to talk
                   </span>
                 </span>
@@ -83,16 +83,16 @@ export function QuickAddLadderModal({
                 type="button"
                 disabled={busy}
                 onClick={() => setStep("text")}
-                className="flex w-full items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-50"
+                className="flex w-full items-start gap-3 emax-card px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-50"
               >
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-slate-200">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-soft">
                   Aa
                 </span>
                 <span>
                   <span className="block text-sm font-semibold text-white">
                     Quick text
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-400">
+                  <span className="mt-0.5 block text-xs text-mute">
                     Type a note — AI parses time, type, and project
                   </span>
                 </span>
@@ -102,16 +102,16 @@ export function QuickAddLadderModal({
                 type="button"
                 disabled={busy}
                 onClick={onChooseFullForm}
-                className="flex w-full items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-50"
+                className="flex w-full items-start gap-3 emax-card px-4 py-3.5 text-left transition hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-50"
               >
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-slate-200">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold text-soft">
                   ≡
                 </span>
                 <span>
                   <span className="block text-sm font-semibold text-white">
                     Full form
                   </span>
-                  <span className="mt-0.5 block text-xs text-slate-400">
+                  <span className="mt-0.5 block text-xs text-mute">
                     Title, type, project, priority, date & time
                   </span>
                 </span>
@@ -132,7 +132,7 @@ export function QuickAddLadderModal({
         ) : (
           <>
             <h2 className="text-xl font-semibold text-white">Quick text</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-mute">
               Example: “Site visit for Kitchen remodel tomorrow at 2pm”
             </p>
             <form onSubmit={(e) => void handleParse(e)} className="mt-4 space-y-4">

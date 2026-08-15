@@ -27,7 +27,7 @@ export function TodayTimezoneBootstrap() {
   return (
     <div className="flex w-full flex-1 flex-col items-center justify-center gap-2 px-4 py-16 text-center">
       <p className="text-sm font-medium text-white">{message}</p>
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-mute">
         Using your browser time zone so Today matches your local calendar.
       </p>
     </div>
