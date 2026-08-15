@@ -11,7 +11,7 @@
  * EXECUTES DIRECTLY (spoken confirmation after):
  * - add_task / edit_task / mark complete
  * - log_time (hours only)
- * - all read operations
+ * - all read operations (resolve_entity, get_*, list_*, get_financial_summary, …)
  */
 
 export const EM_CALL_CONFIRM_TOOLS = [
