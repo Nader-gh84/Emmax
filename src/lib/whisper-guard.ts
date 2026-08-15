@@ -142,7 +142,10 @@ export function guardWhisperTranscript(
 }
 
 export const NO_SPEECH_USER_MESSAGE =
-  "I didn't catch that — could you say it again?";
+  "I didn't catch that — go ahead whenever you're ready";
+
+/** Cap how many times Em Call auto-retries after silence in a row. */
+export const MAX_CONSECUTIVE_NO_SPEECH = 2;
 
 /** Minimum accumulated non-silent audio before we bother calling Whisper. */
 export const MIN_SPEECH_DURATION_MS = 500;
