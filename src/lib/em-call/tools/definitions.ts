@@ -138,7 +138,19 @@ export const EM_CALL_READ_TOOLS: EmCallToolDefinition[] = [
           id: {
             type: "string",
             description:
-              "customer_id, project_id, or supplier_id when scope is customer, project, or supplier",
+              "Required entity id for customer/project/supplier scope. Prefer this field. Aliases project_id, customer_id, and supplier_id are also accepted.",
+          },
+          project_id: {
+            type: "string",
+            description: "Alias for id when scope is project",
+          },
+          customer_id: {
+            type: "string",
+            description: "Alias for id when scope is customer",
+          },
+          supplier_id: {
+            type: "string",
+            description: "Alias for id when scope is supplier",
           },
         },
         required: ["scope"],

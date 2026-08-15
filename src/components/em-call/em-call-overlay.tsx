@@ -177,6 +177,15 @@ export function EmCallOverlay() {
         const turnData = (await turnResponse.json().catch(() => null)) as {
           reply?: string;
           usedTools?: boolean;
+          toolNames?: string[];
+          toolTrace?: Array<{
+            tool: string;
+            params: unknown;
+            ok: boolean;
+            error?: string;
+            details?: unknown;
+            stack?: string;
+          }>;
           error?: string;
         } | null;
 
@@ -184,6 +193,13 @@ export function EmCallOverlay() {
 
         if (!turnResponse.ok || !turnData?.reply?.trim()) {
           throw new Error(turnData?.error || "Ema couldn't reply just now.");
+        }
+
+        const failedTools = (turnData.toolTrace ?? []).filter((t) => !t.ok);
+        if (failedTools.length > 0) {
+          // Surfaced in the browser so we can see real tool/PostgREST errors
+          // without needing Vercel log access.
+          console.error("[Em Call] tool failures", failedTools);
         }
 
         setStatusMessage(

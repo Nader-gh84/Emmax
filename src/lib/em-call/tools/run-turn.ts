@@ -3,6 +3,10 @@ import {
   isEmCallReadToolName,
 } from "@/lib/em-call/tools/definitions";
 import { executeEmCallReadTool } from "@/lib/em-call/tools/execute-reads";
+import {
+  logEmCallToolEvent,
+  type EmCallToolTraceEntry,
+} from "@/lib/em-call/tool-log";
 import type { EmCallSession } from "@/lib/em-call/session-store";
 import { openAiMessagesFromSession } from "@/lib/em-call/session-store";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -37,7 +41,24 @@ export type EmCallTurnResult = {
   reply: string;
   usedTools: boolean;
   toolNames: string[];
+  /** Full per-tool trace including failures — returned to the client. */
+  toolTrace: EmCallToolTraceEntry[];
 };
+
+function extractToolError(result: unknown): {
+  error?: string;
+  details?: unknown;
+} {
+  if (!result || typeof result !== "object") return {};
+  const row = result as Record<string, unknown>;
+  const error = typeof row.error === "string" ? row.error : undefined;
+  const details =
+    row.debug ??
+    row.supabase ??
+    row.details ??
+    (error ? { raw: result } : undefined);
+  return { error, details };
+}
 
 export async function runEmCallTurnWithTools(input: {
   apiKey: string;
@@ -50,6 +71,7 @@ export async function runEmCallTurnWithTools(input: {
   );
 
   const toolNamesUsed: string[] = [];
+  const toolTrace: EmCallToolTraceEntry[] = [];
   let usedTools = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -90,6 +112,7 @@ export async function runEmCallTurnWithTools(input: {
         reply,
         usedTools,
         toolNames: toolNamesUsed,
+        toolTrace,
       };
     }
 
@@ -104,6 +127,7 @@ export async function runEmCallTurnWithTools(input: {
       const name = call.function?.name ?? "";
       const rawArgs = call.function?.arguments ?? "{}";
       toolNamesUsed.push(name);
+      const started = Date.now();
 
       let parsedParams: unknown = rawArgs;
       try {
@@ -113,14 +137,19 @@ export async function runEmCallTurnWithTools(input: {
       }
 
       let result: unknown;
+      let trace: EmCallToolTraceEntry;
+
       if (!isEmCallReadToolName(name)) {
         result = {
           error: `Tool "${name}" is not available yet in this Em Call build.`,
         };
-        console.error("[Em Call tool] unavailable tool", {
+        trace = logEmCallToolEvent({
           tool: name,
           params: parsedParams,
+          ok: false,
           error: (result as { error: string }).error,
+          durationMs: Date.now() - started,
+          at: new Date().toISOString(),
         });
       } else {
         try {
@@ -129,31 +158,39 @@ export async function runEmCallTurnWithTools(input: {
             name,
             rawArgs
           );
-          if (
-            result &&
-            typeof result === "object" &&
-            "error" in result &&
-            typeof (result as { error: unknown }).error === "string"
-          ) {
-            console.error("[Em Call tool] returned error", {
-              tool: name,
-              params: parsedParams,
-              error: (result as { error: string }).error,
-            });
-          }
-        } catch (err) {
-          const message =
-            err instanceof Error ? err.message : "Tool execution failed";
-          const stack = err instanceof Error ? err.stack : undefined;
-          console.error("[Em Call tool] threw", {
+          const extracted = extractToolError(result);
+          const ok = !extracted.error;
+          trace = logEmCallToolEvent({
             tool: name,
             params: parsedParams,
-            error: message,
-            stack,
+            ok,
+            error: extracted.error,
+            details: extracted.details,
+            durationMs: Date.now() - started,
+            at: new Date().toISOString(),
           });
-          result = { error: message };
+        } catch (err) {
+          const messageText =
+            err instanceof Error ? err.message : "Tool execution failed";
+          const stack = err instanceof Error ? err.stack : undefined;
+          result = {
+            error: messageText,
+            debug: { stack },
+          };
+          trace = logEmCallToolEvent({
+            tool: name,
+            params: parsedParams,
+            ok: false,
+            error: messageText,
+            details: { stack },
+            stack,
+            durationMs: Date.now() - started,
+            at: new Date().toISOString(),
+          });
         }
       }
+
+      toolTrace.push(trace);
 
       working.push({
         role: "tool",
@@ -199,5 +236,5 @@ export async function runEmCallTurnWithTools(input: {
     throw new Error("Empty final reply from model");
   }
 
-  return { reply, usedTools, toolNames: toolNamesUsed };
+  return { reply, usedTools, toolNames: toolNamesUsed, toolTrace };
 }
