@@ -164,7 +164,7 @@ export function EmCallOverlay() {
         consecutiveNoSpeechRef.current = 0;
         const text = sttData.transcript.trim();
         setTranscript(text);
-        setStatusMessage("Thinking…");
+        setStatusMessage("Looking that up…");
 
         const turnResponse = await fetch("/api/em-call/turn", {
           method: "POST",
@@ -176,6 +176,7 @@ export function EmCallOverlay() {
         });
         const turnData = (await turnResponse.json().catch(() => null)) as {
           reply?: string;
+          usedTools?: boolean;
           error?: string;
         } | null;
 
@@ -185,7 +186,9 @@ export function EmCallOverlay() {
           throw new Error(turnData?.error || "Ema couldn't reply just now.");
         }
 
-        setStatusMessage(null);
+        setStatusMessage(
+          turnData.usedTools ? "Got your project data…" : null
+        );
         speakLine(turnData.reply.trim(), { resumeListening: true });
       } catch (err) {
         if (local !== sessionLocalRef.current) return;
