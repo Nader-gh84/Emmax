@@ -102,25 +102,56 @@ export async function runEmCallTurnWithTools(input: {
 
     for (const call of toolCalls) {
       const name = call.function?.name ?? "";
+      const rawArgs = call.function?.arguments ?? "{}";
       toolNamesUsed.push(name);
+
+      let parsedParams: unknown = rawArgs;
+      try {
+        parsedParams = rawArgs ? JSON.parse(rawArgs) : {};
+      } catch {
+        parsedParams = { _raw: rawArgs, _parseError: true };
+      }
 
       let result: unknown;
       if (!isEmCallReadToolName(name)) {
         result = {
           error: `Tool "${name}" is not available yet in this Em Call build.`,
         };
+        console.error("[Em Call tool] unavailable tool", {
+          tool: name,
+          params: parsedParams,
+          error: (result as { error: string }).error,
+        });
       } else {
         try {
           result = await executeEmCallReadTool(
             { supabase: input.supabase, userId: input.userId },
             name,
-            call.function?.arguments ?? "{}"
+            rawArgs
           );
+          if (
+            result &&
+            typeof result === "object" &&
+            "error" in result &&
+            typeof (result as { error: unknown }).error === "string"
+          ) {
+            console.error("[Em Call tool] returned error", {
+              tool: name,
+              params: parsedParams,
+              error: (result as { error: string }).error,
+            });
+          }
         } catch (err) {
-          result = {
-            error:
-              err instanceof Error ? err.message : "Tool execution failed",
-          };
+          const message =
+            err instanceof Error ? err.message : "Tool execution failed";
+          const stack = err instanceof Error ? err.stack : undefined;
+          console.error("[Em Call tool] threw", {
+            tool: name,
+            params: parsedParams,
+            error: message,
+            stack,
+          });
+          result = { error: message };
         }
       }
 

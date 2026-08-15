@@ -97,7 +97,7 @@ export const EM_CALL_READ_TOOLS: EmCallToolDefinition[] = [
     function: {
       name: "get_customer",
       description:
-        "Get customer contact details (address, phone, email) and their projects with payment status summary.",
+        "Get customer contact details (address, phone, email) and their projects with payment/outstanding status. Use after resolve_entity when asked for a customer's address, phone, or payment status.",
       parameters: {
         type: "object",
         properties: {
@@ -127,18 +127,18 @@ export const EM_CALL_READ_TOOLS: EmCallToolDefinition[] = [
     function: {
       name: "get_financial_summary",
       description:
-        "Get financial figures. For a project: profit, outstanding customer balance, unpaid supplier/labour costs, cash flow. For a supplier: outstanding balance owed. For portfolio: high-level unpaid totals across open projects.",
+        "Get financial figures. For a customer: outstanding balance and contract/payment rollup (same numbers as Customer Detail). For a project: profit, outstanding customer balance, unpaid supplier/labour costs, cash flow. For a supplier: outstanding balance owed. For portfolio: high-level unpaid totals across open projects. When the user asks about a customer's outstanding balance, use scope=customer with that customer's id.",
       parameters: {
         type: "object",
         properties: {
           scope: {
             type: "string",
-            enum: ["project", "supplier", "portfolio"],
+            enum: ["customer", "project", "supplier", "portfolio"],
           },
           id: {
             type: "string",
             description:
-              "project_id or supplier_id when scope is project or supplier",
+              "customer_id, project_id, or supplier_id when scope is customer, project, or supplier",
           },
         },
         required: ["scope"],
