@@ -19,7 +19,7 @@
 
   --maxw: 1440px;
   --pad: 56px;
-  --header-h: 96px;
+  --header-h: 108px;
 
   margin: 0;
   font-family: var(--font-ui);
@@ -132,7 +132,7 @@
 }
 
 .logo img {
-  height: 44px;
+  height: 64px;
   width: auto;
   object-fit: contain;
 }
@@ -671,7 +671,7 @@
   }
 
   .logo img {
-    height: 36px;
+    height: 52px;
   }
 
   .wordmark {
@@ -741,7 +741,7 @@
 @media (max-width: 767px) {
   .root {
     --pad: 20px;
-    --header-h: 74px;
+    --header-h: 86px;
   }
 
   .nav,
@@ -754,7 +754,7 @@
   }
 
   .logo img {
-    height: 32px;
+    height: 46px;
   }
 
   .kicker {
