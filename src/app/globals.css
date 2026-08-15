@@ -8,8 +8,9 @@
   .emax-theme = marketing dusk palette (Today pilot).
 */
 :root {
-  --emax-navy: #0f172a;
-  --emax-surface: #0b1220;
+  /* One-stop brighter surfaces (was #0f172a / #0b1220) */
+  --emax-navy: #0f1e33;
+  --emax-surface: #14263d;
   --emax-accent: #3b82f6;
   --emax-accent-hover: #2563eb;
   --emax-blue-bright: #60a5fa;
@@ -18,16 +19,17 @@
   --emax-text-soft: #94a3b8;
   --emax-text-mute: #64748b;
   --emax-glass-brd: rgba(255, 255, 255, 0.1);
-  --emax-card-from: rgba(255, 255, 255, 0.03);
-  --emax-card-to: rgba(255, 255, 255, 0.015);
-  --emax-field-bg: rgba(255, 255, 255, 0.05);
+  --emax-card-from: rgba(255, 255, 255, 0.05);
+  --emax-card-to: rgba(255, 255, 255, 0.028);
+  --emax-field-bg: rgba(255, 255, 255, 0.06);
   --emax-field-border: rgba(255, 255, 255, 0.1);
   --font-app: var(--font-marketing, ui-sans-serif);
 }
 
 .emax-theme {
-  --emax-navy: #08111f;
-  --emax-surface: #0c1a2e;
+  /* Marketing dusk, one-stop brighter (was #08111f / #0c1a2e) */
+  --emax-navy: #0f1e33;
+  --emax-surface: #14263d;
   --emax-accent: #4d8dff;
   --emax-accent-hover: #6ba4ff;
   --emax-blue-bright: #6ba4ff;
@@ -36,9 +38,9 @@
   --emax-text-soft: #b9c8df;
   --emax-text-mute: #8296b4;
   --emax-glass-brd: rgba(140, 180, 255, 0.16);
-  --emax-card-from: rgba(255, 255, 255, 0.055);
-  --emax-card-to: rgba(255, 255, 255, 0.018);
-  --emax-field-bg: rgba(255, 255, 255, 0.05);
+  --emax-card-from: rgba(255, 255, 255, 0.08);
+  --emax-card-to: rgba(255, 255, 255, 0.035);
+  --emax-field-bg: rgba(255, 255, 255, 0.06);
   --emax-field-border: rgba(140, 180, 255, 0.2);
   color: var(--emax-text);
   background-color: var(--emax-navy);

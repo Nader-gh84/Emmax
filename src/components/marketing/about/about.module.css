@@ -4,8 +4,8 @@
   --font-ui: var(--font-marketing), "DM Sans", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
 
-  --night-900: #08111f;
-  --night-800: #0c1a2e;
+  --night-900: #0f1e33;
+  --night-800: #14263d;
   --night-700: #12263d;
   --night-600: #1a3251;
 
@@ -219,15 +219,15 @@
   background:
     linear-gradient(
       96deg,
-      rgba(8, 17, 31, 0.88) 0%,
-      rgba(8, 17, 31, 0.66) 26%,
-      rgba(8, 17, 31, 0.24) 42%,
-      rgba(8, 17, 31, 0) 56%
+      rgba(8, 17, 31, 0.73) 0%,
+      rgba(8, 17, 31, 0.54) 26%,
+      rgba(8, 17, 31, 0.2) 42%,
+      rgba(8, 17, 31, 0.0) 56%
     ),
     linear-gradient(
       180deg,
-      rgba(8, 17, 31, 0.45) 0%,
-      rgba(8, 17, 31, 0) 28%
+      rgba(8, 17, 31, 0.37) 0%,
+      rgba(8, 17, 31, 0.0) 28%
     );
 }
 
@@ -620,10 +620,10 @@
   .veil {
     background: linear-gradient(
       180deg,
-      rgba(8, 17, 31, 0.9) 0%,
-      rgba(8, 17, 31, 0.55) 40%,
-      rgba(8, 17, 31, 0.1) 66%,
-      rgba(8, 17, 31, 0) 100%
+      rgba(8, 17, 31, 0.74) 0%,
+      rgba(8, 17, 31, 0.45) 40%,
+      rgba(8, 17, 31, 0.08) 66%,
+      rgba(8, 17, 31, 0.0) 100%
     );
   }
 

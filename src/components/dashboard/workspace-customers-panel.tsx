@@ -63,7 +63,7 @@ function statusClass(status: "Active" | "Pending") {
 
 export function WorkspaceCustomersPanel() {
   return (
-    <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#0B1220] xl:flex">
+    <aside className="hidden w-80 shrink-0 flex-col border-l border-white/10 bg-[#14263D] xl:flex">
       <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
         <div className="flex items-center gap-2">
           <h2 className="text-base font-semibold text-white">Customers</h2>

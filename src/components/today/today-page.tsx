@@ -1298,7 +1298,7 @@ export function TodayPage({
                         : ""
                     } ${
                       micHighlight
-                        ? "ring-4 ring-accent/50 ring-offset-2 ring-offset-[#0B1220]"
+                        ? "ring-4 ring-accent/50 ring-offset-2 ring-offset-[#14263D]"
                         : ""
                     }`}
                     aria-label="Tap for daily brief, hold to talk to Ema"

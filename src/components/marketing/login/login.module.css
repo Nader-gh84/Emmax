@@ -8,8 +8,8 @@
   --font-ui: var(--font-marketing), "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   -webkit-text-size-adjust:100%;
 
-  --night-900:  #08111F;
-  --night-800:  #0C1A2E;
+  --night-900:  #0F1E33;
+  --night-800:  #14263D;
 
   --text:       #FFFFFF;
   --text-soft:  #B9C8DF;
@@ -78,9 +78,9 @@
   z-index:1; pointer-events:none;
   background:
     linear-gradient(180deg,
-      rgba(8,17,31,0.86) 0%,
-      rgba(8,17,31,0.74) 40%,
-      rgba(8,17,31,0.88) 100%),
+      rgba(8, 17, 31, 0.71) 0%,
+      rgba(8, 17, 31, 0.61) 40%,
+      rgba(8, 17, 31, 0.73) 100%),
     radial-gradient(ellipse at 22% 46%,
       rgba(77,141,255,0.10) 0%,
       rgba(77,141,255,0) 58%);

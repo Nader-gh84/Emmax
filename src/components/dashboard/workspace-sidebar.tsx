@@ -57,7 +57,7 @@ export function WorkspaceSidebar() {
   const hideEmaWidget = pathname === "/dashboard/today";
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-[#0B1220] lg:flex">
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-white/10 bg-[#14263D] lg:flex">
       <div className="border-b border-white/10 px-5 py-5">
         <Link href="/dashboard" className="flex flex-col items-start gap-1">
           <Image
