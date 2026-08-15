@@ -2,6 +2,7 @@ export type EmCallPhase =
   | "idle"
   | "greeting"
   | "listening"
+  | "ready"
   | "thinking"
   | "speaking"
   | "closing";

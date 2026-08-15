@@ -9,7 +9,7 @@ import {
   EM_CALL_TTS_INSTRUCTIONS,
   EM_CALL_TTS_VOICE,
 } from "@/lib/em-call/greeting";
-import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
+import { NO_SPEECH_USER_MESSAGE, MAX_CONSECUTIVE_NO_SPEECH } from "@/lib/whisper-guard";
 import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 
 function VoiceWave({ active }: { active: boolean }) {
@@ -45,6 +45,7 @@ function phaseLabel(
   if (phase === "greeting" || (phase === "speaking" && ttsLoading)) {
     return "Ema is speaking…";
   }
+  if (phase === "ready") return "Tap the mic when you're ready";
   if (phase === "listening" || isRecording) return "Listening…";
   if (phase === "thinking") return "Thinking…";
   if (phase === "speaking") return "Ema is speaking…";
@@ -77,6 +78,7 @@ export function EmCallOverlay() {
   const listenAfterSpeechRef = useRef(false);
   const sawSpeechPlayingRef = useRef(false);
   const pendingSpeakTextRef = useRef<string | null>(null);
+  const consecutiveNoSpeechRef = useRef(0);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -90,16 +92,18 @@ export function EmCallOverlay() {
         await startRec();
       } catch {
         setStatusMessage("Tap the mic to speak");
+        setPhase("ready");
       }
     },
     [setPhase, setStatusMessage]
   );
 
   const speakLine = useCallback(
-    (text: string) => {
+    (text: string, options?: { resumeListening?: boolean }) => {
+      const resumeListening = options?.resumeListening !== false;
       pendingSpeakTextRef.current = text;
       sawSpeechPlayingRef.current = false;
-      listenAfterSpeechRef.current = true;
+      listenAfterSpeechRef.current = resumeListening;
       setAssistantLine(text);
       setPhase("speaking");
       void tts.play(text, {
@@ -110,25 +114,44 @@ export function EmCallOverlay() {
     [setAssistantLine, setPhase, tts]
   );
 
+  const handleNoSpeech = useCallback(() => {
+    setTranscript(null);
+    setError(null);
+    setStatusMessage(null);
+
+    consecutiveNoSpeechRef.current += 1;
+
+    if (consecutiveNoSpeechRef.current >= MAX_CONSECUTIVE_NO_SPEECH) {
+      // 2nd miss: go quiet, wait for a manual mic tap
+      listenAfterSpeechRef.current = false;
+      sawSpeechPlayingRef.current = false;
+      pendingSpeakTextRef.current = null;
+      setPhase("ready");
+      setStatusMessage("Tap the mic when you're ready");
+      return;
+    }
+
+    // 1st miss: nudge once, then listen again
+    speakLine(NO_SPEECH_USER_MESSAGE, { resumeListening: true });
+  }, [setError, setPhase, setStatusMessage, setTranscript, speakLine]);
+
   const handleRecordingComplete = useCallback(
     async (blob: Blob, meta: VoiceRecordingMeta) => {
       const local = sessionLocalRef.current;
       const activeSessionId = sessionIdRef.current;
       if (!activeSessionId) {
         setError("Call session missing — end and start again.");
-        setPhase("listening");
+        setPhase("ready");
         return;
       }
 
       // Client silence gate — skip Whisper entirely on near-silent clips
       if (!meta.hasSpeech) {
-        setTranscript(null);
-        setError(null);
-        setStatusMessage(null);
-        speakLine(NO_SPEECH_USER_MESSAGE);
+        handleNoSpeech();
         return;
       }
 
+      consecutiveNoSpeechRef.current = 0;
       setPhase("thinking");
       setStatusMessage("Transcribing…");
       setError(null);
@@ -155,12 +178,11 @@ export function EmCallOverlay() {
         }
 
         if (sttData?.noSpeech || !sttData?.transcript?.trim()) {
-          setTranscript(null);
-          setStatusMessage(null);
-          speakLine(NO_SPEECH_USER_MESSAGE);
+          handleNoSpeech();
           return;
         }
 
+        consecutiveNoSpeechRef.current = 0;
         const text = sttData.transcript.trim();
         setTranscript(text);
         setStatusMessage("Thinking…");
@@ -185,15 +207,22 @@ export function EmCallOverlay() {
         }
 
         setStatusMessage(null);
-        speakLine(turnData.reply.trim());
+        speakLine(turnData.reply.trim(), { resumeListening: true });
       } catch (err) {
         if (local !== sessionLocalRef.current) return;
         setError(err instanceof Error ? err.message : "Something went wrong");
-        setPhase("listening");
+        setPhase("ready");
         setStatusMessage("Tap the mic to try again");
       }
     },
-    [setError, setPhase, setStatusMessage, setTranscript, speakLine]
+    [
+      handleNoSpeech,
+      setError,
+      setPhase,
+      setStatusMessage,
+      setTranscript,
+      speakLine,
+    ]
   );
 
   const {
@@ -203,7 +232,8 @@ export function EmCallOverlay() {
     error: recorderError,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
-    silenceDurationMs: 2200,
+    preSpeechSilenceMs: 7000,
+    postSpeechSilenceMs: 1500,
   });
 
   const isRecording = recorderStatus === "recording";
@@ -214,6 +244,7 @@ export function EmCallOverlay() {
     listenAfterSpeechRef.current = false;
     sawSpeechPlayingRef.current = false;
     pendingSpeakTextRef.current = null;
+    consecutiveNoSpeechRef.current = 0;
     tts.stop();
 
     if (recorderStatus === "recording") {
@@ -238,6 +269,7 @@ export function EmCallOverlay() {
       listenAfterSpeechRef.current = false;
       sawSpeechPlayingRef.current = false;
       pendingSpeakTextRef.current = null;
+      consecutiveNoSpeechRef.current = 0;
       tts.stop();
       return;
     }
@@ -252,6 +284,7 @@ export function EmCallOverlay() {
     setError(null);
     setTranscript(null);
     setAssistantLine(null);
+    consecutiveNoSpeechRef.current = 0;
 
     void (async () => {
       try {
@@ -273,7 +306,7 @@ export function EmCallOverlay() {
         setSessionId(data.sessionId);
         sessionIdRef.current = data.sessionId;
         setStatusMessage(null);
-        speakLine(data.greeting);
+        speakLine(data.greeting, { resumeListening: true });
       } catch (err) {
         if (local !== sessionLocalRef.current) return;
         setError(err instanceof Error ? err.message : "Couldn't start Em Call");
@@ -284,7 +317,7 @@ export function EmCallOverlay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per open
   }, [isOpen]);
 
-  // After Ema finishes speaking → listen again (multi-turn)
+  // After Ema finishes speaking → listen again (multi-turn), unless ready
   useEffect(() => {
     if (!isOpen) return;
     if (phase !== "greeting" && phase !== "speaking") return;
@@ -351,8 +384,11 @@ export function EmCallOverlay() {
 
     if (phase === "thinking") return;
 
+    // Manual tap resets the no-speech streak
+    consecutiveNoSpeechRef.current = 0;
     setError(null);
     setTranscript(null);
+    setStatusMessage(null);
     setPhase("listening");
     await startRecording();
   };

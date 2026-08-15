@@ -19,17 +19,41 @@ interface UseVoiceRecorderOptions {
     meta: VoiceRecordingMeta
   ) => void | Promise<void>;
   silenceThreshold?: number;
+  /**
+   * How long to wait with no speech before giving up (user hasn't started).
+   * Default ~7s so people can gather thoughts.
+   */
+  preSpeechSilenceMs?: number;
+  /**
+   * After real speech was detected, how long a pause ends the utterance.
+   * Default ~1.5s for responsive turn-taking.
+   */
+  postSpeechSilenceMs?: number;
+  /** @deprecated Prefer preSpeechSilenceMs / postSpeechSilenceMs. */
   silenceDurationMs?: number;
   /** Minimum speech ms to mark hasSpeech (default from whisper-guard). */
   minSpeechDurationMs?: number;
 }
 
+const DEFAULT_PRE_SPEECH_SILENCE_MS = 7000;
+const DEFAULT_POST_SPEECH_SILENCE_MS = 1500;
+
 export function useVoiceRecorder({
   onRecordingComplete,
   silenceThreshold = 0.015,
-  silenceDurationMs = 2000,
+  preSpeechSilenceMs,
+  postSpeechSilenceMs,
+  silenceDurationMs,
   minSpeechDurationMs = MIN_SPEECH_DURATION_MS,
 }: UseVoiceRecorderOptions) {
+  const resolvedPreSpeech =
+    preSpeechSilenceMs ?? silenceDurationMs ?? DEFAULT_PRE_SPEECH_SILENCE_MS;
+  const resolvedPostSpeech =
+    postSpeechSilenceMs ??
+    (silenceDurationMs != null
+      ? Math.min(silenceDurationMs, DEFAULT_POST_SPEECH_SILENCE_MS)
+      : DEFAULT_POST_SPEECH_SILENCE_MS);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -40,6 +64,7 @@ export function useVoiceRecorder({
   const speechDurationMsRef = useRef(0);
   const peakRmsRef = useRef(0);
   const lastSpeechSampleAtRef = useRef<number | null>(null);
+  const heardSpeechRef = useRef(false);
 
   const [status, setStatus] = useState<RecorderStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +123,7 @@ export function useVoiceRecorder({
     speechDurationMsRef.current = 0;
     peakRmsRef.current = 0;
     lastSpeechSampleAtRef.current = null;
+    heardSpeechRef.current = false;
     setSeconds(0);
 
     try {
@@ -160,14 +186,23 @@ export function useVoiceRecorder({
             speechDurationMsRef.current += now - lastSpeechSampleAtRef.current;
           }
           lastSpeechSampleAtRef.current = now;
+          if (speechDurationMsRef.current >= minSpeechDurationMs) {
+            heardSpeechRef.current = true;
+          }
           silenceStartRef.current = null;
         } else {
           lastSpeechSampleAtRef.current = null;
           if (!silenceStartRef.current) {
             silenceStartRef.current = now;
-          } else if (now - silenceStartRef.current >= silenceDurationMs) {
-            finishRecording();
-            return;
+          } else {
+            const silenceFor = now - silenceStartRef.current;
+            const limit = heardSpeechRef.current
+              ? resolvedPostSpeech
+              : resolvedPreSpeech;
+            if (silenceFor >= limit) {
+              finishRecording();
+              return;
+            }
           }
         }
 
@@ -189,7 +224,8 @@ export function useVoiceRecorder({
     cleanupStream,
     finishRecording,
     minSpeechDurationMs,
-    silenceDurationMs,
+    resolvedPostSpeech,
+    resolvedPreSpeech,
     silenceThreshold,
   ]);
 

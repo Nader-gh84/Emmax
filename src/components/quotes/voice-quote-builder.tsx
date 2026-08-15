@@ -538,7 +538,8 @@ function VoiceQuoteBuilderInner({
     stopRecording,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
-    silenceDurationMs: 2000,
+    preSpeechSilenceMs: 7000,
+    postSpeechSilenceMs: 1500,
   });
 
   const isRecording = recorderStatus === "recording";
