@@ -30,6 +30,7 @@ import type { ScheduleItem } from "@/types/schedule-item";
 import type { AppNotification } from "@/types/notification";
 import type { EmCallReadToolName } from "@/lib/em-call/tools/definitions";
 import { loadCustomerFinancialRollup } from "@/lib/em-call/tools/customer-financial-rollup";
+import { formatSupabaseError } from "@/lib/em-call/tool-log";
 import {
   resolveEntityQuery,
   type EntityCandidate,
@@ -43,6 +44,47 @@ type ToolCtx = {
 
 function money(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+/** Models often pass project_id/customer_id instead of the schema's `id`. */
+function resolveScopedId(
+  args: Record<string, unknown>,
+  scope: string
+): { id: string; source: string; receivedKeys: string[] } {
+  const receivedKeys = Object.keys(args);
+  const asString = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
+
+  const direct = asString(args.id);
+  if (direct) return { id: direct, source: "id", receivedKeys };
+
+  if (scope === "project") {
+    const projectId = asString(args.project_id);
+    if (projectId) {
+      return { id: projectId, source: "project_id", receivedKeys };
+    }
+  }
+  if (scope === "customer") {
+    const customerId = asString(args.customer_id);
+    if (customerId) {
+      return { id: customerId, source: "customer_id", receivedKeys };
+    }
+  }
+  if (scope === "supplier") {
+    const supplierId = asString(args.supplier_id);
+    if (supplierId) {
+      return { id: supplierId, source: "supplier_id", receivedKeys };
+    }
+  }
+
+  return { id: "", source: "missing", receivedKeys };
+}
+
+function toolError(
+  message: string,
+  extras?: Record<string, unknown>
+): { error: string; debug: Record<string, unknown> } {
+  return { error: message, debug: extras ?? {} };
 }
 
 function resolveUserTimeZone(): string {
@@ -408,12 +450,25 @@ async function assertOwnedProject(ctx: ToolCtx, projectId: string) {
     .maybeSingle();
 
   if (error) {
-    return { project: null, error: `Failed to load project: ${error.message}` };
+    return {
+      project: null,
+      error: `Failed to load project: ${formatSupabaseError(error)}`,
+      supabase: {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      },
+    };
   }
   if (!data) {
-    return { project: null, error: "Project not found" };
+    return {
+      project: null,
+      error: "Project not found",
+      supabase: null,
+    };
   }
-  return { project: data, error: null };
+  return { project: data, error: null, supabase: null };
 }
 
 async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
@@ -422,7 +477,10 @@ async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
 
   const owned = await assertOwnedProject(ctx, projectId);
   if (owned.error || !owned.project) {
-    return { error: owned.error ?? "Project not found" };
+    return toolError(owned.error ?? "Project not found", {
+      projectId,
+      supabase: owned.supabase,
+    });
   }
   const project = owned.project;
 
@@ -445,15 +503,22 @@ async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
   ]);
 
   if (tasksResult.error) {
-    return { error: `Failed to load tasks: ${tasksResult.error.message}` };
+    return toolError(
+      `Failed to load tasks: ${formatSupabaseError(tasksResult.error)}`,
+      { supabase: tasksResult.error }
+    );
   }
   if (assignmentsResult.error) {
-    return {
-      error: `Failed to load project employees: ${assignmentsResult.error.message}`,
-    };
+    return toolError(
+      `Failed to load project employees: ${formatSupabaseError(assignmentsResult.error)}`,
+      { supabase: assignmentsResult.error }
+    );
   }
   if (timeResult.error) {
-    return { error: `Failed to load time entries: ${timeResult.error.message}` };
+    return toolError(
+      `Failed to load time entries: ${formatSupabaseError(timeResult.error)}`,
+      { supabase: timeResult.error }
+    );
   }
 
   const tasks = (tasksResult.data ?? []) as Array<{
@@ -677,7 +742,11 @@ async function toolGetSupplier(ctx: ToolCtx, args: { supplier_id?: string }) {
 async function loadProjectFinancialInputs(ctx: ToolCtx, projectId: string) {
   const owned = await assertOwnedProject(ctx, projectId);
   if (owned.error || !owned.project) {
-    return { ok: false as const, error: owned.error ?? "Project not found" };
+    return {
+      ok: false as const,
+      error: owned.error ?? "Project not found",
+      supabase: owned.supabase,
+    };
   }
   const project = owned.project;
 
@@ -714,31 +783,36 @@ async function loadProjectFinancialInputs(ctx: ToolCtx, projectId: string) {
   if (payments.error) {
     return {
       ok: false as const,
-      error: `Failed to load project payments: ${payments.error.message}`,
+      error: `Failed to load project payments: ${formatSupabaseError(payments.error)}`,
+      supabase: payments.error,
     };
   }
   if (expenses.error) {
     return {
       ok: false as const,
-      error: `Failed to load project expenses: ${expenses.error.message}`,
+      error: `Failed to load project expenses: ${formatSupabaseError(expenses.error)}`,
+      supabase: expenses.error,
     };
   }
   if (materialOrders.error) {
     return {
       ok: false as const,
-      error: `Failed to load material orders: ${materialOrders.error.message}`,
+      error: `Failed to load material orders: ${formatSupabaseError(materialOrders.error)}`,
+      supabase: materialOrders.error,
     };
   }
   if (timeEntries.error) {
     return {
       ok: false as const,
-      error: `Failed to load time entries: ${timeEntries.error.message}`,
+      error: `Failed to load time entries: ${formatSupabaseError(timeEntries.error)}`,
+      supabase: timeEntries.error,
     };
   }
   if (changeOrders.error) {
     return {
       ok: false as const,
-      error: `Failed to load change orders: ${changeOrders.error.message}`,
+      error: `Failed to load change orders: ${formatSupabaseError(changeOrders.error)}`,
+      supabase: changeOrders.error,
     };
   }
 
@@ -765,13 +839,19 @@ async function loadProjectFinancialInputs(ctx: ToolCtx, projectId: string) {
 
 async function toolGetFinancialSummary(
   ctx: ToolCtx,
-  args: { scope?: string; id?: string }
+  args: Record<string, unknown>
 ) {
   const scope = String(args.scope ?? "").trim();
-  const id = String(args.id ?? "").trim();
+  const resolved = resolveScopedId(args, scope);
+  const id = resolved.id;
 
   if (scope === "customer") {
-    if (!id) return { error: "id (customer_id) is required for customer scope" };
+    if (!id) {
+      return toolError(
+        "id (customer_id) is required for customer scope",
+        { receivedKeys: resolved.receivedKeys, params: args }
+      );
+    }
 
     const { data: customer, error: customerError } = await ctx.supabase
       .from("customers")
@@ -781,16 +861,26 @@ async function toolGetFinancialSummary(
       .maybeSingle();
 
     if (customerError) {
-      return { error: `Failed to load customer: ${customerError.message}` };
+      return toolError(
+        `Failed to load customer: ${formatSupabaseError(customerError)}`,
+        { supabase: customerError, id, idSource: resolved.source }
+      );
     }
-    if (!customer) return { error: "Customer not found" };
+    if (!customer) {
+      return toolError("Customer not found", {
+        id,
+        idSource: resolved.source,
+      });
+    }
 
     const rollup = await loadCustomerFinancialRollup(
       ctx.supabase,
       ctx.userId,
       id
     );
-    if (!rollup.ok) return { error: rollup.error };
+    if (!rollup.ok) {
+      return toolError(rollup.error, { id, idSource: resolved.source });
+    }
 
     const customerName = getCustomerDisplayName({
       first_name: String(customer.first_name ?? ""),
@@ -823,9 +913,20 @@ async function toolGetFinancialSummary(
   }
 
   if (scope === "project") {
-    if (!id) return { error: "id (project_id) is required for project scope" };
+    if (!id) {
+      return toolError(
+        "id (project_id) is required for project scope",
+        { receivedKeys: resolved.receivedKeys, params: args }
+      );
+    }
     const loaded = await loadProjectFinancialInputs(ctx, id);
-    if (!loaded.ok) return { error: loaded.error };
+    if (!loaded.ok) {
+      return toolError(loaded.error, {
+        id,
+        idSource: resolved.source,
+        supabase: loaded.supabase,
+      });
+    }
     const { project, summary } = loaded;
     const quotes = project.quotes as
       | { project_name?: string | null; quote_number?: string | null }
@@ -852,7 +953,12 @@ async function toolGetFinancialSummary(
   }
 
   if (scope === "supplier") {
-    if (!id) return { error: "id (supplier_id) is required for supplier scope" };
+    if (!id) {
+      return toolError(
+        "id (supplier_id) is required for supplier scope",
+        { receivedKeys: resolved.receivedKeys, params: args }
+      );
+    }
     return toolGetSupplier(ctx, { supplier_id: id });
   }
 
@@ -865,7 +971,10 @@ async function toolGetFinancialSummary(
       .limit(40);
 
     if (projectsError) {
-      return { error: `Failed to load projects: ${projectsError.message}` };
+      return toolError(
+        `Failed to load projects: ${formatSupabaseError(projectsError)}`,
+        { supabase: projectsError }
+      );
     }
 
     let outstandingCustomer = 0;
@@ -901,9 +1010,10 @@ async function toolGetFinancialSummary(
     }
 
     if ((projects ?? []).length > 0 && projectSummaries.length === 0) {
-      return {
-        error: `Failed to load portfolio financials: ${loadErrors[0] ?? "unknown error"}`,
-      };
+      return toolError(
+        `Failed to load portfolio financials: ${loadErrors[0] ?? "unknown error"}`,
+        { loadErrors }
+      );
     }
 
     return {
@@ -918,9 +1028,10 @@ async function toolGetFinancialSummary(
     };
   }
 
-  return {
-    error: "scope must be customer, project, supplier, or portfolio",
-  };
+  return toolError("scope must be customer, project, supplier, or portfolio", {
+    receivedScope: scope,
+    params: args,
+  });
 }
 
 export async function executeEmCallReadTool(
@@ -957,7 +1068,7 @@ export async function executeEmCallReadTool(
     case "get_supplier":
       return toolGetSupplier(ctx, args as { supplier_id?: string });
     case "get_financial_summary":
-      return toolGetFinancialSummary(ctx, args as { scope?: string; id?: string });
+      return toolGetFinancialSummary(ctx, args);
     default:
       return { error: `Unknown tool: ${name}` };
   }

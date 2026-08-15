@@ -212,6 +212,11 @@ check(
   source.includes('scope === "portfolio"'),
   ""
 );
+check(
+  "get_financial_summary accepts project_id alias",
+  source.includes("resolveScopedId") && source.includes("args.project_id"),
+  "models often pass project_id instead of id"
+);
 
 const failed = checks.filter((c) => !c.ok).length;
 

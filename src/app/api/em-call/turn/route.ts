@@ -78,6 +78,7 @@ export async function POST(request: Request) {
         reply: result.reply,
         usedTools: result.usedTools,
         toolNames: result.toolNames,
+        toolTrace: result.toolTrace,
         turnCount: session.messages.filter((m) => m.role === "user").length,
       });
     } catch (err) {
