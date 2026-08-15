@@ -41,6 +41,8 @@ import {
 import { marketingFont } from "@/lib/marketing-font";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
+import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
 import {
   findScheduleConflicts,
   type ScheduleConflictCandidate,
@@ -231,11 +233,15 @@ export function TodayPage({
   );
 
   const handleRecordingComplete = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob, meta: VoiceRecordingMeta) => {
       setVoiceError(null);
       setVoicePhase("transcribing");
 
       try {
+        if (!meta.hasSpeech) {
+          throw new Error(NO_SPEECH_USER_MESSAGE);
+        }
+
         const formData = new FormData();
         formData.append("audio", blob, "recording.webm");
         formData.append("extract", "false");
@@ -246,16 +252,18 @@ export function TodayPage({
         });
         const transcriptData = (await transcriptResponse.json()) as {
           transcript?: string;
+          noSpeech?: boolean;
           error?: string;
         };
         if (!transcriptResponse.ok) {
           throw new Error(transcriptData.error || "Transcription failed");
         }
 
-        const transcript = transcriptData.transcript?.trim() ?? "";
-        if (!transcript) {
-          throw new Error("I didn't catch that — try holding the mic again.");
+        if (transcriptData.noSpeech || !transcriptData.transcript?.trim()) {
+          throw new Error(NO_SPEECH_USER_MESSAGE);
         }
+
+        const transcript = transcriptData.transcript.trim();
         setVoiceTranscript(transcript);
         setVoicePhase("classifying");
 

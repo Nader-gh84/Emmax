@@ -9,6 +9,8 @@ import {
   EM_CALL_TTS_INSTRUCTIONS,
   EM_CALL_TTS_VOICE,
 } from "@/lib/em-call/greeting";
+import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
+import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 
 function VoiceWave({ active }: { active: boolean }) {
   return (
@@ -109,12 +111,21 @@ export function EmCallOverlay() {
   );
 
   const handleRecordingComplete = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob, meta: VoiceRecordingMeta) => {
       const local = sessionLocalRef.current;
       const activeSessionId = sessionIdRef.current;
       if (!activeSessionId) {
         setError("Call session missing — end and start again.");
         setPhase("listening");
+        return;
+      }
+
+      // Client silence gate — skip Whisper entirely on near-silent clips
+      if (!meta.hasSpeech) {
+        setTranscript(null);
+        setError(null);
+        setStatusMessage(null);
+        speakLine(NO_SPEECH_USER_MESSAGE);
         return;
       }
 
@@ -133,13 +144,21 @@ export function EmCallOverlay() {
         });
         const sttData = (await sttResponse.json().catch(() => null)) as {
           transcript?: string;
+          noSpeech?: boolean;
           error?: string;
         } | null;
 
         if (local !== sessionLocalRef.current) return;
 
-        if (!sttResponse.ok || !sttData?.transcript?.trim()) {
+        if (!sttResponse.ok) {
           throw new Error(sttData?.error || "Couldn't catch that — try again.");
+        }
+
+        if (sttData?.noSpeech || !sttData?.transcript?.trim()) {
+          setTranscript(null);
+          setStatusMessage(null);
+          speakLine(NO_SPEECH_USER_MESSAGE);
+          return;
         }
 
         const text = sttData.transcript.trim();

@@ -31,6 +31,8 @@ import {
   touchInput,
 } from "@/components/quotes/ui";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
+import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
 import {
   saveQuoteDraft,
   sendMaterialsToSupplier,
@@ -477,13 +479,17 @@ function VoiceQuoteBuilderInner({
   );
 
   const handleRecordingComplete = useCallback(
-    async (blob: Blob) => {
+    async (blob: Blob, meta: VoiceRecordingMeta) => {
       const append = Boolean(transcript.trim()) || materials.length > 0 || labourItems.length > 0;
       setPhase("transcribing");
       setPipelineError(null);
       setIsEditingTranscript(false);
 
       try {
+        if (!meta.hasSpeech) {
+          throw new Error(NO_SPEECH_USER_MESSAGE);
+        }
+
         const formData = new FormData();
         formData.append("audio", blob, "recording.webm");
         formData.append("extract", "false");
@@ -498,10 +504,14 @@ function VoiceQuoteBuilderInner({
           throw new Error(data.error || "Transcription failed");
         }
 
+        if (data.noSpeech) {
+          throw new Error(NO_SPEECH_USER_MESSAGE);
+        }
+
         const nextChunk =
           typeof data.transcript === "string" ? data.transcript.trim() : "";
         if (!nextChunk) {
-          throw new Error("No transcript returned. Please try again.");
+          throw new Error(NO_SPEECH_USER_MESSAGE);
         }
 
         const combinedTranscript = append
