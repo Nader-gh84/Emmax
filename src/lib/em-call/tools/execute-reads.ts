@@ -396,23 +396,35 @@ async function toolListProjects(
 }
 
 async function assertOwnedProject(ctx: ToolCtx, projectId: string) {
-  const { data } = await ctx.supabase
+  // quotes.grand_total is the real column — NOT quotes.total (that select fails
+  // the entire embed and was previously swallowed as "Project not found").
+  const { data, error } = await ctx.supabase
     .from("projects")
     .select(
-      "id, project_name, status, value, start_date, end_date, address, deposit_amount, customer_id, notes, customers(first_name, last_name), quotes(project_name, quote_number, total)"
+      "id, project_name, status, value, start_date, end_date, address, deposit_amount, customer_id, notes, customers(first_name, last_name), quotes(project_name, quote_number, grand_total)"
     )
     .eq("user_id", ctx.userId)
     .eq("id", projectId)
     .maybeSingle();
-  return data;
+
+  if (error) {
+    return { project: null, error: `Failed to load project: ${error.message}` };
+  }
+  if (!data) {
+    return { project: null, error: "Project not found" };
+  }
+  return { project: data, error: null };
 }
 
 async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
   const projectId = String(args.project_id ?? "").trim();
   if (!projectId) return { error: "project_id is required" };
 
-  const project = await assertOwnedProject(ctx, projectId);
-  if (!project) return { error: "Project not found" };
+  const owned = await assertOwnedProject(ctx, projectId);
+  if (owned.error || !owned.project) {
+    return { error: owned.error ?? "Project not found" };
+  }
+  const project = owned.project;
 
   const [tasksResult, assignmentsResult, timeResult] = await Promise.all([
     ctx.supabase
@@ -431,6 +443,18 @@ async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
       .eq("user_id", ctx.userId)
       .eq("project_id", projectId),
   ]);
+
+  if (tasksResult.error) {
+    return { error: `Failed to load tasks: ${tasksResult.error.message}` };
+  }
+  if (assignmentsResult.error) {
+    return {
+      error: `Failed to load project employees: ${assignmentsResult.error.message}`,
+    };
+  }
+  if (timeResult.error) {
+    return { error: `Failed to load time entries: ${timeResult.error.message}` };
+  }
 
   const tasks = (tasksResult.data ?? []) as Array<{
     id: string;
@@ -451,14 +475,18 @@ async function toolGetProject(ctx: ToolCtx, args: { project_id?: string }) {
     | { first_name?: string; last_name?: string }
     | null;
   const quotes = project.quotes as
-    | { project_name?: string | null; quote_number?: string | null; total?: number }
+    | {
+        project_name?: string | null;
+        quote_number?: string | null;
+        grand_total?: number;
+      }
     | null;
 
   return {
     id: project.id,
     name: resolveProjectDisplayName(String(project.project_name ?? ""), quotes),
     status: project.status,
-    value: money(Number(project.value ?? quotes?.total ?? 0)),
+    value: money(Number(project.value ?? quotes?.grand_total ?? 0)),
     startDate: project.start_date,
     endDate: project.end_date,
     address: project.address,
@@ -554,13 +582,16 @@ async function toolGetSupplier(ctx: ToolCtx, args: { supplier_id?: string }) {
   const supplierId = String(args.supplier_id ?? "").trim();
   if (!supplierId) return { error: "supplier_id is required" };
 
-  const { data: supplier } = await ctx.supabase
+  const { data: supplier, error: supplierError } = await ctx.supabase
     .from("suppliers")
     .select("*")
     .eq("user_id", ctx.userId)
     .eq("id", supplierId)
     .maybeSingle();
 
+  if (supplierError) {
+    return { error: `Failed to load supplier: ${supplierError.message}` };
+  }
   if (!supplier) return { error: "Supplier not found" };
 
   const timeZone = resolveUserTimeZone();
@@ -582,6 +613,22 @@ async function toolGetSupplier(ctx: ToolCtx, args: { supplier_id?: string }) {
       .select("*")
       .eq("user_id", ctx.userId),
   ]);
+
+  if (invoicesResult.error) {
+    return {
+      error: `Failed to load supplier invoices: ${invoicesResult.error.message}`,
+    };
+  }
+  if (paymentsResult.error) {
+    return {
+      error: `Failed to load supplier payments: ${paymentsResult.error.message}`,
+    };
+  }
+  if (allocationsResult.error) {
+    return {
+      error: `Failed to load supplier payment allocations: ${allocationsResult.error.message}`,
+    };
+  }
 
   const invoices = enrichSupplierInvoices({
     invoices: (invoicesResult.data ?? []) as SupplierInvoiceRow[],
@@ -628,9 +675,13 @@ async function toolGetSupplier(ctx: ToolCtx, args: { supplier_id?: string }) {
 }
 
 async function loadProjectFinancialInputs(ctx: ToolCtx, projectId: string) {
-  const project = await assertOwnedProject(ctx, projectId);
-  if (!project) return null;
+  const owned = await assertOwnedProject(ctx, projectId);
+  if (owned.error || !owned.project) {
+    return { ok: false as const, error: owned.error ?? "Project not found" };
+  }
+  const project = owned.project;
 
+  // Same source tables as Project Detail / Customer Detail Financial tab.
   const [payments, expenses, materialOrders, timeEntries, changeOrders] =
     await Promise.all([
       ctx.supabase
@@ -660,10 +711,42 @@ async function loadProjectFinancialInputs(ctx: ToolCtx, projectId: string) {
         .eq("project_id", projectId),
     ]);
 
-  const quotes = project.quotes as { total?: number } | null;
-  const quoteAmount = Number(project.value ?? quotes?.total ?? 0);
+  if (payments.error) {
+    return {
+      ok: false as const,
+      error: `Failed to load project payments: ${payments.error.message}`,
+    };
+  }
+  if (expenses.error) {
+    return {
+      ok: false as const,
+      error: `Failed to load project expenses: ${expenses.error.message}`,
+    };
+  }
+  if (materialOrders.error) {
+    return {
+      ok: false as const,
+      error: `Failed to load material orders: ${materialOrders.error.message}`,
+    };
+  }
+  if (timeEntries.error) {
+    return {
+      ok: false as const,
+      error: `Failed to load time entries: ${timeEntries.error.message}`,
+    };
+  }
+  if (changeOrders.error) {
+    return {
+      ok: false as const,
+      error: `Failed to load change orders: ${changeOrders.error.message}`,
+    };
+  }
+
+  const quotes = project.quotes as { grand_total?: number } | null;
+  const quoteAmount = Number(project.value ?? quotes?.grand_total ?? 0);
 
   return {
+    ok: true as const,
     project,
     summary: computeFinancialSummary({
       quoteAmount,
@@ -742,7 +825,7 @@ async function toolGetFinancialSummary(
   if (scope === "project") {
     if (!id) return { error: "id (project_id) is required for project scope" };
     const loaded = await loadProjectFinancialInputs(ctx, id);
-    if (!loaded) return { error: "Project not found" };
+    if (!loaded.ok) return { error: loaded.error };
     const { project, summary } = loaded;
     const quotes = project.quotes as
       | { project_name?: string | null; quote_number?: string | null }
@@ -754,7 +837,10 @@ async function toolGetFinancialSummary(
         String(project.project_name ?? ""),
         quotes
       ),
-      contractValue: money(summary.revisedContractValue),
+      // Same fields Project Detail Financial Summary uses via computeFinancialSummary.
+      contractValue: money(summary.contractValue),
+      revisedContractValue: money(summary.revisedContractValue),
+      customerPayments: money(summary.customerPayments),
       outstandingCustomerBalance: money(summary.outstandingCustomerBalance),
       unpaidSupplierCosts: money(summary.unpaidSupplierCosts),
       unpaidLabourCost: money(summary.unpaidLabourCost),
@@ -771,12 +857,16 @@ async function toolGetFinancialSummary(
   }
 
   if (scope === "portfolio") {
-    const { data: projects } = await ctx.supabase
+    const { data: projects, error: projectsError } = await ctx.supabase
       .from("projects")
       .select("id, project_name, status, value")
       .eq("user_id", ctx.userId)
       .in("status", ["active", "in_progress", "on_hold"])
       .limit(40);
+
+    if (projectsError) {
+      return { error: `Failed to load projects: ${projectsError.message}` };
+    }
 
     let outstandingCustomer = 0;
     let unpaidSupplier = 0;
@@ -788,10 +878,14 @@ async function toolGetFinancialSummary(
       outstandingCustomerBalance: number;
       grossProfit: number;
     }> = [];
+    const loadErrors: string[] = [];
 
     for (const p of projects ?? []) {
       const loaded = await loadProjectFinancialInputs(ctx, String(p.id));
-      if (!loaded) continue;
+      if (!loaded.ok) {
+        loadErrors.push(`${p.id}: ${loaded.error}`);
+        continue;
+      }
       outstandingCustomer += loaded.summary.outstandingCustomerBalance;
       unpaidSupplier += loaded.summary.unpaidSupplierCosts;
       unpaidLabour += loaded.summary.unpaidLabourCost;
@@ -804,6 +898,12 @@ async function toolGetFinancialSummary(
         ),
         grossProfit: money(loaded.summary.grossProfit),
       });
+    }
+
+    if ((projects ?? []).length > 0 && projectSummaries.length === 0) {
+      return {
+        error: `Failed to load portfolio financials: ${loadErrors[0] ?? "unknown error"}`,
+      };
     }
 
     return {
