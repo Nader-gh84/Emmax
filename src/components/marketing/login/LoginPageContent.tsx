@@ -84,10 +84,6 @@ export default function LoginPageContent() {
         <div className={styles.main}>
           <div className={styles.shell}>
             <section className={styles.welcome}>
-              <div className={styles.brandMark} aria-hidden="true">
-                <img src="/Logo.png" alt="" />
-              </div>
-
               <h1>
                 Welcome <span className={styles.accent}>back</span>
               </h1>

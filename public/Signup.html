@@ -115,61 +115,6 @@ img{ display:block; max-width:100%; }
 }
 .site-header .shell{ height:100%; display:flex; align-items:center; }
 
-/* Logo — swap Logo.png for your own file */
-.logo{ display:flex; align-items:center; flex-shrink:0; }
-.logo img{ height:42px; width:auto; object-fit:contain; }
-
-.header-right{ margin-left:auto; display:flex; align-items:center; gap:20px; }
-.header-right .prompt{ font-size:14px; color:var(--text-soft); }
-
-.create-btn{
-  display:inline-flex; align-items:center; gap:12px;
-  height:44px; padding:0 22px;
-  border:1px solid rgba(107,164,255,0.55);
-  border-radius:999px;
-  font-size:14px; color:var(--blue-bright);
-  background:rgba(77,141,255,0.07);
-  transition:background .2s ease, box-shadow .2s ease, transform .2s ease;
-}
-.create-btn:hover{
-  background:rgba(77,141,255,0.16);
-  box-shadow:0 0 26px -6px var(--glow);
-  transform:translateY(-1px);
-}
-.create-btn svg{ width:17px; height:11px; }
-
-/* ============================================================
-   MAIN
-   ============================================================ */
-.main{
-  position:relative; z-index:5;
-  flex:1;
-  display:flex; align-items:center;
-  padding:20px 0 60px;
-}
-.main .shell{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) 548px;
-  gap:60px; align-items:center;
-}
-
-/* ---------- left ---------- */
-.welcome{ padding-right:20px; }
-
-.brand-mark{
-  width:96px; height:96px;
-  margin-bottom:34px;
-  border-radius:50%;
-  border:1px solid rgba(140,190,255,0.30);
-  background:radial-gradient(circle at 42% 34%,
-    rgba(140,190,255,0.20) 0%,
-    rgba(77,141,255,0.10) 55%,
-    rgba(77,141,255,0.03) 100%);
-  display:grid; place-items:center;
-  padding:24px;
-  box-shadow:0 0 42px -14px var(--glow), inset 0 0 30px -14px rgba(160,200,255,0.8);
-}
-.brand-mark img{ width:100%; height:auto; object-fit:contain; }
 
 .welcome h1{
   position:relative;
@@ -418,7 +363,6 @@ img{ display:block; max-width:100%; }
   :root{ --pad:32px; }
   .main .shell{ grid-template-columns:1fr; gap:44px; max-width:620px; }
   .welcome{ padding-right:0; }
-  .brand-mark{ width:80px; height:80px; padding:20px; margin-bottom:26px; }
   .welcome h1{ font-size:38px; }
   .welcome .lede{ margin-bottom:34px; }
 
@@ -487,9 +431,6 @@ a:focus-visible, button:focus-visible, input:focus-visible{
 
       <!-- ---------- left ---------- -->
       <section class="welcome">
-        <div class="brand-mark" aria-hidden="true">
-          <img src="Logo.png" alt="">
-        </div>
 
         <h1>Start <span class="accent">free</span></h1>
         <p class="lede">Your first project is minutes away.</p>

@@ -148,21 +148,6 @@
 /* ---------- left ---------- */
 .welcome{ padding-right:20px; }
 
-.brandMark{
-  width:96px; height:96px;
-  margin-bottom:34px;
-  border-radius:50%;
-  border:1px solid rgba(140,190,255,0.30);
-  background:radial-gradient(circle at 42% 34%,
-    rgba(140,190,255,0.20) 0%,
-    rgba(77,141,255,0.10) 55%,
-    rgba(77,141,255,0.03) 100%);
-  display:grid; place-items:center;
-  padding:24px;
-  box-shadow:0 0 42px -14px var(--glow), inset 0 0 30px -14px rgba(160,200,255,0.8);
-}
-.brandMark img{ width:100%; height:auto; object-fit:contain; }
-
 .welcome h1{
   position:relative;
   margin:0 0 6px; padding-bottom:16px;
@@ -421,7 +406,6 @@
   .root { --pad:32px; }
   .main .shell{ grid-template-columns:1fr; gap:44px; max-width:620px; }
   .welcome{ padding-right:0; }
-  .brandMark{ width:80px; height:80px; padding:20px; margin-bottom:26px; }
   .welcome h1{ font-size:38px; }
   .welcome .lede{ margin-bottom:34px; }
 
