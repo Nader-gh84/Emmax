@@ -127,7 +127,7 @@ export const EM_CALL_READ_TOOLS: EmCallToolDefinition[] = [
     function: {
       name: "get_financial_summary",
       description:
-        "Get financial figures. For a customer: outstanding balance and contract/payment rollup (same numbers as Customer Detail). For a project: profit, outstanding customer balance, unpaid supplier/labour costs, cash flow. For a supplier: outstanding balance owed. For portfolio: high-level unpaid totals across open projects. When the user asks about a customer's outstanding balance, use scope=customer with that customer's id.",
+        "Get financial figures. For a project: gross profit, contract value, total costs, outstanding customer balance, unpaid supplier/labour costs, cash flow (same numbers as Project Detail). For a customer: outstanding balance and contract/payment rollup (same as Customer Detail). For a supplier: outstanding balance owed. For portfolio: high-level unpaid totals across open projects. Project profit questions → scope=project with project_id. Customer balance → scope=customer with customer_id.",
       parameters: {
         type: "object",
         properties: {

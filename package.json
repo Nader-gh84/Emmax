@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:entity-resolve": "tsx scripts/smoke-entity-resolve.ts"
+    "test:entity-resolve": "npx tsx scripts/smoke-entity-resolve.ts",
+    "test:em-call-reads": "npx tsx scripts/smoke-em-call-read-tools.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",
