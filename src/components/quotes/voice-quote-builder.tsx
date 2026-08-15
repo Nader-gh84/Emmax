@@ -1338,7 +1338,7 @@ function VoiceQuoteBuilderInner({
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
                     <IconCheck className="h-3 w-3" />
                   </span>
-                  Auto-stop: 2 sec silence
+                  Auto-stop: ~1.5s after you pause
                 </p>
               </div>
             </section>
