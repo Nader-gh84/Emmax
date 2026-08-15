@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   TODAY_VOICE_COMMAND_SYSTEM_PROMPT,
+  applySharedEntityResolveToVoiceCommand,
   normalizeVoiceCommandResult,
   type TodayVoiceAgendaCandidate,
   type TodayVoiceCommandResult,
@@ -137,25 +138,33 @@ export async function POST(request: Request) {
       }
     }
 
-    // Spoken/typed a project name but no id — force clarify (never silent personal).
+    // Deterministic fuzzy/phonetic resolve (shared with Em Call) — do not
+    // rely on the model alone for proper-noun matching.
+    const resolved = applySharedEntityResolveToVoiceCommand({
+      command: result,
+      transcript,
+      projects: projectPayload,
+      agenda: candidates,
+    });
+
     if (
-      result.intent === "add_item" &&
-      result.projectQuery &&
-      !result.projectId
+      resolved.intent === "add_item" &&
+      resolved.projectQuery &&
+      !resolved.projectId
     ) {
-      result.needsProjectClarification = true;
+      resolved.needsProjectClarification = true;
     }
 
-    if (result.intent === "add_item" && !result.date) {
-      result.date = dateKey;
+    if (resolved.intent === "add_item" && !resolved.date) {
+      resolved.date = dateKey;
     }
-    if (result.intent === "reschedule" && !result.date) {
-      result.date = dateKey;
+    if (resolved.intent === "reschedule" && !resolved.date) {
+      resolved.date = dateKey;
     }
 
     return NextResponse.json({
       transcript,
-      command: result,
+      command: resolved,
     });
   } catch (error) {
     console.error("today-voice-command error:", error);

@@ -1,6 +1,11 @@
 import type { TodayAgendaItem } from "@/lib/today-agenda";
 import { formatAgendaTime } from "@/lib/today-agenda";
 import {
+  resolveEntityQuery,
+  type EntityCandidate,
+  type EntityResolveResult,
+} from "@/lib/entity-resolve";
+import {
   isAgendaPriority,
   isScheduleTaskType,
   scheduleTaskTypeLabel,
@@ -93,6 +98,125 @@ export function toVoiceProjectCandidates(
   }));
 }
 
+/** Shared fuzzy/phonetic project resolve for Today voice (same matcher as Em Call). */
+export function resolveTodayProjectQuery(
+  query: string,
+  projects: TodayVoiceProjectCandidate[]
+): EntityResolveResult {
+  const candidates: EntityCandidate[] = projects.map((p) => ({
+    id: p.id,
+    kind: "project" as const,
+    label: p.projectName,
+    meta: p.customerName,
+  }));
+  return resolveEntityQuery(query, candidates, {
+    kind: "project",
+    optionLimit: 5,
+  });
+}
+
+/** Fuzzy match an agenda item title from a spoken fragment. */
+export function resolveTodayAgendaQuery(
+  query: string,
+  agenda: TodayVoiceAgendaCandidate[]
+): EntityResolveResult {
+  const candidates: EntityCandidate[] = agenda.map((item) => ({
+    id: item.id,
+    kind: "project" as const,
+    label: item.title,
+    meta: item.subtitle,
+  }));
+  return resolveEntityQuery(query, candidates, {
+    kind: "any",
+    optionLimit: 5,
+  });
+}
+
+/**
+ * Apply shared entity resolver on top of model classification so Whisper
+ * misspellings of project/customer names don't silently fail.
+ */
+export function applySharedEntityResolveToVoiceCommand(input: {
+  command: TodayVoiceCommandResult;
+  transcript: string;
+  projects: TodayVoiceProjectCandidate[];
+  agenda: TodayVoiceAgendaCandidate[];
+}): TodayVoiceCommandResult {
+  const command = { ...input.command };
+
+  if (command.intent === "add_item") {
+    const projectHint =
+      command.projectQuery?.trim() ||
+      extractLikelyProjectHint(input.transcript);
+
+    if (projectHint) {
+      command.projectQuery = command.projectQuery || projectHint;
+      const resolved = resolveTodayProjectQuery(projectHint, input.projects);
+
+      if (resolved.match && !resolved.needs_clarification) {
+        command.projectId = resolved.match.id;
+        command.needsProjectClarification = false;
+        if (
+          command.taskType === "personal" ||
+          command.taskType == null
+        ) {
+          command.taskType = "other";
+        }
+      } else if (resolved.needs_clarification) {
+        command.projectId = null;
+        command.needsProjectClarification = true;
+        command.confidence = Math.min(command.confidence, 0.55);
+        command.clarification =
+          resolved.clarification ||
+          command.clarification ||
+          "Which project should I link this to?";
+      }
+    }
+  }
+
+  if (
+    (command.intent === "mark_done" || command.intent === "reschedule") &&
+    !command.targetAgendaId
+  ) {
+    const resolved = resolveTodayAgendaQuery(input.transcript, input.agenda);
+    if (resolved.match && !resolved.needs_clarification) {
+      const candidate = input.agenda.find((a) => a.id === resolved.match!.id);
+      if (
+        candidate &&
+        ((command.intent === "mark_done" && candidate.completable) ||
+          (command.intent === "reschedule" && candidate.reschedulable))
+      ) {
+        command.targetAgendaId = candidate.id;
+        command.clarification = null;
+      }
+    } else if (resolved.needs_clarification && resolved.options.length > 0) {
+      command.confidence = Math.min(command.confidence, 0.55);
+      command.clarification =
+        resolved.clarification || command.clarification;
+    }
+  }
+
+  return command;
+}
+
+/** Lightweight hint extraction when the model omitted projectQuery. */
+function extractLikelyProjectHint(transcript: string): string | null {
+  const text = transcript.trim();
+  if (!text) return null;
+  const patterns = [
+    /\b(?:for|on|at)\s+(?:the\s+)?(.+?)(?:\s+(?:job|project|site|today|tomorrow|at\s+\d)|[.?!]|$)/i,
+    /\b(?:project|job)\s+(.+?)(?:\s+today|\s+tomorrow|[.?!]|$)/i,
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    const captured = m?.[1]?.trim();
+    if (captured && captured.length >= 2 && captured.length <= 60) {
+      return captured;
+    }
+  }
+  return null;
+}
+
 export const TODAY_VOICE_COMMAND_SYSTEM_PROMPT = `You classify spoken or typed commands for a contractor's Daily Command Center (Today agenda).
 
 Return a single JSON object with exactly these keys:
@@ -123,8 +247,8 @@ Rules:
   - date defaults to dateKey; time HH:MM or null for all-day; optional notes; optional priority (default null → medium).
   - targetAgendaId must be null.
   - Project linking:
-    - If the user names a job/project/customer site ("for Kitchen remodel", "at the Smith job"), try to match project candidates by projectName (and customerName as secondary).
-    - Exact or clear unique match → set projectId, projectQuery to the spoken name, needsProjectClarification false. Prefer taskType site_visit/call/inspection/other over personal when a project is linked.
+    - If the user names a job/project/customer site ("for Kitchen remodel", "at the Smith job"), set projectQuery to the spoken name fragment. Exact spelling is NOT required — a shared fuzzy matcher will resolve ids server-side. Prefer setting projectQuery whenever a job/person name appears.
+    - You may set projectId when clearly unique from the candidate list; the server will re-check with fuzzy matching.
     - Zero matches or multiple plausible matches → projectId null, set projectQuery to the spoken name, needsProjectClarification TRUE, confidence <= 0.55, and clarification asking which project. NEVER silently invent a personal-only item when a project was clearly referenced.
     - If the user clearly wants a personal/errand item with no job reference → taskType personal, projectId null, needsProjectClarification false.
 - unknown: cannot map confidently, or the request is unsupported (delete, call someone on the phone, pay invoice, etc.). Put a short clarification for the user. needsProjectClarification false.
