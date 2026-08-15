@@ -108,7 +108,7 @@ export function TimelineHourLabel({
   return (
     <div
       className={`w-14 shrink-0 pt-1 text-right text-xs font-semibold tabular-nums ${
-        empty ? "text-slate-600" : "text-slate-400"
+        empty ? "text-mute opacity-70" : "text-mute"
       }`}
     >
       {label}

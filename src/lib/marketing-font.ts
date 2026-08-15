@@ -1,9 +1,8 @@
 import { DM_Sans } from "next/font/google";
 
 /**
- * DM Sans for marketing pages (matches approved HTML designs).
- * Apply className on the marketing page root — do not put on <body>
- * so the dashboard keeps Inter from the root layout.
+ * DM Sans — marketing pages and (progressively) the in-app dashboard.
+ * Exposes `--font-marketing` for CSS token wiring; also use `.className`.
  */
 export const marketingFont = DM_Sans({
   subsets: ["latin"],

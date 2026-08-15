@@ -204,13 +204,13 @@ export function ScheduleItemFormModal({
           if (!isSaving) onClose();
         }}
       />
-      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-white/10 bg-navy p-6 shadow-xl">
+      <div className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-glass bg-navy p-6 shadow-xl">
         {showingConflict ? (
           <>
             <h2 className="text-xl font-semibold text-white">
               Schedule conflict
             </h2>
-            <p className="mt-2 text-sm text-slate-300">
+            <p className="mt-2 text-sm text-soft">
               You already have something nearby. You can still schedule this —
               just confirming you meant to.
             </p>
@@ -228,9 +228,9 @@ export function ScheduleItemFormModal({
                 </li>
               ))}
             </ul>
-            <p className="mt-4 text-sm text-slate-400">
+            <p className="mt-4 text-sm text-mute">
               New item:{" "}
-              <span className="font-medium text-slate-200">
+              <span className="font-medium text-soft">
                 {form.time
                   ? `${form.time} — ${form.title.trim() || "Untitled"}`
                   : form.title.trim() || "Untitled"}
@@ -262,7 +262,7 @@ export function ScheduleItemFormModal({
               <div>
                 <label
                   htmlFor="schedule-title"
-                  className="block text-base font-medium text-slate-300"
+                  className="block text-base font-medium text-soft"
                 >
                   Title <span className="text-accent">*</span>
                 </label>
@@ -282,7 +282,7 @@ export function ScheduleItemFormModal({
                 <div>
                   <label
                     htmlFor="schedule-type"
-                    className="block text-base font-medium text-slate-300"
+                    className="block text-base font-medium text-soft"
                   >
                     Type
                   </label>
@@ -304,7 +304,7 @@ export function ScheduleItemFormModal({
                 <div>
                   <label
                     htmlFor="schedule-priority"
-                    className="block text-base font-medium text-slate-300"
+                    className="block text-base font-medium text-soft"
                   >
                     Priority
                   </label>
@@ -331,7 +331,7 @@ export function ScheduleItemFormModal({
               <div>
                 <label
                   htmlFor="schedule-project"
-                  className="block text-base font-medium text-slate-300"
+                  className="block text-base font-medium text-soft"
                 >
                   Project
                 </label>
@@ -363,7 +363,7 @@ export function ScheduleItemFormModal({
                 <div>
                   <label
                     htmlFor="schedule-date"
-                    className="block text-base font-medium text-slate-300"
+                    className="block text-base font-medium text-soft"
                   >
                     Date <span className="text-accent">*</span>
                   </label>
@@ -379,7 +379,7 @@ export function ScheduleItemFormModal({
                 <div>
                   <label
                     htmlFor="schedule-time"
-                    className="block text-base font-medium text-slate-300"
+                    className="block text-base font-medium text-soft"
                   >
                     Time
                   </label>
@@ -390,7 +390,7 @@ export function ScheduleItemFormModal({
                     onChange={(e) => updateField("time", e.target.value)}
                     className={`${touchInput} mt-1.5`}
                   />
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-mute">
                     Leave blank for all-day.
                   </p>
                 </div>
@@ -399,7 +399,7 @@ export function ScheduleItemFormModal({
               <div>
                 <label
                   htmlFor="schedule-notes"
-                  className="block text-base font-medium text-slate-300"
+                  className="block text-base font-medium text-soft"
                 >
                   Notes
                 </label>

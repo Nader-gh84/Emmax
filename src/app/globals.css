@@ -2,6 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Design tokens — single source of truth for app chrome colors.
+  :root = legacy dashboard palette (other pages unchanged during pilot).
+  .emax-theme = marketing dusk palette (Today pilot).
+*/
+:root {
+  --emax-navy: #0f172a;
+  --emax-surface: #0b1220;
+  --emax-accent: #3b82f6;
+  --emax-accent-hover: #2563eb;
+  --emax-blue-bright: #60a5fa;
+  --emax-blue-pale: #93c5fd;
+  --emax-text: #ffffff;
+  --emax-text-soft: #94a3b8;
+  --emax-text-mute: #64748b;
+  --emax-glass-brd: rgba(255, 255, 255, 0.1);
+  --emax-card-from: rgba(255, 255, 255, 0.03);
+  --emax-card-to: rgba(255, 255, 255, 0.015);
+  --emax-field-bg: rgba(255, 255, 255, 0.05);
+  --emax-field-border: rgba(255, 255, 255, 0.1);
+  --font-app: var(--font-marketing, ui-sans-serif);
+}
+
+.emax-theme {
+  --emax-navy: #08111f;
+  --emax-surface: #0c1a2e;
+  --emax-accent: #4d8dff;
+  --emax-accent-hover: #6ba4ff;
+  --emax-blue-bright: #6ba4ff;
+  --emax-blue-pale: #a8c6ff;
+  --emax-text: #ffffff;
+  --emax-text-soft: #b9c8df;
+  --emax-text-mute: #8296b4;
+  --emax-glass-brd: rgba(140, 180, 255, 0.16);
+  --emax-card-from: rgba(255, 255, 255, 0.055);
+  --emax-card-to: rgba(255, 255, 255, 0.018);
+  --emax-field-bg: rgba(255, 255, 255, 0.05);
+  --emax-field-border: rgba(140, 180, 255, 0.2);
+  color: var(--emax-text);
+  background-color: var(--emax-navy);
+}
+
 @layer base {
   *,
   *::before,
@@ -22,6 +64,100 @@
   body {
     min-height: 100%;
     min-height: 100dvh;
+  }
+}
+
+@layer components {
+  /* Marketing-aligned card surface (no glow) — use on dashboard panels */
+  .emax-card {
+    border: 1px solid var(--emax-glass-brd);
+    border-radius: 16px;
+    background: linear-gradient(
+      180deg,
+      var(--emax-card-from) 0%,
+      var(--emax-card-to) 100%
+    );
+  }
+
+  .emax-field {
+    width: 100%;
+    min-height: 52px;
+    border-radius: 11px;
+    border: 1px solid var(--emax-field-border);
+    background: var(--emax-field-bg);
+    color: var(--emax-text);
+    padding: 0 1rem;
+    font-size: 0.9375rem;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease;
+  }
+
+  .emax-field::placeholder {
+    color: var(--emax-text-mute);
+  }
+
+  .emax-field:focus {
+    outline: none;
+    border-color: rgba(107, 164, 255, 0.62);
+    background: rgba(255, 255, 255, 0.075);
+    box-shadow: 0 0 0 3px rgba(77, 141, 255, 0.14);
+  }
+
+  .emax-btn-primary {
+    display: inline-flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    border: 0;
+    background: var(--emax-accent);
+    padding: 0 1.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #fff;
+    transition:
+      background 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .emax-btn-primary:hover:not(:disabled) {
+    background: var(--emax-accent-hover);
+  }
+
+  .emax-btn-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .emax-btn-outline {
+    display: inline-flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    border: 1px solid var(--emax-glass-brd);
+    background: transparent;
+    padding: 0 1.5rem;
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--emax-text-soft);
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease;
+  }
+
+  .emax-btn-outline:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--emax-blue-bright);
+    color: #fff;
+  }
+
+  .emax-btn-outline:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
   }
 }
 
