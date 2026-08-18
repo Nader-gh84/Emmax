@@ -24,6 +24,7 @@ import {
   ValidUntilModal,
 } from "@/components/quotes/voice-quote-action-modals";
 import { InProgressQuoteSummaryModal } from "@/components/quotes/in-progress-quote-summary-modal";
+import { ProjectsCapturePanel } from "@/components/quotes/projects-capture-panel";
 import { UploadSupplierPricingModal } from "@/components/quotes/upload-supplier-pricing-modal";
 import {
   touchBtnPrimary,
@@ -199,13 +200,14 @@ type TableRow =
 
 export type VoiceQuoteBuilderProps = {
   /**
-   * When true, renders inside the Pre-Invoices dashboard: compact chrome,
-   * project-name field next to the recorder, and details as an expandable
-   * panel instead of a fixed page sidebar.
+   * When true, renders inside the Projects dashboard: HTML-ported capture
+   * column, project-name field, and details reachable from process actions.
    */
   embedded?: boolean;
   /** Called after draft save, send-to-supplier, or send-to-customer succeeds. */
-  onPersisted?: () => void;
+  onPersisted?: (quoteId?: string) => void;
+  /** Live project title for the process column while capturing. */
+  onProjectNameChange?: (name: string) => void;
 };
 
 export function VoiceQuoteBuilder(props: VoiceQuoteBuilderProps = {}) {
@@ -214,6 +216,7 @@ export function VoiceQuoteBuilder(props: VoiceQuoteBuilderProps = {}) {
       <VoiceQuoteBuilderInner
         embedded
         onPersisted={props.onPersisted}
+        onProjectNameChange={props.onProjectNameChange}
         quoteParam={null}
         uploadPricingParam={null}
         customerIdParam={null}
@@ -230,6 +233,7 @@ function VoiceQuoteBuilderWithSearchParams(props: VoiceQuoteBuilderProps) {
     <VoiceQuoteBuilderInner
       embedded={false}
       onPersisted={props.onPersisted}
+      onProjectNameChange={props.onProjectNameChange}
       quoteParam={searchParams.get("quote")}
       uploadPricingParam={searchParams.get("uploadPricing")}
       customerIdParam={searchParams.get("customerId")}
@@ -240,6 +244,7 @@ function VoiceQuoteBuilderWithSearchParams(props: VoiceQuoteBuilderProps) {
 function VoiceQuoteBuilderInner({
   embedded = false,
   onPersisted,
+  onProjectNameChange,
   quoteParam,
   uploadPricingParam,
   customerIdParam,
@@ -292,6 +297,15 @@ function VoiceQuoteBuilderInner({
   );
   const openedUploadPricingRef = useRef(false);
   const preInvoiceSectionRef = useRef<HTMLElement | null>(null);
+  const projectNameRef = useRef(projectName);
+  const [liveDraft, setLiveDraft] = useState("");
+  const [supplierPricingApplied, setSupplierPricingApplied] = useState(false);
+
+  projectNameRef.current = projectName;
+
+  useEffect(() => {
+    onProjectNameChange?.(projectName);
+  }, [projectName, onProjectNameChange]);
 
   useEffect(() => {
     if (!quoteParam) {
@@ -348,6 +362,9 @@ function VoiceQuoteBuilderInner({
         setProjectName(wizard.projectName);
         setValidUntil(wizard.validUntil ?? defaultValidUntil(30));
         setPriceMode(wizard.priceDisplayMode);
+        setSupplierPricingApplied(
+          Boolean((data as Quote).supplier_pricing_uploaded_at)
+        );
         setPhase(
           wizard.materials.length > 0 || wizard.labourItems.length > 0
             ? "ready"
@@ -451,7 +468,8 @@ function VoiceQuoteBuilderInner({
         const mapped = mapExtractionToLineItems(
           data.materials ?? [],
           data.labourItems ?? [],
-          data.scopeOfWork ?? ""
+          data.scopeOfWork ?? "",
+          data.projectTitle ?? data.project_name ?? ""
         );
 
         if (append) {
@@ -464,6 +482,10 @@ function VoiceQuoteBuilderInner({
           setMaterials(mapped.materials);
           setLabourItems(mapped.labourItems);
           setNotes(mapped.scopeOfWork);
+        }
+
+        if (!projectNameRef.current.trim() && mapped.projectTitle) {
+          setProjectName(mapped.projectTitle);
         }
 
         setPhase("ready");
@@ -520,6 +542,7 @@ function VoiceQuoteBuilderInner({
           : nextChunk;
 
         setTranscript(combinedTranscript);
+        setLiveDraft("");
         await processTranscript(nextChunk, append);
       } catch (error) {
         setPhase("error");
@@ -542,12 +565,67 @@ function VoiceQuoteBuilderInner({
     onRecordingComplete: handleRecordingComplete,
     preSpeechSilenceMs: 7000,
     postSpeechSilenceMs: 1500,
-    barCount: embedded ? 20 : 24,
+    barCount: embedded ? 18 : 24,
   });
 
   const isRecording = recorderStatus === "recording";
   const isBusy =
     isRecording || phase === "transcribing" || phase === "extracting";
+
+  useEffect(() => {
+    if (!embedded || !isRecording) return;
+
+    type LiveSpeechRecognition = {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      onresult: ((event: {
+        resultIndex: number;
+        results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
+      }) => void) | null;
+      start: () => void;
+      stop: () => void;
+    };
+
+    const SpeechWindow = window as Window & {
+      SpeechRecognition?: new () => LiveSpeechRecognition;
+      webkitSpeechRecognition?: new () => LiveSpeechRecognition;
+    };
+    const SpeechRecognitionCtor =
+      SpeechWindow.SpeechRecognition || SpeechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) return;
+
+    setLiveDraft("");
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-CA";
+    let finals = "";
+
+    recognition.onresult = (event) => {
+      let interim = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const piece = event.results[i][0]?.transcript ?? "";
+        if (event.results[i].isFinal) finals = `${finals} ${piece}`.trim();
+        else interim += piece;
+      }
+      setLiveDraft([finals, interim].filter(Boolean).join(" ").trim());
+    };
+
+    try {
+      recognition.start();
+    } catch {
+      // Browser may reject a second start; Whisper transcript still works.
+    }
+
+    return () => {
+      try {
+        recognition.stop();
+      } catch {
+        // ignore
+      }
+    };
+  }, [embedded, isRecording]);
 
   const totals = useMemo(
     () =>
@@ -649,6 +727,7 @@ function VoiceQuoteBuilderInner({
       })
     );
     setIsEditingItems(false);
+    setSupplierPricingApplied(true);
     setCalcFlash(true);
     window.setTimeout(() => setCalcFlash(false), 700);
     showFeedback(
@@ -740,6 +819,98 @@ function VoiceQuoteBuilderInner({
     }
     setShowAddItem(false);
     if (phase === "idle" || phase === "error") setPhase("ready");
+  }
+
+  function resetCaptureForm() {
+    setQuoteId(null);
+    setQuoteNumber(null);
+    setQuoteStatus("draft");
+    setTranscript("");
+    setLiveDraft("");
+    setNotes("");
+    setMaterials([]);
+    setLabourItems([]);
+    setPhase("idle");
+    setPipelineError(null);
+    setIsEditingItems(false);
+    setIsEditingTranscript(false);
+    setPriceMode("detailed");
+    setDiscountMode("amount");
+    setDiscountAmount(0);
+    setDiscountPercent(0);
+    setGstRate(DEFAULT_GST_RATE);
+    setPstRate(DEFAULT_PST_RATE);
+    setCustomerMode("existing");
+    setSelectedCustomerId(null);
+    setCustomerName("");
+    setCustomerEmail("");
+    setCustomerPhone("");
+    setCustomerSecondary("");
+    setProjectName("");
+    setValidUntil(defaultValidUntil(30));
+    setMobileAction("");
+    setActiveModal(null);
+    setSupplierPricingApplied(false);
+    setActionFeedback(null);
+  }
+
+  function handleStartOver() {
+    const hasContent =
+      Boolean(transcript.trim()) ||
+      materials.length > 0 ||
+      labourItems.length > 0 ||
+      Boolean(projectName.trim());
+    if (hasContent) {
+      const confirmed = window.confirm(
+        "Start over? This clears the current capture and starts a new project. Saved drafts in the list are not deleted."
+      );
+      if (!confirmed) return;
+    }
+    resetCaptureForm();
+    showFeedback("info", "Ready for a new project.");
+  }
+
+  async function handleConfirmMaterials() {
+    if (materials.length === 0 && labourItems.length === 0) {
+      showFeedback("error", "Add at least one material first.");
+      return;
+    }
+
+    let nextTitle = projectName.trim();
+    if (!nextTitle) {
+      const entered = window.prompt(
+        "This project has no title yet. Add one now, or leave blank to continue.",
+        ""
+      );
+      if (entered === null) return;
+      nextTitle = entered.trim();
+      if (nextTitle) setProjectName(nextTitle);
+    }
+
+    setIsActionBusy(true);
+    setActionFeedback(null);
+    try {
+      const result = await saveQuoteDraft({
+        ...buildActionState(),
+        projectName: nextTitle || projectName,
+      });
+      setQuoteId(result.quoteId);
+      setQuoteNumber(result.quoteNumber);
+      showFeedback(
+        "success",
+        result.quoteNumber
+          ? `Materials confirmed — saved as ${result.quoteNumber}.`
+          : "Materials confirmed and saved."
+      );
+      onPersisted?.(result.quoteId);
+    } catch (error) {
+      showFeedback(
+        "error",
+        error instanceof Error ? error.message : "Failed to save materials"
+      );
+    } finally {
+      setIsActionBusy(false);
+    }
   }
 
   function handleCalculate() {
@@ -865,7 +1036,7 @@ function VoiceQuoteBuilderInner({
           ? `Saved as draft ${result.quoteNumber}.`
           : "Saved to Drafts."
       );
-      onPersisted?.();
+      onPersisted?.(result.quoteId);
     } catch (error) {
       showFeedback(
         "error",
@@ -957,6 +1128,8 @@ function VoiceQuoteBuilderInner({
       setValidUntil(defaultValidUntil(30));
       setMobileAction("");
       setActiveModal(null);
+      setLiveDraft("");
+      setSupplierPricingApplied(false);
       showFeedback("success", "Project discarded.");
       onPersisted?.();
     } catch (error) {
@@ -994,7 +1167,7 @@ function VoiceQuoteBuilderInner({
         "success",
         `Quote sent to ${customerEmail.trim()}.`
       );
-      onPersisted?.();
+      onPersisted?.(result.quoteId);
     } catch (error) {
       showFeedback(
         "error",
@@ -1033,7 +1206,7 @@ function VoiceQuoteBuilderInner({
         "success",
         `Materials list sent to ${payload.supplier.supplier_name}. Awaiting pricing.`
       );
-      onPersisted?.();
+      onPersisted?.(result.quoteId);
     } catch (error) {
       showFeedback(
         "error",
@@ -1161,6 +1334,247 @@ function VoiceQuoteBuilderInner({
       footerTone: "cyan" as const,
     };
   })();
+
+  const displayedTranscript = [transcript, liveDraft]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  const showPriceColumns = supplierPricingApplied;
+
+  const sharedModals = (
+    <>
+      {showHowItWorks && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div
+            className="absolute inset-0"
+            aria-hidden="true"
+            onClick={() => setShowHowItWorks(false)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-white/10 bg-navy p-6 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-lg font-semibold text-white">How it works</h2>
+              <button
+                type="button"
+                onClick={() => setShowHowItWorks(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-white/5 hover:text-white"
+                aria-label="Close"
+              >
+                <IconClose className="h-4 w-4" />
+              </button>
+            </div>
+            <ol className="mt-4 space-y-3 text-sm text-slate-300">
+              <li>1. Tap the mic and describe the job naturally.</li>
+              <li>2. Ema transcribes your voice and extracts materials.</li>
+              <li>3. Review the list, confirm materials, then follow the process steps.</li>
+              <li>4. Use Continue speaking in the transcript panel to add more anytime.</li>
+            </ol>
+            <button
+              type="button"
+              onClick={() => setShowHowItWorks(false)}
+              className={`${touchBtnPrimary} mt-6 w-full`}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showAddItem && (
+        <AddItemModal
+          allowLabour={!embedded}
+          onClose={() => setShowAddItem(false)}
+          onAdd={handleAddItem}
+        />
+      )}
+
+      {activeModal === "summary" && (
+        <InProgressQuoteSummaryModal
+          customerName={customerName}
+          customerEmail={customerEmail}
+          customerPhone={customerPhone}
+          projectName={projectName}
+          notes={notes}
+          validityDays={buildActionState().validityDays}
+          materials={materials}
+          labourItems={labourItems}
+          subtotal={totals.subtotal}
+          tax={totals.gst + totals.pst}
+          grandTotal={totals.grandTotal}
+          taxRate={gstRate + pstRate}
+          quoteNumber={quoteNumber}
+          onClose={() => setActiveModal(null)}
+        />
+      )}
+
+      {activeModal === "customer" && (
+        <CustomerSelectModal
+          selectedCustomerId={selectedCustomerId}
+          onClose={() => setActiveModal(null)}
+          onSelect={handleSelectCustomer}
+        />
+      )}
+
+      {activeModal === "project" && (
+        <ProjectEditModal
+          projectName={projectName}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setProjectName(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {activeModal === "validUntil" && (
+        <ValidUntilModal
+          validUntil={validUntil}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setValidUntil(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {activeModal === "notes" && (
+        <NotesEditModal
+          notes={notes}
+          onClose={() => setActiveModal(null)}
+          onSave={(value) => {
+            setNotes(value);
+            setActiveModal(null);
+          }}
+        />
+      )}
+
+      {(activeModal === "sendContact" || activeModal === "sendNew") && (
+        <SendQuoteModal
+          mode={activeModal === "sendContact" ? "contact" : "new"}
+          customerMode={customerMode}
+          selectedCustomerId={selectedCustomerId}
+          customerName={customerName}
+          customerEmail={customerEmail}
+          customerPhone={customerPhone}
+          isSending={isActionBusy}
+          onClose={() => setActiveModal(null)}
+          onModeChange={setCustomerMode}
+          onSelectCustomer={setSelectedCustomerId}
+          onChange={handleCustomerFieldChange}
+          onSend={handleSendQuote}
+        />
+      )}
+
+      {activeModal === "supplier" && (
+        <SendToSupplierModal
+          materials={materials.map(({ item, brand, quantity, unit }) => ({
+            item,
+            brand,
+            quantity,
+            unit,
+          }))}
+          isSending={isActionBusy}
+          onClose={() => setActiveModal(null)}
+          onSend={handleSendToSupplier}
+        />
+      )}
+
+      {activeModal === "uploadPricing" && (
+        <UploadSupplierPricingModal
+          materials={materials}
+          quoteId={quoteId}
+          onClose={() => setActiveModal(null)}
+          onApply={handleApplySupplierPrices}
+        />
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="relative min-w-0">
+        {isLoadingQuote && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-navy/70 backdrop-blur-sm">
+            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#14263D] px-4 py-3 text-sm text-slate-300">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+              Loading draft…
+            </div>
+          </div>
+        )}
+        <ProjectsCapturePanel
+          projectName={projectName}
+          onProjectNameChange={setProjectName}
+          isRecording={isRecording}
+          isBusy={isBusy || isActionBusy}
+          phase={phase}
+          seconds={seconds}
+          micLevels={micLevels}
+          onMicClick={() => void handleMicClick()}
+          recorderError={recorderError}
+          actionFeedback={actionFeedback}
+          pipelineError={pipelineError}
+          displayedTranscript={
+            isEditingTranscript ? transcript : displayedTranscript
+          }
+          isEditingTranscript={isEditingTranscript}
+          onToggleTranscriptEdit={() =>
+            setIsEditingTranscript((current) => !current)
+          }
+          onTranscriptChange={setTranscript}
+          onContinueSpeaking={handleContinueSpeaking}
+          onReextract={() => {
+            if (!transcript.trim()) return;
+            setIsEditingTranscript(false);
+            void processTranscript(transcript.trim(), false);
+          }}
+          materials={materials}
+          isEditingItems={isEditingItems}
+          onToggleEditItems={() => setIsEditingItems((current) => !current)}
+          showPriceColumns={showPriceColumns}
+          isMaterialsMerged={isMaterialsMerged}
+          onToggleMerge={toggleMaterialsMerge}
+          onAddManually={() => setShowAddItem(true)}
+          onSmartAdd={handleSmartAdd}
+          onUploadPricing={openUploadSupplierPricing}
+          onUpdateMaterial={updateMaterial}
+          onDeleteMaterial={(id) =>
+            setMaterials((current) => current.filter((item) => item.id !== id))
+          }
+          showPricingDetails
+          discountMode={discountMode}
+          onDiscountModeChange={setDiscountMode}
+          discountAmount={discountAmount}
+          discountPercent={discountPercent}
+          onDiscountValueChange={(value) => {
+            if (discountMode === "amount") setDiscountAmount(value);
+            else setDiscountPercent(value);
+          }}
+          gstRate={gstRate}
+          pstRate={pstRate}
+          onGstRateChange={setGstRate}
+          onPstRateChange={setPstRate}
+          materialsTotal={totals.materialsTotal}
+          labourTotal={totals.labourTotal}
+          subtotal={totals.subtotal}
+          discountApplied={totals.discountApplied}
+          gst={totals.gst}
+          pst={totals.pst}
+          grandTotal={totals.grandTotal}
+          onCalculate={handleCalculate}
+          calcFlash={calcFlash}
+          onSaveDraft={() => void handleSaveDraft()}
+          onDownloadPdf={() => void handleDownloadPdf()}
+          onSendQuote={() => setActiveModal("sendContact")}
+          onSendSupplier={() => setActiveModal("supplier")}
+          onChangeCustomer={() => setActiveModal("customer")}
+          onStartOver={handleStartOver}
+          onConfirmMaterials={() => void handleConfirmMaterials()}
+          onHowItWorks={() => setShowHowItWorks(true)}
+          customerDisplay={customerDisplay}
+        />
+        {sharedModals}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -2487,6 +2901,7 @@ function VoiceQuoteDetailsPanel({
 function AddItemModal({
   onClose,
   onAdd,
+  allowLabour = true,
 }: {
   onClose: () => void;
   onAdd: (payload: {
@@ -2497,6 +2912,7 @@ function AddItemModal({
     unit: string;
     unitPrice: number;
   }) => void;
+  allowLabour?: boolean;
 }) {
   const [kind, setKind] = useState<AddItemKind>("material");
   const [description, setDescription] = useState("");
@@ -2521,6 +2937,7 @@ function AddItemModal({
           </button>
         </div>
 
+        {allowLabour ? (
         <div className="mt-4 flex rounded-lg border border-white/10 p-0.5 text-sm">
           {(["material", "labour"] as const).map((option) => (
             <button
@@ -2538,6 +2955,7 @@ function AddItemModal({
             </button>
           ))}
         </div>
+        ) : null}
 
         <div className="mt-4 space-y-3">
           <input

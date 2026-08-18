@@ -150,7 +150,7 @@ export default async function ProjectDetailRoute({
           This project may have been deleted, or the link is invalid.
         </p>
         <Link
-          href="/dashboard/quotes"
+          href="/dashboard/projects"
           className="mt-6 text-sm font-semibold text-accent hover:text-blue-400"
         >
           Back to Projects

@@ -36,8 +36,8 @@ export const workspaceNavItems = [
   },
   {
     label: "Projects",
-    href: "/dashboard/quotes",
-    matchPath: "/dashboard/quotes",
+    href: "/dashboard/projects",
+    matchPath: "/dashboard/projects",
     icon: IconProjects,
   },
   {
@@ -71,6 +71,13 @@ export function isWorkspaceNavItemActive(
 ): boolean {
   if (item.matchPath === "/dashboard") {
     return pathname === "/dashboard";
+  }
+
+  if (item.matchPath === "/dashboard/projects") {
+    return (
+      pathname.startsWith("/dashboard/projects") ||
+      pathname.startsWith("/dashboard/quotes")
+    );
   }
 
   if (!pathname.startsWith(item.matchPath)) {

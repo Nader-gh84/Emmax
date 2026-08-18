@@ -1365,7 +1365,7 @@ function ProjectCard({
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4 text-sm">
             {project.quote_id ? (
               <Link
-                href={`/dashboard/quotes?quote=${project.quote_id}`}
+                href={`/dashboard/projects?quote=${project.quote_id}`}
                 className="font-semibold text-accent hover:text-blue-400"
                 onClick={(event) => event.stopPropagation()}
               >

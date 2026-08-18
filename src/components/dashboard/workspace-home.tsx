@@ -68,7 +68,7 @@ const DETAIL_ROWS = [
     },
     {
       title: "Projects",
-      href: "/dashboard/quotes",
+      href: "/dashboard/projects",
       icon: IconProjects,
       stats: [
         { label: "Draft", value: "11" },

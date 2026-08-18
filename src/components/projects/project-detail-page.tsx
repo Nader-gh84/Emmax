@@ -266,7 +266,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     ]
   );
   const orderMaterialsHref = `/dashboard/customers/${customerId}/projects/${projectId}/order-materials`;
-  const projectsListHref = "/dashboard/quotes";
+  const projectsListHref = "/dashboard/projects";
   const statusBadgeLabel = projectStarted
     ? liveStatus === "completed"
       ? "Completed"
@@ -517,7 +517,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
           <Link
             href={
               quoteId
-                ? `/dashboard/quotes?quoteId=${quoteId}`
+                ? `/dashboard/projects?quoteId=${quoteId}`
                 : projectsListHref
             }
             className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"
@@ -531,7 +531,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
           <Link
             href={
               quoteId
-                ? `/dashboard/quotes?quoteId=${quoteId}`
+                ? `/dashboard/projects?quoteId=${quoteId}`
                 : "/dashboard/voice-quote-builder"
             }
             className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-semibold text-white shadow-lg shadow-accent/25 transition hover:bg-blue-600"
@@ -674,9 +674,9 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
       case "send_customer":
       case "customer_accept":
         if (quoteId) {
-          router.push(`/dashboard/quotes?quoteId=${quoteId}`);
+          router.push(`/dashboard/projects?quoteId=${quoteId}`);
         } else {
-          router.push("/dashboard/quotes");
+          router.push("/dashboard/projects");
         }
         return;
       case "order_materials":

@@ -70,20 +70,20 @@ export const PRE_INVOICE_WORKFLOW_STEPS: WorkflowStepDefinition[] = [
   {
     id: "voice_materials",
     number: 1,
-    title: "Voice & Materials",
-    description: "Extract materials with voice",
+    title: "List Materials",
+    description: "Voice & list ready",
   },
   {
     id: "send_supplier",
     number: 2,
-    title: "Send to Supplier",
-    description: "Request pricing from suppliers",
+    title: "Get Prices",
+    description: "Send your list to suppliers",
   },
   {
     id: "upload_prices",
     number: 3,
     title: "Upload Prices",
-    description: "Upload supplier pricing",
+    description: "Upload supplier prices",
   },
   {
     id: "create_quote",
@@ -94,14 +94,14 @@ export const PRE_INVOICE_WORKFLOW_STEPS: WorkflowStepDefinition[] = [
   {
     id: "send_customer",
     number: 5,
-    title: "Send to Customer",
+    title: "Send Quote",
     description: "Send quote to customer",
   },
   {
     id: "customer_accept",
     number: 6,
-    title: "Customer Accept",
-    description: "Wait for customer confirmation",
+    title: "Customer Accepts",
+    description: "Wait for confirmation",
   },
   {
     id: "order_materials",
@@ -119,13 +119,13 @@ export const PRE_INVOICE_WORKFLOW_STEPS: WorkflowStepDefinition[] = [
     id: "schedule_project",
     number: 9,
     title: "Schedule Project",
-    description: "Set project start date",
+    description: "Set dates and assign crew",
   },
   {
     id: "start_project",
     number: 10,
     title: "Start Project",
-    description: "Begin the project",
+    description: "Kick off the job",
   },
 ];
 
