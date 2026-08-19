@@ -56,6 +56,8 @@ export function ProjectsCapturePanel({
   seconds,
   micLevels,
   onMicClick,
+  onExtractMaterials,
+  hasTranscript,
   recorderError,
   actionFeedback,
   pipelineError,
@@ -63,8 +65,6 @@ export function ProjectsCapturePanel({
   isEditingTranscript,
   onToggleTranscriptEdit,
   onTranscriptChange,
-  onContinueSpeaking,
-  onReextract,
   materials,
   isEditingItems,
   onToggleEditItems,
@@ -113,6 +113,8 @@ export function ProjectsCapturePanel({
   seconds: number;
   micLevels: number[] | null | undefined;
   onMicClick: () => void;
+  onExtractMaterials: () => void;
+  hasTranscript: boolean;
   recorderError: string | null;
   actionFeedback: { type: "success" | "error" | "info"; message: string } | null;
   pipelineError: string | null;
@@ -120,8 +122,6 @@ export function ProjectsCapturePanel({
   isEditingTranscript: boolean;
   onToggleTranscriptEdit: () => void;
   onTranscriptChange: (value: string) => void;
-  onContinueSpeaking: () => void;
-  onReextract: () => void;
   materials: MaterialItem[];
   isEditingItems: boolean;
   onToggleEditItems: () => void;
@@ -180,7 +180,12 @@ export function ProjectsCapturePanel({
         ? "Extracting…"
         : isRecording
           ? "Listening…"
-          : "Ready";
+          : hasTranscript
+            ? "Ready to extract"
+            : "Ready";
+
+  const extractDisabled =
+    isBusy || !hasTranscript || isRecording || phase === "transcribing";
 
   return (
     <section className={`${styles.card} ${styles.recorder}`}>
@@ -222,27 +227,39 @@ export function ProjectsCapturePanel({
           <IdleWave side="left" />
         )}
 
-        <button
-          type="button"
-          className={`${styles.micBtn} ${isRecording ? styles.listening : ""}`}
-          onClick={onMicClick}
-          disabled={phase === "transcribing" || phase === "extracting"}
-          aria-label={isRecording ? "Stop recording" : "Start recording"}
-        >
-          {phase === "transcribing" || phase === "extracting" ? (
-            <span className={styles.spinner} />
-          ) : (
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
-              <path
-                d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-          )}
-        </button>
+        {isRecording ? (
+          <button
+            type="button"
+            className={styles.stopBtn}
+            onClick={onMicClick}
+            disabled={phase === "transcribing"}
+            aria-label="Stop recording"
+          >
+            <span className={styles.stopIcon} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={styles.micBtn}
+            onClick={onMicClick}
+            disabled={phase === "transcribing" || phase === "extracting"}
+            aria-label="Start recording"
+          >
+            {phase === "transcribing" ? (
+              <span className={styles.spinner} />
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none">
+                <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                <path
+                  d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+            )}
+          </button>
+        )}
 
         {isRecording ? (
           <LiveWave levels={micLevels} listening />
@@ -266,8 +283,26 @@ export function ProjectsCapturePanel({
               strokeLinecap="round"
             />
           </svg>
-          {formatTimer(isRecording || phase === "transcribing" ? seconds : 0)}
+          {formatTimer(isRecording ? seconds : 0)}
         </span>
+      </div>
+
+      <div className={styles.extractRow}>
+        <button
+          type="button"
+          className={styles.extractBtn}
+          onClick={onExtractMaterials}
+          disabled={extractDisabled}
+        >
+          {phase === "extracting" ? (
+            <>
+              <span className={styles.spinner} />
+              Extracting…
+            </>
+          ) : (
+            "Extract Materials"
+          )}
+        </button>
       </div>
 
       {bannerText ? (
@@ -295,20 +330,9 @@ export function ProjectsCapturePanel({
             <button
               type="button"
               className={styles.toolBtn}
-              onClick={onContinueSpeaking}
-              disabled={isBusy}
+              onClick={onToggleTranscriptEdit}
+              disabled={isRecording || phase === "transcribing"}
             >
-              Continue speaking
-            </button>
-            <button
-              type="button"
-              className={styles.toolBtn}
-              onClick={onReextract}
-              disabled={isBusy || !displayedTranscript.trim()}
-            >
-              Re-extract
-            </button>
-            <button type="button" className={styles.toolBtn} onClick={onToggleTranscriptEdit}>
               <svg viewBox="0 0 14 14" fill="none">
                 <path
                   d="M9.4 1.9 12.1 4.6M2 12l.6-2.6 7-7 2.7 2.7-7 7L2 12Z"
@@ -321,7 +345,7 @@ export function ProjectsCapturePanel({
             </button>
           </div>
         </div>
-        {isEditingTranscript ? (
+        {isEditingTranscript && !isRecording ? (
           <textarea
             className={styles.transcriptEdit}
             value={displayedTranscript}
@@ -331,7 +355,7 @@ export function ProjectsCapturePanel({
         ) : (
           <div className={styles.transcript}>
             {displayedTranscript ||
-              "Tap the mic and speak. Your words will show up here while you record."}
+              "Tap the mic and speak. Tap Stop when you pause — then Extract Materials when you're done."}
           </div>
         )}
       </div>

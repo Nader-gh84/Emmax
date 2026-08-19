@@ -35,6 +35,11 @@ interface UseVoiceRecorderOptions {
   minSpeechDurationMs?: number;
   /** Number of live waveform bars to expose (default 7). */
   barCount?: number;
+  /**
+   * When true, recording ends only when the user calls stopRecording().
+   * Silence-based auto-stop is disabled (Projects materials capture).
+   */
+  manualStopOnly?: boolean;
 }
 
 const DEFAULT_PRE_SPEECH_SILENCE_MS = 7000;
@@ -55,6 +60,7 @@ export function useVoiceRecorder({
   silenceDurationMs,
   minSpeechDurationMs = MIN_SPEECH_DURATION_MS,
   barCount = DEFAULT_BAR_COUNT,
+  manualStopOnly = false,
 }: UseVoiceRecorderOptions) {
   const resolvedPreSpeech =
     preSpeechSilenceMs ?? silenceDurationMs ?? DEFAULT_PRE_SPEECH_SILENCE_MS;
@@ -255,7 +261,7 @@ export function useVoiceRecorder({
             heardSpeechRef.current = true;
           }
           silenceStartRef.current = null;
-        } else {
+        } else if (!manualStopOnly) {
           lastSpeechSampleAtRef.current = null;
           if (!silenceStartRef.current) {
             silenceStartRef.current = now;
@@ -269,6 +275,8 @@ export function useVoiceRecorder({
               return;
             }
           }
+        } else {
+          lastSpeechSampleAtRef.current = null;
         }
 
         rafRef.current = requestAnimationFrame(monitor);
@@ -290,6 +298,7 @@ export function useVoiceRecorder({
     cleanupStream,
     finishRecording,
     minSpeechDurationMs,
+    manualStopOnly,
     resolvedPostSpeech,
     resolvedPreSpeech,
     silenceThreshold,
