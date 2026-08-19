@@ -10,6 +10,8 @@ interface GptExtraction {
   materials?: ExtractedMaterialPayload[];
   labourItems?: ExtractedLabourPayload[];
   scopeOfWork?: string;
+  projectTitle?: string;
+  project_name?: string;
 }
 
 async function extractQuoteData(
@@ -81,7 +83,8 @@ export async function POST(request: Request) {
     const mapped = mapExtractionToLineItems(
       extracted.materials ?? [],
       extracted.labourItems ?? [],
-      extracted.scopeOfWork ?? ""
+      extracted.scopeOfWork ?? "",
+      extracted.projectTitle ?? extracted.project_name ?? ""
     );
 
     return NextResponse.json({
@@ -100,6 +103,7 @@ export async function POST(request: Request) {
         rate,
       })),
       scopeOfWork: mapped.scopeOfWork,
+      projectTitle: mapped.projectTitle,
     });
   } catch (error) {
     console.error("Extract quote error:", error);

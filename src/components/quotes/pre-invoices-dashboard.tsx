@@ -1,29 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  IconCalendar,
   IconCheckCircle,
   IconClock,
   IconDocument,
-  IconMicrophone,
-  IconTruck,
 } from "@/components/dashboard/icons";
 import {
-  IconLocation,
   IconProjects,
   IconSend,
 } from "@/components/dashboard/workspace-icons";
 import { EnterSupplierPricesModal } from "@/components/quotes/enter-supplier-prices-modal";
 import { PreInvoiceVoiceCapture } from "@/components/quotes/pre-invoice-voice-capture";
+import {
+  ProjectsProcessColumn,
+  newProjectWorkflowSteps,
+} from "@/components/quotes/projects-process-column";
+import styles from "@/components/quotes/projects-page.module.css";
 import { QuotePdfPreviewModal } from "@/components/quotes/quote-pdf-preview-modal";
 import { SetStartDateModal } from "@/components/quotes/set-start-date-modal";
 import {
   SendQuoteModal,
   SendToSupplierModal,
 } from "@/components/quotes/voice-quote-action-modals";
-import { touchBtnSecondary } from "@/components/quotes/ui";
 import {
   applySupplierPricesToQuote,
   prepareCustomerQuote,
@@ -35,9 +35,6 @@ import {
   buildPreInvoiceStats,
   mapQuoteToPreInvoiceCard,
   type PreInvoiceProjectCard,
-  type ProjectStatusTone,
-  type ProjectWorkflowStep,
-  type WorkflowStepDefinition,
   type WorkflowStepId,
 } from "@/lib/pre-invoices";
 import {
@@ -61,14 +58,6 @@ type ActiveModal =
   | { kind: "pdf_preview"; quoteId: string; pdfPath: string }
   | { kind: "start_date"; projectId: string };
 
-function IconInfo({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
 function IconStar({ className }: { className?: string }) {
   return (
     <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -84,15 +73,6 @@ function IconStarOutline({ className }: { className?: string }) {
     </svg>
   );
 }
-
-function IconLock({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-    </svg>
-  );
-}
-
 function IconCart({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -109,67 +89,6 @@ function IconPlay({ className }: { className?: string }) {
     </svg>
   );
 }
-
-function IconUpload({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-    </svg>
-  );
-}
-
-function IconChevronDown({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  );
-}
-
-function stepIcon(id: WorkflowStepId, className = "h-4 w-4") {
-  switch (id) {
-    case "voice_materials":
-      return <IconMicrophone className={className} />;
-    case "send_supplier":
-      return <IconTruck className={className} />;
-    case "upload_prices":
-      return <IconUpload className={className} />;
-    case "create_quote":
-      return <IconDocument className={className} />;
-    case "send_customer":
-      return <IconSend className={className} />;
-    case "customer_accept":
-      return <IconCheckCircle className={className} />;
-    case "order_materials":
-      return <IconCart className={className} />;
-    case "materials_ready":
-      return <IconProjects className={className} />;
-    case "schedule_project":
-      return <IconCalendar className={className} />;
-    case "start_project":
-      return <IconPlay className={className} />;
-    default:
-      return <IconDocument className={className} />;
-  }
-}
-
-function statusBadgeClasses(tone: ProjectStatusTone): string {
-  switch (tone) {
-    case "waiting":
-      return "border-amber-500/30 bg-amber-500/10 text-amber-300";
-    case "sent":
-      return "border-sky-500/30 bg-sky-500/10 text-sky-300";
-    case "accepted":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
-    case "ready":
-      return "border-cyan-500/30 bg-cyan-500/10 text-cyan-300";
-    case "start":
-      return "border-accent/30 bg-accent/10 text-accent";
-    default:
-      return "border-white/15 bg-white/5 text-slate-300";
-  }
-}
-
 function statIcon(id: string, className = "h-5 w-5") {
   switch (id) {
     case "all":
@@ -188,125 +107,19 @@ function statIcon(id: string, className = "h-5 w-5") {
       return <IconDocument className={className} />;
   }
 }
-
-function WorkflowGuideSteps() {
-  return (
-    <div className="mt-6 overflow-x-auto pb-2">
-      <ol className="flex min-w-max items-start gap-0 px-1">
-        {PRE_INVOICE_WORKFLOW_STEPS.map((step, index) => (
-          <li key={step.id} className="flex items-start">
-            <div className="flex w-[7.5rem] flex-col items-center px-1 text-center sm:w-32">
-              <span className="flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-accent ring-1 ring-white/5">
-                {stepIcon(step.id, "h-5 w-5")}
-              </span>
-              <span className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                Step {step.number}
-              </span>
-              <span className="mt-1 text-xs font-semibold text-white">
-                {step.title}
-              </span>
-              <span className="mt-1 text-[11px] leading-snug text-slate-400">
-                {step.description}
-              </span>
-            </div>
-            {index < PRE_INVOICE_WORKFLOW_STEPS.length - 1 ? (
-              <div
-                className="mt-5 h-px w-4 shrink-0 border-t border-dashed border-white/20 sm:w-6"
-                aria-hidden="true"
-              />
-            ) : null}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-function ProjectStepNode({
-  definition,
-  step,
-  busy,
-  onAction,
-}: {
-  definition: WorkflowStepDefinition;
-  step: ProjectWorkflowStep;
-  busy: boolean;
-  onAction: () => void;
-}) {
-  const clickable = step.state === "active" || step.state === "completed";
-
-  return (
-    <div className="flex items-start">
-      <div className="flex w-[4.75rem] flex-col items-center px-0.5 text-center sm:w-[5.5rem]">
-        <button
-          type="button"
-          disabled={!clickable || busy || step.state === "locked"}
-          onClick={() => {
-            if (step.state === "active") onAction();
-          }}
-          className={`flex h-9 w-9 items-center justify-center rounded-full border transition ${
-            step.state === "completed"
-              ? "cursor-default border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-              : step.state === "active"
-                ? "cursor-pointer border-accent/50 bg-accent/20 text-accent shadow-md shadow-accent/20 hover:bg-accent/30 disabled:opacity-50"
-                : "cursor-default border-white/10 bg-white/[0.03] text-slate-500"
-          }`}
-          aria-label={`${definition.title} (${step.state})`}
-        >
-          {step.state === "completed" ? (
-            <IconCheckCircle className="h-4 w-4" />
-          ) : step.state === "locked" ? (
-            <IconLock className="h-3.5 w-3.5" />
-          ) : (
-            stepIcon(definition.id, "h-4 w-4")
-          )}
-        </button>
-        <span
-          className={`mt-1.5 text-[10px] font-medium leading-tight ${
-            step.state === "locked" ? "text-slate-600" : "text-slate-300"
-          }`}
-        >
-          {definition.title}
-        </span>
-        {step.state === "completed" && step.completedDate ? (
-          <span className="mt-0.5 text-[10px] text-emerald-400/80">
-            {step.completedDate}
-          </span>
-        ) : null}
-        {step.state === "active" && step.actionLabel ? (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAction}
-            className="mt-1.5 inline-flex min-h-[28px] items-center justify-center rounded-lg bg-accent px-2 py-1 text-[10px] font-semibold text-white transition hover:bg-blue-600 disabled:opacity-50"
-          >
-            {step.actionLabel}
-          </button>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function IconTrash({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-    </svg>
-  );
-}
-
 function ProjectCard({
   project,
   busy,
-  onStepAction,
+  selected,
+  onSelect,
   onEdit,
   onViewPdf,
   onDelete,
 }: {
   project: PreInvoiceProjectCard;
   busy: boolean;
-  onStepAction: (stepId: WorkflowStepId) => void;
+  selected: boolean;
+  onSelect: () => void;
   onEdit: () => void;
   onViewPdf: () => void;
   onDelete: () => void;
@@ -315,183 +128,164 @@ function ProjectCard({
   const [moreOpen, setMoreOpen] = useState(false);
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-      <div className="flex flex-col gap-5 xl:flex-row xl:items-stretch xl:gap-6">
-        <div className="min-w-0 flex-1 xl:max-w-sm xl:shrink-0">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <span className="inline-flex rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] font-semibold tracking-wide text-slate-300">
-                {project.projectNumber}
-              </span>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <h3 className="text-lg font-bold text-white">{project.title}</h3>
-                <button
-                  type="button"
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition hover:bg-white/10 ${
-                    project.favorited ? "text-amber-300" : "text-slate-500"
-                  }`}
-                  aria-label={project.favorited ? "Unfavorite" : "Favorite"}
-                >
-                  {project.favorited ? (
-                    <IconStar className="h-4 w-4" />
-                  ) : (
-                    <IconStarOutline className="h-4 w-4" />
-                  )}
-                </button>
-                <span
-                  className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide ${statusBadgeClasses(
-                    project.statusTone
-                  )}`}
-                >
-                  {project.statusLabel}
-                </span>
-              </div>
-              <p className="mt-2 text-sm text-slate-300">{project.customerName}</p>
-              <p className="mt-1 flex items-start gap-1.5 text-sm text-slate-400">
-                <IconLocation className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-                <span>{project.address}</span>
-              </p>
-              <p className="mt-3 text-2xl font-bold text-accent">{project.priceLabel}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span>{project.materialsCount} materials</span>
-                <span className="inline-flex items-center gap-1">
-                  <IconCalendar className="h-3.5 w-3.5" />
-                  {project.createdLabel}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDetailsOpen((open) => !open)}
-                  className="inline-flex items-center gap-1 text-sm font-semibold text-accent transition hover:text-blue-400"
-                >
-                  View Details
-                  <IconChevronDown
-                    className={`h-4 w-4 transition ${detailsOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-                {project.pdfPath ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={onViewPdf}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1 text-sm font-semibold text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
-                  >
-                    <IconDocument className="h-3.5 w-3.5 text-accent" />
-                    View PDF
-                  </button>
-                ) : null}
-              </div>
-              {detailsOpen ? (
-                <p className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs leading-relaxed text-slate-400">
-                  Quote ID: {project.quoteId || "—"}
-                  {project.projectId ? ` · Project ID: ${project.projectId}` : ""}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="relative shrink-0">
+    <article
+      className={`${styles.card} ${styles.pCard} ${
+        selected ? styles.pCardSelected : ""
+      }`}
+      onClick={onSelect}
+    >
+      <div className={styles.pCardTop}>
+        <div className={styles.pCardMeta}>
+          <span className={styles.pNum}>{project.projectNumber}</span>
+          <div className={styles.pTitleRow}>
+            <h3>{project.title}</h3>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              style={{
+                color: project.favorited ? "#fbbf24" : undefined,
+                width: 28,
+                height: 28,
+              }}
+              aria-label={project.favorited ? "Unfavorite" : "Favorite"}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {project.favorited ? (
+                <IconStar className="h-4 w-4" />
+              ) : (
+                <IconStarOutline className="h-4 w-4" />
+              )}
+            </button>
+            <span
+              className={
+                project.statusTone === "accepted" || project.statusTone === "ready"
+                  ? `${styles.tag} ${styles.tagDone}`
+                  : project.statusTone === "start" || project.statusTone === "sent"
+                    ? `${styles.tag} ${styles.tagActive}`
+                    : styles.tag
+              }
+            >
+              {project.statusLabel}
+            </span>
+          </div>
+          <p className={styles.pCustomer}>{project.customerName}</p>
+          <p className={styles.pAddress}>{project.address}</p>
+          <p className={styles.pPrice}>{project.priceLabel}</p>
+          <div className={styles.pFacts}>
+            <span>{project.materialsCount} materials</span>
+            <span>{project.createdLabel}</span>
+          </div>
+          <div className={styles.pFacts}>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setDetailsOpen((open) => !open);
+              }}
+              className={styles.howItWorks}
+            >
+              {detailsOpen ? "Hide details" : "View details"}
+            </button>
+            {project.pdfPath ? (
               <button
                 type="button"
-                onClick={() => setMoreOpen((open) => !open)}
                 disabled={busy}
-                className={`${touchBtnSecondary} min-h-[36px] gap-1.5 px-3 text-sm disabled:opacity-50`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onViewPdf();
+                }}
+                className={styles.toolBtn}
               >
-                More
-                <IconChevronDown
-                  className={`h-3.5 w-3.5 transition ${moreOpen ? "rotate-180" : ""}`}
-                />
+                View PDF
               </button>
-              {moreOpen ? (
-                <div className="absolute right-0 top-full z-20 mt-1 w-44 overflow-hidden rounded-xl border border-white/10 bg-navy shadow-xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onEdit();
-                    }}
-                    className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
-                  >
-                    Edit
-                  </button>
-                  {project.pdfPath ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMoreOpen(false);
-                        onViewPdf();
-                      }}
-                      className="block w-full px-4 py-2.5 text-left text-sm text-slate-300 transition hover:bg-white/5 hover:text-white"
-                    >
-                      View PDF
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMoreOpen(false);
-                      onDelete();
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
-                  >
-                    <IconTrash className="h-3.5 w-3.5" />
-                    Delete
-                  </button>
-                </div>
-              ) : null}
-            </div>
+            ) : null}
           </div>
+          {detailsOpen ? (
+            <p className={styles.nextAction} style={{ marginTop: 8 }}>
+              Quote ID: {project.quoteId || "—"}
+              {project.projectId ? ` · Project ID: ${project.projectId}` : ""}
+            </p>
+          ) : null}
         </div>
 
-        <div className="min-w-0 flex-1 border-t border-white/10 pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
-          <div className="overflow-x-auto pb-1">
-            <div className="flex min-w-max items-start">
-              {PRE_INVOICE_WORKFLOW_STEPS.map((definition, index) => {
-                const step = project.steps[index];
-                const showConnector =
-                  index < PRE_INVOICE_WORKFLOW_STEPS.length - 1 &&
-                  definition.number !== 9;
-                return (
-                  <div key={definition.id} className="flex items-start">
-                    {definition.number === 10 ? (
-                      <div className="mx-1 mt-2 h-10 w-px shrink-0 bg-white/20 sm:mx-2" aria-hidden="true" />
-                    ) : null}
-                    <ProjectStepNode
-                      definition={definition}
-                      step={step}
-                      busy={busy}
-                      onAction={() => onStepAction(definition.id)}
-                    />
-                    {showConnector ? (
-                      <div
-                        className={`mt-4 h-px w-3 shrink-0 border-t border-dashed sm:w-4 ${
-                          step.state === "completed"
-                            ? "border-emerald-500/40"
-                            : "border-white/15"
-                        }`}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
+        <div className={styles.pMore}>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMoreOpen((open) => !open);
+            }}
+            disabled={busy}
+            className={styles.toolBtn}
+          >
+            More
+          </button>
+          {moreOpen ? (
+            <div className={styles.menu}>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMoreOpen(false);
+                  onEdit();
+                }}
+              >
+                Edit
+              </button>
+              {project.pdfPath ? (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setMoreOpen(false);
+                    onViewPdf();
+                  }}
+                >
+                  View PDF
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={styles.menuDanger}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMoreOpen(false);
+                  onDelete();
+                }}
+              >
+                Delete
+              </button>
             </div>
-          </div>
-
-          <div className="mt-4 flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
-            <IconInfo className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-            <p className="text-xs leading-relaxed text-slate-300 sm:text-sm">
-              {project.nextActionText}
-            </p>
-          </div>
+          ) : null}
         </div>
       </div>
+
+      <div className={styles.cardSteps} aria-hidden="true">
+        {project.steps.map((step, index) => (
+          <span
+            key={step.id}
+            className={`${styles.miniStep} ${
+              step.state === "completed"
+                ? styles.miniDone
+                : step.state === "active"
+                  ? styles.miniActive
+                  : ""
+            }`}
+            title={PRE_INVOICE_WORKFLOW_STEPS[index]?.title}
+          >
+            {index + 1}
+          </span>
+        ))}
+      </div>
+
+      <p className={styles.nextAction}>{project.nextActionText}</p>
     </article>
   );
 }
 
 export function PreInvoicesDashboard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const voiceSectionRef = useRef<HTMLDivElement | null>(null);
   const [cards, setCards] = useState<PreInvoiceProjectCard[]>([]);
   const [quotesById, setQuotesById] = useState<Record<string, Quote>>({});
@@ -506,6 +300,8 @@ export function PreInvoicesDashboard() {
   const [sendState, setSendState] = useState<QuoteActionState | null>(null);
   const [customerMode, setCustomerMode] =
     useState<CustomerSelectionMode>("existing");
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
+  const [captureProjectName, setCaptureProjectName] = useState("");
 
   const loadCards = useCallback(async () => {
     setError(null);
@@ -589,7 +385,36 @@ export function PreInvoicesDashboard() {
     void loadCards();
   }, [loadCards]);
 
+  useEffect(() => {
+    const fromUrl = searchParams.get("quote") || searchParams.get("quoteId");
+    if (fromUrl) setSelectedQuoteId(fromUrl);
+  }, [searchParams]);
+
   const stats = useMemo(() => buildPreInvoiceStats(cards), [cards]);
+
+  const selectedCard =
+    cards.find((card) => card.quoteId === selectedQuoteId) ??
+    cards.find((card) => card.id === selectedQuoteId) ??
+    null;
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (
+      selectedQuoteId &&
+      !cards.some(
+        (card) => card.quoteId === selectedQuoteId || card.id === selectedQuoteId
+      )
+    ) {
+      setSelectedQuoteId(null);
+    }
+  }, [cards, isLoading, selectedQuoteId]);
+
+  const processTitle = selectedCard
+    ? selectedCard.title
+    : captureProjectName.trim() || "New project";
+  const processSteps = selectedCard
+    ? selectedCard.steps
+    : newProjectWorkflowSteps();
 
   const modalQuote =
     activeModal && "quoteId" in activeModal
@@ -631,7 +456,7 @@ export function PreInvoicesDashboard() {
         });
         showFeedback(
           "info",
-          "Use Record Your Voice above to extract or add materials."
+          "Use the recorder to extract or add materials for this project."
         );
         break;
       }
@@ -998,86 +823,108 @@ export function PreInvoicesDashboard() {
   }
 
   return (
-    <main className="relative min-w-0 flex-1 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-7xl pb-28">
-        <header className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-              Projects
-            </h1>
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400">
-              <IconInfo className="h-5 w-5" />
-            </span>
-          </div>
-          <p className="max-w-3xl text-sm leading-relaxed text-slate-400 sm:text-base">
-            Create projects with voice, get supplier prices, send quotes, order
-            materials and start projects - all in one place. Started projects
-            move to the customer&apos;s Projects tab.
+    <main className={styles.page}>
+      <div className={styles.pageHead}>
+        <div>
+          <h1>Projects</h1>
+          <p>
+            Create quotes, get supplier prices, send quotes, order materials and start
+            projects.
           </p>
-        </header>
+        </div>
+        <div className={styles.headActions}>
+          <button
+            type="button"
+            className={styles.btnNew}
+            onClick={() => {
+              setSelectedQuoteId(null);
+              voiceSectionRef.current?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            }}
+          >
+            <svg viewBox="0 0 16 16" fill="none">
+              <path
+                d="M8 2.5v11M2.5 8h11"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+            New Project
+          </button>
+        </div>
+      </div>
 
-        <div className="mt-6" ref={voiceSectionRef}>
+      <div className={styles.grid}>
+        <div ref={voiceSectionRef}>
           <PreInvoiceVoiceCapture
-            onProjectCreated={() => {
+            onProjectNameChange={setCaptureProjectName}
+            onProjectCreated={(quoteId) => {
               setIsLoading(true);
+              if (quoteId) {
+                setSelectedQuoteId(quoteId);
+              }
               void loadCards();
             }}
           />
         </div>
+        <ProjectsProcessColumn
+          projectTitle={processTitle}
+          steps={processSteps}
+          busy={actionBusy}
+          interactive={Boolean(selectedCard)}
+          onStepAction={(stepId) => {
+            if (!selectedCard) return;
+            void handleStepAction(selectedCard, stepId);
+          }}
+        />
+      </div>
 
-        {(feedback || error) && (
-          <div
-            className={`mt-6 rounded-xl border px-4 py-3 text-sm ${
-              error || feedback?.type === "error"
-                ? "border-red-500/30 bg-red-500/10 text-red-200"
-                : feedback?.type === "success"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-200"
-            }`}
-          >
-            {error || feedback?.message}
-          </div>
-        )}
+      {(feedback || error) && (
+        <div
+          className={`${styles.banner} ${
+            error || feedback?.type === "error"
+              ? styles.bannerError
+              : feedback?.type === "success"
+                ? styles.bannerSuccess
+                : styles.bannerInfo
+          }`}
+          style={{ marginTop: 22 }}
+        >
+          {error || feedback?.message}
+        </div>
+      )}
 
-        <section className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <section className={styles.listSection}>
+        <div className={styles.listHead}>
+          <h2>In progress &amp; completed</h2>
+          <p>Select a card to see its 10-step process on the right.</p>
+        </div>
+
+        <div className={styles.stats}>
           {stats.map((stat) => (
-            <div
-              key={stat.id}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-left"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15 text-accent ring-1 ring-accent/25">
-                {statIcon(stat.id)}
-              </span>
-              <p className="mt-3 text-2xl font-bold text-white">{stat.count}</p>
-              <p className="mt-1 text-xs font-medium text-slate-400">{stat.label}</p>
+            <div key={stat.id} className={`${styles.card} ${styles.stat}`}>
+              <span className={styles.statIcon}>{statIcon(stat.id, "h-4 w-4")}</span>
+              <strong>{stat.count}</strong>
+              <span>{stat.label}</span>
             </div>
           ))}
-        </section>
+        </div>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-5 sm:px-6">
-          <h2 className="text-lg font-semibold text-white">Project Workflow</h2>
-          <p className="mt-1 text-sm text-slate-400">
-            Each step unlocks when the previous step is completed.
-          </p>
-          <WorkflowGuideSteps />
-          <p className="mt-4 flex items-start gap-2 text-xs text-slate-500 sm:text-sm">
-            <IconInfo className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-            Click on any active step button to continue the workflow
-          </p>
-        </section>
-
-        <section className="mt-6 space-y-4">
+        <div className={styles.cards}>
           {isLoading ? (
-            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-10 text-sm text-slate-400">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/20 border-t-accent" />
+            <div className={`${styles.card} ${styles.loading}`}>
+              <span className={styles.spinner} />
               Loading projects…
             </div>
           ) : cards.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] px-6 py-14 text-center">
-              <h2 className="text-lg font-semibold text-white">No projects yet</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Record materials above to start a project in this pipeline.
-                After Start Project, it moves to the customer&apos;s Projects tab.
+            <div className={`${styles.card} ${styles.emptyState}`}>
+              <h2>No projects yet</h2>
+              <p>
+                Record materials above to start a project in this pipeline. After Start
+                Project, it moves to the customer&apos;s Projects tab.
               </p>
             </div>
           ) : (
@@ -1086,7 +933,13 @@ export function PreInvoicesDashboard() {
                 key={project.id}
                 project={project}
                 busy={actionBusy}
-                onStepAction={(stepId) => void handleStepAction(project, stepId)}
+                selected={
+                  selectedQuoteId === project.quoteId ||
+                  selectedQuoteId === project.id
+                }
+                onSelect={() =>
+                  setSelectedQuoteId(project.quoteId || project.id)
+                }
                 onEdit={() => {
                   if (!project.quoteId) return;
                   router.push(
@@ -1111,18 +964,8 @@ export function PreInvoicesDashboard() {
               />
             ))
           )}
-        </section>
-
-        <section className="mt-6 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-white">How it works</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Follow the workflow steps from left to right. Each step will unlock
-              when the previous step is completed.
-            </p>
-          </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       {activeModal?.kind === "supplier" && modalQuote ? (
         <SendToSupplierModal

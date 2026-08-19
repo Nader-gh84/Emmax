@@ -182,7 +182,7 @@ export async function getQuoteConfirmationToken(
 }
 
 export function buildQuoteDashboardUrl(quoteId: string): string {
-  return `${getAppBaseUrl()}/dashboard/quotes?quote=${quoteId}`;
+  return `${getAppBaseUrl()}/dashboard/projects?quote=${quoteId}`;
 }
 
 export function buildQuoteAcceptUrl(

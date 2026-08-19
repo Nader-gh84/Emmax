@@ -1,10 +1,15 @@
-import type { Metadata } from "next";
-import { PreInvoicesDashboard } from "@/components/quotes/pre-invoices-dashboard";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Projects",
-};
-
-export default function PreInvoicesPage() {
-  return <PreInvoicesDashboard />;
+export default function QuotesRedirectPage({
+  searchParams,
+}: {
+  searchParams: Record<string, string | string[] | undefined>;
+}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
+    if (typeof value === "string") params.set(key, value);
+    else if (Array.isArray(value) && value[0]) params.set(key, value[0]);
+  }
+  const qs = params.toString();
+  redirect(qs ? `/dashboard/projects?${qs}` : "/dashboard/projects");
 }

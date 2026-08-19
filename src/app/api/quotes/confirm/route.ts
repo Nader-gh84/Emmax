@@ -140,7 +140,7 @@ async function confirmQuoteWithRpc(token: string) {
   return NextResponse.json({
     success: true,
     confirmedAt: result.confirmed_at,
-    dashboardUrl: `${getAppBaseUrl()}/dashboard/quotes?quote=${result.quote_id}`,
+    dashboardUrl: `${getAppBaseUrl()}/dashboard/projects?quote=${result.quote_id}`,
   });
 }
 
@@ -366,7 +366,7 @@ async function confirmQuoteWithAdmin(token: string) {
   return NextResponse.json({
     success: true,
     confirmedAt,
-    dashboardUrl: `${getAppBaseUrl()}/dashboard/quotes?quote=${quote.id}`,
+    dashboardUrl: `${getAppBaseUrl()}/dashboard/projects?quote=${quote.id}`,
   });
 }
 

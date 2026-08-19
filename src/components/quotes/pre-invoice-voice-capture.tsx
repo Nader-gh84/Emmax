@@ -9,10 +9,16 @@ import { VoiceQuoteBuilder } from "@/components/quotes/voice-quote-builder";
  */
 export function PreInvoiceVoiceCapture({
   onProjectCreated,
+  onProjectNameChange,
 }: {
-  onProjectCreated: () => void;
+  onProjectCreated: (quoteId?: string) => void;
+  onProjectNameChange?: (name: string) => void;
 }) {
   return (
-    <VoiceQuoteBuilder embedded onPersisted={onProjectCreated} />
+    <VoiceQuoteBuilder
+      embedded
+      onPersisted={onProjectCreated}
+      onProjectNameChange={onProjectNameChange}
+    />
   );
 }

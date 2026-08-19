@@ -25,7 +25,7 @@ export const dashboardNavItems = [
   {
     label: "Projects",
     shortLabel: "Projects",
-    href: "/dashboard/quotes",
+    href: "/dashboard/projects",
     icon: IconProjects,
     highlight: false,
   },

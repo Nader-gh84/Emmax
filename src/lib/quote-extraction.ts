@@ -23,6 +23,7 @@ export interface QuoteExtractionResult {
   materials: MaterialItem[];
   labourItems: LabourItem[];
   scopeOfWork: string;
+  projectTitle: string;
 }
 
 const LABOUR_UNIT_PATTERN = /^(hour|hours|hr|hrs)$/i;
@@ -43,7 +44,8 @@ function isLabourMaterial(material: ExtractedMaterialPayload): boolean {
 export function mapExtractionToLineItems(
   materialsPayload: ExtractedMaterialPayload[] = [],
   labourPayload: ExtractedLabourPayload[] = [],
-  scopeOfWork = ""
+  scopeOfWork = "",
+  projectTitle = ""
 ): QuoteExtractionResult {
   const materials: MaterialItem[] = [];
   const labourItems: LabourItem[] = [];
@@ -85,6 +87,7 @@ export function mapExtractionToLineItems(
     materials,
     labourItems,
     scopeOfWork: scopeOfWork.trim(),
+    projectTitle: projectTitle.trim(),
   };
 }
 
@@ -93,7 +96,8 @@ Return valid JSON with this exact shape:
 {
   "materials": [{ "item": string, "brand": string, "quantity": number, "unit": string, "unitPrice": number }],
   "labourItems": [{ "description": string, "hours": number, "rate": number }],
-  "scopeOfWork": string
+  "scopeOfWork": string,
+  "projectTitle": string
 }
 Rules:
 - materials.item: clear material/product description (NOT labour)
@@ -106,6 +110,7 @@ Rules:
 - labourItems.hours: numeric hours mentioned or reasonable default of 1
 - labourItems.rate: estimated CAD hourly rate
 - scopeOfWork: concise professional summary of the job scope
+- projectTitle: short job title if the speaker names the project, customer, site, or job (e.g. "Kitchen renovation — Sara Emma"). Use an empty string if none is mentioned.
 
 Common brand names to watch for (even if transcript spelling looks slightly off):
 Electrical: Leviton, Legrand, Square D, Eaton, Siemens, GE, Southwire, Carlon, Milwaukee, DeWalt, Klein Tools, Nexans, Liteline
