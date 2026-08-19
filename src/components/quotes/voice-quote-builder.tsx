@@ -298,10 +298,19 @@ function VoiceQuoteBuilderInner({
   const openedUploadPricingRef = useRef(false);
   const preInvoiceSectionRef = useRef<HTMLElement | null>(null);
   const projectNameRef = useRef(projectName);
+  const transcriptRef = useRef(transcript);
+  const extractOffsetRef = useRef(0);
   const [liveDraft, setLiveDraft] = useState("");
   const [supplierPricingApplied, setSupplierPricingApplied] = useState(false);
 
   projectNameRef.current = projectName;
+  transcriptRef.current = transcript;
+
+  useEffect(() => {
+    if (transcript.length < extractOffsetRef.current) {
+      extractOffsetRef.current = 0;
+    }
+  }, [transcript]);
 
   useEffect(() => {
     onProjectNameChange?.(projectName);
@@ -346,6 +355,7 @@ function VoiceQuoteBuilderInner({
         );
         setTranscript(wizard.transcript);
         setNotes(wizard.notes);
+        extractOffsetRef.current = wizard.transcript.trim().length;
         setMaterials(wizard.materials);
         setLabourItems(wizard.labourItems);
         setGstRate(wizard.gstRate);
@@ -501,9 +511,70 @@ function VoiceQuoteBuilderInner({
     []
   );
 
-  const handleRecordingComplete = useCallback(
+  const handleProjectsSegmentComplete = useCallback(async (blob: Blob) => {
+    const settlePhase = () => {
+      setPhase(materials.length > 0 ? "ready" : "idle");
+    };
+
+    if (blob.size === 0) {
+      settlePhase();
+      return;
+    }
+
+    setPhase("transcribing");
+    setPipelineError(null);
+    setIsEditingTranscript(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", blob, "recording.webm");
+      formData.append("extract", "false");
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        if (data.noSpeech) {
+          settlePhase();
+          return;
+        }
+        throw new Error(data.error || "Transcription failed");
+      }
+
+      if (data.noSpeech) {
+        settlePhase();
+        return;
+      }
+
+      const nextChunk =
+        typeof data.transcript === "string" ? data.transcript.trim() : "";
+      if (!nextChunk) {
+        settlePhase();
+        return;
+      }
+
+      setTranscript((previous) =>
+        previous.trim() ? `${previous.trim()} ${nextChunk}` : nextChunk
+      );
+      setLiveDraft("");
+      setPhase(materials.length > 0 ? "ready" : "idle");
+    } catch (error) {
+      setPhase("error");
+      setPipelineError(
+        error instanceof Error ? error.message : "Failed to transcribe recording"
+      );
+    }
+  }, [materials.length]);
+
+  const handleLegacyRecordingComplete = useCallback(
     async (blob: Blob, meta: VoiceRecordingMeta) => {
-      const append = Boolean(transcript.trim()) || materials.length > 0 || labourItems.length > 0;
+      const append =
+        Boolean(transcript.trim()) ||
+        materials.length > 0 ||
+        labourItems.length > 0;
       setPhase("transcribing");
       setPipelineError(null);
       setIsEditingTranscript(false);
@@ -554,6 +625,17 @@ function VoiceQuoteBuilderInner({
     [labourItems.length, materials.length, processTranscript, transcript]
   );
 
+  const handleRecordingComplete = useCallback(
+    async (blob: Blob, meta: VoiceRecordingMeta) => {
+      if (embedded) {
+        await handleProjectsSegmentComplete(blob);
+        return;
+      }
+      await handleLegacyRecordingComplete(blob, meta);
+    },
+    [embedded, handleLegacyRecordingComplete, handleProjectsSegmentComplete]
+  );
+
   const {
     status: recorderStatus,
     error: recorderError,
@@ -563,14 +645,100 @@ function VoiceQuoteBuilderInner({
     levels: micLevels,
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
-    preSpeechSilenceMs: 7000,
-    postSpeechSilenceMs: 1500,
+    manualStopOnly: embedded,
+    preSpeechSilenceMs: embedded ? undefined : 7000,
+    postSpeechSilenceMs: embedded ? undefined : 1500,
     barCount: embedded ? 18 : 24,
   });
 
   const isRecording = recorderStatus === "recording";
   const isBusy =
     isRecording || phase === "transcribing" || phase === "extracting";
+
+  const handleExtractMaterials = useCallback(async () => {
+    if (isRecording || phase === "transcribing" || phase === "extracting") {
+      return;
+    }
+
+    const full = transcriptRef.current.trim();
+    if (!full) return;
+
+    const hadMaterials = materials.length > 0;
+    const newPortion = hadMaterials
+      ? full.slice(extractOffsetRef.current).trim()
+      : full;
+
+    if (hadMaterials && !newPortion) {
+      showFeedback("info", "Record more items before extracting again.");
+      return;
+    }
+
+    setPhase("extracting");
+    setPipelineError(null);
+    setActionFeedback(null);
+
+    try {
+      const response = await fetch("/api/extract-quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript: newPortion }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+            "Couldn't parse that, try again or add items manually"
+        );
+      }
+
+      const mapped = mapExtractionToLineItems(
+        data.materials ?? [],
+        data.labourItems ?? [],
+        data.scopeOfWork ?? "",
+        data.projectTitle ?? data.project_name ?? ""
+      );
+
+      if (hadMaterials) {
+        setMaterials((current) => [...current, ...mapped.materials]);
+        setLabourItems((current) => [...current, ...mapped.labourItems]);
+        setNotes((current) =>
+          [current, mapped.scopeOfWork].filter(Boolean).join("\n\n")
+        );
+        const added = mapped.materials.length;
+        showFeedback(
+          "success",
+          `Added ${added} material${added === 1 ? "" : "s"} from the latest recording.`
+        );
+      } else {
+        setMaterials(mapped.materials);
+        setLabourItems(mapped.labourItems);
+        setNotes(mapped.scopeOfWork);
+        const count = mapped.materials.length;
+        if (count > 0) {
+          showFeedback(
+            "success",
+            `Extracted ${count} material${count === 1 ? "" : "s"}.`
+          );
+        }
+      }
+
+      extractOffsetRef.current = full.length;
+
+      if (!projectNameRef.current.trim() && mapped.projectTitle) {
+        setProjectName(mapped.projectTitle);
+      }
+
+      setPhase("ready");
+    } catch (error) {
+      setPhase("error");
+      setPipelineError(
+        error instanceof Error
+          ? error.message
+          : "Couldn't parse that, try again or add items manually"
+      );
+    }
+  }, [isRecording, materials.length, phase]);
 
   useEffect(() => {
     if (!embedded || !isRecording) return;
@@ -851,6 +1019,7 @@ function VoiceQuoteBuilderInner({
     setMobileAction("");
     setActiveModal(null);
     setSupplierPricingApplied(false);
+    extractOffsetRef.current = 0;
     setActionFeedback(null);
   }
 
@@ -1509,6 +1678,8 @@ function VoiceQuoteBuilderInner({
           seconds={seconds}
           micLevels={micLevels}
           onMicClick={() => void handleMicClick()}
+          onExtractMaterials={() => void handleExtractMaterials()}
+          hasTranscript={Boolean(transcript.trim())}
           recorderError={recorderError}
           actionFeedback={actionFeedback}
           pipelineError={pipelineError}
@@ -1520,12 +1691,6 @@ function VoiceQuoteBuilderInner({
             setIsEditingTranscript((current) => !current)
           }
           onTranscriptChange={setTranscript}
-          onContinueSpeaking={handleContinueSpeaking}
-          onReextract={() => {
-            if (!transcript.trim()) return;
-            setIsEditingTranscript(false);
-            void processTranscript(transcript.trim(), false);
-          }}
           materials={materials}
           isEditingItems={isEditingItems}
           onToggleEditItems={() => setIsEditingItems((current) => !current)}
@@ -2542,10 +2707,21 @@ function VoiceQuoteBuilderInner({
               </button>
             </div>
             <ol className="mt-4 space-y-3 text-sm text-slate-300">
-              <li>1. Tap the mic and describe the job naturally.</li>
-              <li>2. Ema transcribes your voice and extracts materials + labour.</li>
-              <li>3. Review the project materials, edit items, then save or send.</li>
-              <li>4. Use Continue Speaking to add more details anytime.</li>
+              {embedded ? (
+                <>
+                  <li>1. Tap the mic, speak your materials list, then tap Stop.</li>
+                  <li>2. Record again anytime — each segment appends to the transcript.</li>
+                  <li>3. Tap Extract Materials when you&apos;re done talking.</li>
+                  <li>4. Review items, then confirm materials or send to a supplier.</li>
+                </>
+              ) : (
+                <>
+                  <li>1. Tap the mic and describe the job naturally.</li>
+                  <li>2. Ema transcribes your voice and extracts materials + labour.</li>
+                  <li>3. Review the project materials, edit items, then save or send.</li>
+                  <li>4. Use Continue Speaking to add more details anytime.</li>
+                </>
+              )}
             </ol>
             <button
               type="button"
