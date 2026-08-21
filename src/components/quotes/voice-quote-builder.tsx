@@ -38,6 +38,7 @@ import {
   EM_CALL_TTS_VOICE,
 } from "@/lib/em-call/greeting";
 import { useTtsPlayback } from "@/hooks/use-tts-playback";
+import { unlockTtsAudio } from "@/lib/tts-audio-bus";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 import {
@@ -318,14 +319,21 @@ function VoiceQuoteBuilderInner({
   const tts = useTtsPlayback();
   const ttsPlayRef = useRef(tts.play);
   ttsPlayRef.current = tts.play;
+  const lastSpokenRef = useRef<string | null>(null);
 
   projectNameRef.current = projectName;
   transcriptRef.current = transcript;
 
-  const speakEma = useCallback((text: string) => {
-    void ttsPlayRef.current(text, {
+  const speakEma = useCallback((text: string, eventKey?: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const key = eventKey ?? trimmed;
+    if (lastSpokenRef.current === key) return;
+    lastSpokenRef.current = key;
+    void ttsPlayRef.current(trimmed, {
       voice: EM_CALL_TTS_VOICE,
       instructions: EM_CALL_TTS_INSTRUCTIONS,
+      silentFail: true,
     });
   }, []);
 
@@ -703,6 +711,10 @@ function VoiceQuoteBuilderInner({
     const full = transcriptRef.current.trim();
     if (!full) return;
 
+    // Unlock audio during the click gesture so post-await TTS can play.
+    unlockTtsAudio();
+    lastSpokenRef.current = null;
+
     const hadMaterials = materials.length > 0;
     const newPortion = hadMaterials
       ? full.slice(extractOffsetRef.current).trim()
@@ -775,12 +787,14 @@ function VoiceQuoteBuilderInner({
         setEmaDraftTitle(mapped.projectTitle);
         setEmaTitleState("confirm");
         speakEma(
-          `I've got this job as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`
+          `I've got this job as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`,
+          `po-confirm:${mapped.projectTitle}`
         );
       } else {
         setEmaTitleState("unknown");
         speakEma(
-          "I couldn't find a project name in what you said. What's the PO for this job?"
+          "I couldn't find a project name in what you said. What's the PO for this job?",
+          "po-unknown"
         );
       }
 
@@ -961,6 +975,8 @@ function VoiceQuoteBuilderInner({
 
   async function handleMicClick() {
     if (phase === "transcribing" || phase === "extracting") return;
+    // Keep TTS unlock warm from mic start/stop gestures (used after async extract).
+    unlockTtsAudio();
     if (isRecording) {
       await stopRecording();
       return;
@@ -978,27 +994,38 @@ function VoiceQuoteBuilderInner({
   function openSupplierAfterTitleConfirm() {
     titleConfirmedRef.current = true;
     setEmaTitleState("hidden");
-    speakEma("Great, sending this to your supplier now.");
+    unlockTtsAudio();
+    lastSpokenRef.current = null;
+    speakEma(
+      "Great, sending this to your supplier now.",
+      "po-sending-supplier"
+    );
     setActiveModal("supplier");
   }
 
   function handleEmaEdit() {
+    unlockTtsAudio();
+    lastSpokenRef.current = null;
     setEmaDraftTitle(projectNameRef.current);
     setEmaTitleState("editing");
-    speakEma("Go ahead — what should I call this job?");
+    speakEma("Go ahead — what should I call this job?", "po-edit-prompt");
   }
 
   function handleEmaTypeIt() {
+    unlockTtsAudio();
+    lastSpokenRef.current = null;
     setEmaDraftTitle("");
     setEmaTitleState("editing");
-    speakEma("Go ahead — what should I call this job?");
+    speakEma("Go ahead — what should I call this job?", "po-type-prompt");
   }
 
   function handleEmaSayIt() {
     if (isBusy) return;
+    unlockTtsAudio();
+    lastSpokenRef.current = null;
     titleCaptureModeRef.current = true;
     setIsTitleCaptureRecording(true);
-    speakEma("I'm listening — say the project name.");
+    speakEma("I'm listening — say the project name.", "po-say-listening");
     void startRecording();
   }
 
@@ -1130,6 +1157,7 @@ function VoiceQuoteBuilderInner({
     setIsTitleCaptureRecording(false);
     setEmaTitleState("hidden");
     setEmaDraftTitle("");
+    lastSpokenRef.current = null;
     tts.stop();
     setActionFeedback(null);
   }

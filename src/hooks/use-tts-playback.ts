@@ -1,6 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  claimExclusiveTts,
+  registerTtsStopper,
+  unlockTtsAudio,
+} from "@/lib/tts-audio-bus";
 
 export type TtsPlaybackStatus =
   | "idle"
@@ -12,11 +17,17 @@ export type TtsPlaybackStatus =
 export type TtsPlayOptions = {
   voice?: string;
   instructions?: string;
+  /**
+   * When true, autoplay / network failures do not set a user-visible error.
+   * Used by Projects PO confirmation (on-screen text is the fallback).
+   */
+  silentFail?: boolean;
 };
 
 /**
  * Fetch OpenAI TTS via `/api/tts` and play as HTMLAudioElement.
  * Caches the last generated blob for instant Replay of the same text.
+ * Coordinates with other pages via the shared TTS audio bus.
  */
 export function useTtsPlayback() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -24,6 +35,7 @@ export function useTtsPlayback() {
   const cacheKeyRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const onEndedRef = useRef<() => void>(() => setStatus("ended"));
+  const stopRef = useRef<() => void>(() => undefined);
 
   const [status, setStatus] = useState<TtsPlaybackStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +83,14 @@ export function useTtsPlayback() {
     });
   }, []);
 
-  const playCached = useCallback(async () => {
+  stopRef.current = stop;
+
+  useEffect(() => {
+    const stopper = () => stopRef.current();
+    return registerTtsStopper(stopper);
+  }, []);
+
+  const playCached = useCallback(async (silentFail?: boolean) => {
     if (!urlRef.current) return false;
     const audio = audioRef.current ?? new Audio(urlRef.current);
     bindAudio(audio);
@@ -81,8 +100,10 @@ export function useTtsPlayback() {
       await audio.play();
       return true;
     } catch {
-      setStatus("error");
-      setError("Tap Start Brief again — the browser blocked autoplay.");
+      setStatus(silentFail ? "idle" : "error");
+      if (!silentFail) {
+        setError("Tap Start Brief again — the browser blocked autoplay.");
+      }
       return false;
     }
   }, [bindAudio]);
@@ -90,16 +111,23 @@ export function useTtsPlayback() {
   const play = useCallback(
     async (text: string, options?: TtsPlayOptions) => {
       const trimmed = text.trim();
+      const silentFail = Boolean(options?.silentFail);
       if (!trimmed) {
-        setError("Nothing to speak — agenda brief is empty.");
-        setStatus("error");
+        if (!silentFail) {
+          setError("Nothing to speak — agenda brief is empty.");
+          setStatus("error");
+        }
         return;
       }
+
+      // Keep user-gesture unlock warm when play is called from a click path
+      unlockTtsAudio();
+      claimExclusiveTts(() => stopRef.current());
 
       setError(null);
 
       if (cacheKeyRef.current === trimmed && urlRef.current) {
-        await playCached();
+        await playCached(silentFail);
         return;
       }
 
@@ -144,15 +172,19 @@ export function useTtsPlayback() {
         try {
           await audio.play();
         } catch {
-          setStatus("error");
-          setError("Tap Start Brief again — the browser blocked autoplay.");
+          setStatus(silentFail ? "idle" : "error");
+          if (!silentFail) {
+            setError("Tap Start Brief again — the browser blocked autoplay.");
+          }
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
-        setStatus("error");
-        setError(
-          err instanceof Error ? err.message : "Failed to play Daily Brief"
-        );
+        setStatus(silentFail ? "idle" : "error");
+        if (!silentFail) {
+          setError(
+            err instanceof Error ? err.message : "Failed to play Daily Brief"
+          );
+        }
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
@@ -182,6 +214,7 @@ export function useTtsPlayback() {
     error,
     play,
     stop,
+    unlock: unlockTtsAudio,
     isLoading: status === "loading",
     isPlaying: status === "playing",
   };
