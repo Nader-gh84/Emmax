@@ -110,7 +110,7 @@ Rules:
 - labourItems.hours: numeric hours mentioned or reasonable default of 1
 - labourItems.rate: estimated CAD hourly rate
 - scopeOfWork: concise professional summary of the job scope
-- projectTitle: short job title if the speaker names the project, customer, site, or job (e.g. "Kitchen renovation — Sara Emma"). Use an empty string if none is mentioned.
+- projectTitle: ONLY a short name for the JOB, CUSTOMER, or LOCATION when the speaker clearly states one — e.g. "Kitchen renovation", "Sara Emma's basement", "135 13th Ave", "Kitchen renovation — Sara Emma". NEVER use a material, product, brand, quantity, or line-item name (e.g. never "BX cable", "pot lights", "Leviton dimmer"). If unsure or the only nouns are materials, return an empty string. Low confidence → empty string (do not guess).
 
 Common brand names to watch for (even if transcript spelling looks slightly off):
 Electrical: Leviton, Legrand, Square D, Eaton, Siemens, GE, Southwire, Carlon, Milwaukee, DeWalt, Klein Tools, Nexans, Liteline
