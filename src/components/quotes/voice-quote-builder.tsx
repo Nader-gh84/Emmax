@@ -31,10 +31,15 @@ import {
   touchBtnSecondary,
   touchInput,
 } from "@/components/quotes/ui";
-import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
-import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 import { LiveVoiceWave } from "@/components/ui/live-voice-wave";
 import { NO_SPEECH_USER_MESSAGE } from "@/lib/whisper-guard";
+import {
+  EM_CALL_TTS_INSTRUCTIONS,
+  EM_CALL_TTS_VOICE,
+} from "@/lib/em-call/greeting";
+import { useTtsPlayback } from "@/hooks/use-tts-playback";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import type { VoiceRecordingMeta } from "@/hooks/use-voice-recorder";
 import {
   saveQuoteDraft,
   sendMaterialsToSupplier,
@@ -300,11 +305,29 @@ function VoiceQuoteBuilderInner({
   const projectNameRef = useRef(projectName);
   const transcriptRef = useRef(transcript);
   const extractOffsetRef = useRef(0);
+  const titleCaptureModeRef = useRef(false);
+  const titleManuallySetRef = useRef(false);
+  const titleConfirmedRef = useRef(false);
   const [liveDraft, setLiveDraft] = useState("");
   const [supplierPricingApplied, setSupplierPricingApplied] = useState(false);
+  const [emaTitleState, setEmaTitleState] = useState<
+    "hidden" | "confirm" | "unknown" | "editing"
+  >("hidden");
+  const [emaDraftTitle, setEmaDraftTitle] = useState("");
+  const [isTitleCaptureRecording, setIsTitleCaptureRecording] = useState(false);
+  const tts = useTtsPlayback();
+  const ttsPlayRef = useRef(tts.play);
+  ttsPlayRef.current = tts.play;
 
   projectNameRef.current = projectName;
   transcriptRef.current = transcript;
+
+  const speakEma = useCallback((text: string) => {
+    void ttsPlayRef.current(text, {
+      voice: EM_CALL_TTS_VOICE,
+      instructions: EM_CALL_TTS_INSTRUCTIONS,
+    });
+  }, []);
 
   useEffect(() => {
     if (transcript.length < extractOffsetRef.current) {
@@ -355,7 +378,6 @@ function VoiceQuoteBuilderInner({
         );
         setTranscript(wizard.transcript);
         setNotes(wizard.notes);
-        extractOffsetRef.current = wizard.transcript.trim().length;
         setMaterials(wizard.materials);
         setLabourItems(wizard.labourItems);
         setGstRate(wizard.gstRate);
@@ -370,6 +392,10 @@ function VoiceQuoteBuilderInner({
         setCustomerPhone(wizard.customerPhone);
         setCustomerSecondary(wizard.customerEmail || "");
         setProjectName(wizard.projectName);
+        extractOffsetRef.current = wizard.transcript.trim().length;
+        titleManuallySetRef.current = Boolean(wizard.projectName.trim());
+        titleConfirmedRef.current = Boolean(wizard.projectName.trim());
+        setEmaTitleState("hidden");
         setValidUntil(wizard.validUntil ?? defaultValidUntil(30));
         setPriceMode(wizard.priceDisplayMode);
         setSupplierPricingApplied(
@@ -512,6 +538,10 @@ function VoiceQuoteBuilderInner({
   );
 
   const handleProjectsSegmentComplete = useCallback(async (blob: Blob) => {
+    const wasTitleCapture = titleCaptureModeRef.current;
+    titleCaptureModeRef.current = false;
+    setIsTitleCaptureRecording(false);
+
     const settlePhase = () => {
       setPhase(materials.length > 0 ? "ready" : "idle");
     };
@@ -556,10 +586,20 @@ function VoiceQuoteBuilderInner({
         return;
       }
 
+      setLiveDraft("");
+
+      if (wasTitleCapture) {
+        const cleaned = nextChunk.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, "");
+        setEmaDraftTitle(cleaned);
+        setEmaTitleState("editing");
+        setPhase(materials.length > 0 ? "ready" : "idle");
+        speakEma("Got it — does that look right?");
+        return;
+      }
+
       setTranscript((previous) =>
         previous.trim() ? `${previous.trim()} ${nextChunk}` : nextChunk
       );
-      setLiveDraft("");
       setPhase(materials.length > 0 ? "ready" : "idle");
     } catch (error) {
       setPhase("error");
@@ -567,7 +607,7 @@ function VoiceQuoteBuilderInner({
         error instanceof Error ? error.message : "Failed to transcribe recording"
       );
     }
-  }, [materials.length]);
+  }, [materials.length, speakEma]);
 
   const handleLegacyRecordingComplete = useCallback(
     async (blob: Blob, meta: VoiceRecordingMeta) => {
@@ -673,6 +713,9 @@ function VoiceQuoteBuilderInner({
       return;
     }
 
+    const userAlreadySetTitle =
+      titleManuallySetRef.current || titleConfirmedRef.current;
+
     setPhase("extracting");
     setPipelineError(null);
     setActionFeedback(null);
@@ -725,8 +768,20 @@ function VoiceQuoteBuilderInner({
 
       extractOffsetRef.current = full.length;
 
-      if (!projectNameRef.current.trim() && mapped.projectTitle) {
+      if (userAlreadySetTitle) {
+        setEmaTitleState("hidden");
+      } else if (mapped.projectTitle) {
         setProjectName(mapped.projectTitle);
+        setEmaDraftTitle(mapped.projectTitle);
+        setEmaTitleState("confirm");
+        speakEma(
+          `I've got this job as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`
+        );
+      } else {
+        setEmaTitleState("unknown");
+        speakEma(
+          "I couldn't find a project name in what you said. What's the PO for this job?"
+        );
       }
 
       setPhase("ready");
@@ -738,7 +793,7 @@ function VoiceQuoteBuilderInner({
           : "Couldn't parse that, try again or add items manually"
       );
     }
-  }, [isRecording, materials.length, phase]);
+  }, [isRecording, materials.length, phase, speakEma]);
 
   useEffect(() => {
     if (!embedded || !isRecording) return;
@@ -910,12 +965,61 @@ function VoiceQuoteBuilderInner({
       await stopRecording();
       return;
     }
+    titleCaptureModeRef.current = false;
+    setIsTitleCaptureRecording(false);
     await startRecording();
   }
 
   function handleContinueSpeaking() {
     if (isBusy) return;
     void startRecording();
+  }
+
+  function openSupplierAfterTitleConfirm() {
+    titleConfirmedRef.current = true;
+    setEmaTitleState("hidden");
+    speakEma("Great, sending this to your supplier now.");
+    setActiveModal("supplier");
+  }
+
+  function handleEmaEdit() {
+    setEmaDraftTitle(projectNameRef.current);
+    setEmaTitleState("editing");
+    speakEma("Go ahead — what should I call this job?");
+  }
+
+  function handleEmaTypeIt() {
+    setEmaDraftTitle("");
+    setEmaTitleState("editing");
+    speakEma("Go ahead — what should I call this job?");
+  }
+
+  function handleEmaSayIt() {
+    if (isBusy) return;
+    titleCaptureModeRef.current = true;
+    setIsTitleCaptureRecording(true);
+    speakEma("I'm listening — say the project name.");
+    void startRecording();
+  }
+
+  function handleEmaSave() {
+    const next = emaDraftTitle.trim();
+    if (!next) return;
+    setProjectName(next);
+    titleManuallySetRef.current = true;
+    openSupplierAfterTitleConfirm();
+  }
+
+  function handleEmaConfirm() {
+    if (!projectNameRef.current.trim()) return;
+    openSupplierAfterTitleConfirm();
+  }
+
+  function handleProjectTitleFieldChange(value: string) {
+    setProjectName(value);
+    if (value.trim()) {
+      titleManuallySetRef.current = true;
+    }
   }
 
   function updateMaterial(
@@ -1020,6 +1124,13 @@ function VoiceQuoteBuilderInner({
     setActiveModal(null);
     setSupplierPricingApplied(false);
     extractOffsetRef.current = 0;
+    titleCaptureModeRef.current = false;
+    titleManuallySetRef.current = false;
+    titleConfirmedRef.current = false;
+    setIsTitleCaptureRecording(false);
+    setEmaTitleState("hidden");
+    setEmaDraftTitle("");
+    tts.stop();
     setActionFeedback(null);
   }
 
@@ -1671,7 +1782,7 @@ function VoiceQuoteBuilderInner({
         )}
         <ProjectsCapturePanel
           projectName={projectName}
-          onProjectNameChange={setProjectName}
+          onProjectNameChange={handleProjectTitleFieldChange}
           isRecording={isRecording}
           isBusy={isBusy || isActionBusy}
           phase={phase}
@@ -1732,9 +1843,17 @@ function VoiceQuoteBuilderInner({
           onSendSupplier={() => setActiveModal("supplier")}
           onChangeCustomer={() => setActiveModal("customer")}
           onStartOver={handleStartOver}
-          onConfirmMaterials={() => void handleConfirmMaterials()}
           onHowItWorks={() => setShowHowItWorks(true)}
           customerDisplay={customerDisplay}
+          emaTitleState={emaTitleState}
+          emaDraftTitle={emaDraftTitle}
+          onEmaDraftTitleChange={setEmaDraftTitle}
+          onEmaEdit={handleEmaEdit}
+          onEmaConfirm={handleEmaConfirm}
+          onEmaSayIt={handleEmaSayIt}
+          onEmaTypeIt={handleEmaTypeIt}
+          onEmaSave={handleEmaSave}
+          isTitleCaptureRecording={isTitleCaptureRecording}
         />
         {sharedModals}
       </div>
@@ -2712,7 +2831,7 @@ function VoiceQuoteBuilderInner({
                   <li>1. Tap the mic, speak your materials list, then tap Stop.</li>
                   <li>2. Record again anytime — each segment appends to the transcript.</li>
                   <li>3. Tap Extract Materials when you&apos;re done talking.</li>
-                  <li>4. Review items, then confirm materials or send to a supplier.</li>
+                  <li>4. Confirm the project / PO name with Ema, then send to your supplier.</li>
                 </>
               ) : (
                 <>

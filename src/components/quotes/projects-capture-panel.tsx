@@ -101,9 +101,17 @@ export function ProjectsCapturePanel({
   onSendSupplier,
   onChangeCustomer,
   onStartOver,
-  onConfirmMaterials,
   onHowItWorks,
   customerDisplay,
+  emaTitleState,
+  emaDraftTitle,
+  onEmaDraftTitleChange,
+  onEmaEdit,
+  onEmaConfirm,
+  onEmaSayIt,
+  onEmaTypeIt,
+  onEmaSave,
+  isTitleCaptureRecording,
 }: {
   projectName: string;
   onProjectNameChange: (value: string) => void;
@@ -158,9 +166,17 @@ export function ProjectsCapturePanel({
   onSendSupplier: () => void;
   onChangeCustomer: () => void;
   onStartOver: () => void;
-  onConfirmMaterials: () => void;
   onHowItWorks: () => void;
   customerDisplay: string;
+  emaTitleState: "hidden" | "confirm" | "unknown" | "editing";
+  emaDraftTitle: string;
+  onEmaDraftTitleChange: (value: string) => void;
+  onEmaEdit: () => void;
+  onEmaConfirm: () => void;
+  onEmaSayIt: () => void;
+  onEmaTypeIt: () => void;
+  onEmaSave: () => void;
+  isTitleCaptureRecording: boolean;
 }) {
   const bannerText =
     recorderError ||
@@ -271,7 +287,11 @@ export function ProjectsCapturePanel({
       <div className={styles.recMeta}>
         <span className={`${styles.live} ${isRecording ? "" : styles.liveIdle}`}>
           {isRecording ? <span className={styles.liveDot} /> : null}
-          {isRecording ? "Recording…" : listeningLabel}
+          {isRecording
+            ? isTitleCaptureRecording
+              ? "Recording title…"
+              : "Recording…"
+            : listeningLabel}
         </span>
         <span className={styles.timer}>
           <svg viewBox="0 0 16 16" fill="none">
@@ -359,6 +379,97 @@ export function ProjectsCapturePanel({
           </div>
         )}
       </div>
+
+      {emaTitleState !== "hidden" ? (
+        <div className={styles.emaBar} role="status">
+          <span className={styles.emaBarAvatar} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.7" />
+              <path
+                d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+              />
+            </svg>
+          </span>
+          <div className={styles.emaBarBody}>
+            {emaTitleState === "confirm" ? (
+              <>
+                <p className={styles.emaBarMsg}>
+                  I&apos;ve got this job as <strong>{projectName.trim() || "Untitled"}</strong>.
+                  If that&apos;s right, I&apos;ll get the materials ready to send to your supplier.
+                </p>
+                <div className={styles.poValue}>
+                  <div className={styles.poBox}>{projectName.trim() || "Untitled"}</div>
+                  <div className={styles.poActions}>
+                    <button type="button" className={styles.poBtn} onClick={onEmaEdit}>
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.poBtn} ${styles.poBtnPrimary}`}
+                      onClick={onEmaConfirm}
+                      disabled={isBusy || !projectName.trim()}
+                    >
+                      Yes, that&apos;s right
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {emaTitleState === "unknown" ? (
+              <>
+                <p className={styles.emaBarMsg}>
+                  I couldn&apos;t find a project name in what you said. What&apos;s the PO for this job?
+                </p>
+                <div className={styles.poValue}>
+                  <div className={`${styles.poBox} ${styles.isUnknown}`}>Unknown</div>
+                  <div className={styles.poActions}>
+                    <button
+                      type="button"
+                      className={styles.poBtn}
+                      onClick={onEmaSayIt}
+                      disabled={isBusy}
+                    >
+                      Say it
+                    </button>
+                    <button type="button" className={styles.poBtn} onClick={onEmaTypeIt}>
+                      Type it
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {emaTitleState === "editing" ? (
+              <>
+                <p className={styles.emaBarMsg}>Go ahead — what should I call this job?</p>
+                <div className={styles.poValue}>
+                  <input
+                    className={styles.poInput}
+                    value={emaDraftTitle}
+                    onChange={(event) => onEmaDraftTitleChange(event.target.value)}
+                    placeholder="e.g. Kitchen renovation — Sara Emma"
+                    autoFocus
+                  />
+                  <div className={styles.poActions}>
+                    <button
+                      type="button"
+                      className={`${styles.poBtn} ${styles.poBtnPrimary}`}
+                      onClick={onEmaSave}
+                      disabled={isBusy || !emaDraftTitle.trim()}
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       <div className={styles.panel}>
         <div className={styles.panelHead}>
@@ -698,19 +809,20 @@ export function ProjectsCapturePanel({
         <button
           type="button"
           className={styles.btnPrimary}
-          onClick={onConfirmMaterials}
-          disabled={isBusy}
+          onClick={onSendSupplier}
+          disabled={isBusy || materials.length === 0}
         >
           <svg viewBox="0 0 18 18" fill="none">
             <path
-              d="m3.6 9.4 3.4 3.4 7.4-7.4"
+              d="M2.5 6.5h10v9h-10v-9ZM12.5 9.5h4l3 3.2v2.8h-7v-6Z"
               stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
+              strokeWidth="1.5"
               strokeLinejoin="round"
             />
+            <circle cx="6" cy="17.5" r="1.5" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="16" cy="17.5" r="1.5" stroke="currentColor" strokeWidth="1.4" />
           </svg>
-          Confirm Materials
+          Send to Supplier
         </button>
       </div>
     </section>
