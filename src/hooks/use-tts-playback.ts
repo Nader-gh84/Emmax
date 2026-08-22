@@ -37,34 +37,54 @@ function ttsLog(
 
 function waitForCanPlay(
   audio: HTMLAudioElement,
-  signal: AbortSignal
+  signal: AbortSignal,
+  timeoutMs = 8000
 ): Promise<void> {
   if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
     return Promise.resolve();
   }
 
   return new Promise((resolve, reject) => {
-    const onReady = () => {
+    let settled = false;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
       cleanup();
-      resolve();
+      fn();
     };
-    const onError = () => {
-      cleanup();
-      reject(new Error("Audio source failed to load"));
-    };
-    const onAbort = () => {
-      cleanup();
-      reject(new DOMException("Aborted", "AbortError"));
-    };
+    const onReady = () => finish(() => resolve());
+    const onError = () =>
+      finish(() => reject(new Error("Audio source failed to load")));
+    const onAbort = () =>
+      finish(() => reject(new DOMException("Aborted", "AbortError")));
+    const onTimeout = () =>
+      finish(() => reject(new Error("Timed out waiting for audio to load")));
+
     const cleanup = () => {
       audio.removeEventListener("canplay", onReady);
+      audio.removeEventListener("loadeddata", onReady);
       audio.removeEventListener("error", onError);
       signal.removeEventListener("abort", onAbort);
+      window.clearTimeout(timeoutId);
     };
 
+    const timeoutId = window.setTimeout(onTimeout, timeoutMs);
     audio.addEventListener("canplay", onReady);
+    audio.addEventListener("loadeddata", onReady);
     audio.addEventListener("error", onError);
     signal.addEventListener("abort", onAbort);
+
+    // Kick load in case the browser deferred it.
+    try {
+      audio.load();
+    } catch {
+      // ignore
+    }
+
+    // Re-check after attaching listeners (canplay may have already fired).
+    if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      onReady();
+    }
   });
 }
 
@@ -75,6 +95,7 @@ function waitForCanPlay(
  */
 export function useTtsPlayback() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const assignedSrcRef = useRef<string | null>(null);
   const urlRef = useRef<string | null>(null);
   const cacheKeyRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -151,17 +172,26 @@ export function useTtsPlayback() {
       generation: number
     ): Promise<boolean> => {
       const audio = ensureAudio();
-      unlockTtsAudio(audio);
 
-      if (audio.src !== url) {
+      if (assignedSrcRef.current !== url) {
         audio.src = url;
+        assignedSrcRef.current = url;
       }
-      audio.currentTime = 0;
 
-      ttsLog("waiting canplay", { url: url.slice(0, 48) });
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // ignore until metadata is ready
+      }
+
+      ttsLog("waiting canplay", {
+        url: url.slice(0, 48),
+        readyState: audio.readyState,
+      });
       await waitForCanPlay(audio, signal);
       if (signal.aborted || generation !== playGenerationRef.current) {
         ttsLog("play aborted before start");
+        setStatus("idle");
         return false;
       }
 
@@ -170,7 +200,16 @@ export function useTtsPlayback() {
 
       try {
         await audio.play();
-        ttsLog("play() resolved");
+        // If something else paused us immediately (legacy unlock race), fail honest.
+        if (audio.paused) {
+          ttsLog("play() resolved but element is paused");
+          setStatus(silentFail ? "idle" : "error");
+          if (!silentFail) {
+            setError("Playback was interrupted before audio could start.");
+          }
+          return false;
+        }
+        ttsLog("play() resolved", { paused: audio.paused });
         return true;
       } catch (err) {
         const name = err instanceof Error ? err.name : "Error";
@@ -210,8 +249,8 @@ export function useTtsPlayback() {
       const generation = ++playGenerationRef.current;
       const selfStopper = stopperRef.current!;
 
-      // Keep user-gesture unlock warm; claim exclusive with STABLE stopper id.
-      unlockTtsAudio(audioRef.current);
+      // Warm autoplay unlock via silent element only — never the TTS element.
+      unlockTtsAudio();
       claimExclusiveTts(selfStopper);
 
       setError(null);
@@ -294,9 +333,9 @@ export function useTtsPlayback() {
         cacheKeyRef.current = trimmed;
         ttsLog("blob URL created", { url: url.slice(0, 48), size: blob.size });
 
-        // Point the element at the new URL before revoking the old blob.
-        const audioEl = ensureAudio();
-        audioEl.src = url;
+        // Assign new src before revoking the previous blob URL.
+        audio.src = url;
+        assignedSrcRef.current = url;
 
         if (previousUrl && previousUrl !== url) {
           URL.revokeObjectURL(previousUrl);
@@ -347,6 +386,7 @@ export function useTtsPlayback() {
         audio.load();
       }
       audioRef.current = null;
+      assignedSrcRef.current = null;
       if (urlRef.current) {
         URL.revokeObjectURL(urlRef.current);
         ttsLog("revoked", { reason: "unmount" });
