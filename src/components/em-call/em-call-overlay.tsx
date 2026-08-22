@@ -58,6 +58,8 @@ export function EmCallOverlay() {
   const sawSpeechPlayingRef = useRef(false);
   const pendingSpeakTextRef = useRef<string | null>(null);
   const consecutiveNoSpeechRef = useRef(0);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -84,13 +86,29 @@ export function EmCallOverlay() {
       sawSpeechPlayingRef.current = false;
       listenAfterSpeechRef.current = resumeListening;
       setAssistantLine(text);
+      setError(null);
       setPhase("speaking");
-      void tts.play(text, {
-        voice: EM_CALL_TTS_VOICE,
-        instructions: EM_CALL_TTS_INSTRUCTIONS,
-      });
+      void (async () => {
+        const ok = await tts.play(text, {
+          voice: EM_CALL_TTS_VOICE,
+          instructions: EM_CALL_TTS_INSTRUCTIONS,
+        });
+        // Playback failed: keep the text visible and leave "speaking".
+        // Don't clobber an interrupt that already moved us to listening/ready.
+        if (ok) return;
+        if (pendingSpeakTextRef.current !== text) return;
+        const currentPhase = phaseRef.current;
+        if (currentPhase !== "speaking" && currentPhase !== "greeting") return;
+        listenAfterSpeechRef.current = false;
+        sawSpeechPlayingRef.current = false;
+        pendingSpeakTextRef.current = null;
+        setPhase("ready");
+        setStatusMessage(
+          "Couldn't play audio — tap the mic when you're ready"
+        );
+      })();
     },
-    [setAssistantLine, setPhase, tts]
+    [setAssistantLine, setError, setPhase, setStatusMessage, tts]
   );
 
   const handleNoSpeech = useCallback(() => {
@@ -337,17 +355,37 @@ export function EmCallOverlay() {
     }
 
     if (!sawSpeechPlayingRef.current) return;
-    if (tts.status !== "ended" && tts.status !== "error") return;
 
-    listenAfterSpeechRef.current = false;
-    sawSpeechPlayingRef.current = false;
-    pendingSpeakTextRef.current = null;
-    void beginListening(startRecording);
+    // Success → listen again. Failure/interrupt → don't sit on "speaking".
+    if (tts.status === "ended") {
+      listenAfterSpeechRef.current = false;
+      sawSpeechPlayingRef.current = false;
+      pendingSpeakTextRef.current = null;
+      void beginListening(startRecording);
+      return;
+    }
+
+    if (tts.status === "error" || tts.status === "idle") {
+      // Mic interrupt sets idle + clears listenAfterSpeech; don't override.
+      if (!listenAfterSpeechRef.current) return;
+      listenAfterSpeechRef.current = false;
+      sawSpeechPlayingRef.current = false;
+      pendingSpeakTextRef.current = null;
+      setPhase("ready");
+      if (tts.status === "error" || tts.error) {
+        setStatusMessage(
+          "Couldn't play audio — tap the mic when you're ready"
+        );
+      }
+    }
   }, [
     beginListening,
     isOpen,
     phase,
+    setPhase,
+    setStatusMessage,
     startRecording,
+    tts.error,
     tts.isLoading,
     tts.isPlaying,
     tts.status,
