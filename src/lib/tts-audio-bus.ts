@@ -26,6 +26,11 @@ export function stopAllTts(except?: Stopper) {
   }
 }
 
+/**
+ * Stop every other registered player. `self` MUST be the same function
+ * reference passed to `registerTtsStopper` — a fresh lambda will not match
+ * and will incorrectly stop the caller mid-play.
+ */
 export function claimExclusiveTts(self: Stopper) {
   stopAllTts(self);
 }
@@ -33,11 +38,16 @@ export function claimExclusiveTts(self: Stopper) {
 let unlockAudioEl: HTMLAudioElement | null = null;
 let audioUnlocked = false;
 
+export function isTtsAudioUnlocked(): boolean {
+  return audioUnlocked;
+}
+
 /**
  * Call synchronously from a user gesture (click/tap) before any await.
  * Unlocks HTMLAudioElement.play() for later TTS after async work.
+ * When `target` is provided, also warms that element (reuse across plays).
  */
-export function unlockTtsAudio(): void {
+export function unlockTtsAudio(target?: HTMLAudioElement | null): void {
   if (typeof window === "undefined") return;
 
   try {
@@ -71,6 +81,22 @@ export function unlockTtsAudio(): void {
         // Gesture was present; mark unlocked so later play() is still attempted.
         audioUnlocked = true;
       });
+
+    if (target && target.src) {
+      const prevVolume = target.volume;
+      target.volume = Math.min(prevVolume || 1, 0.01);
+      void target
+        .play()
+        .then(() => {
+          target.pause();
+          target.currentTime = 0;
+          target.volume = prevVolume || 1;
+          audioUnlocked = true;
+        })
+        .catch(() => {
+          target.volume = prevVolume || 1;
+        });
+    }
   } catch {
     audioUnlocked = true;
   }

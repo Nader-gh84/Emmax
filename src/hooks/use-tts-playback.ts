@@ -24,120 +24,230 @@ export type TtsPlayOptions = {
   silentFail?: boolean;
 };
 
+function ttsLog(
+  event: string,
+  data?: Record<string, unknown>
+): void {
+  if (data) {
+    console.info(`[tts] ${event}`, data);
+  } else {
+    console.info(`[tts] ${event}`);
+  }
+}
+
+function waitForCanPlay(
+  audio: HTMLAudioElement,
+  signal: AbortSignal
+): Promise<void> {
+  if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Audio source failed to load"));
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const cleanup = () => {
+      audio.removeEventListener("canplay", onReady);
+      audio.removeEventListener("error", onError);
+      signal.removeEventListener("abort", onAbort);
+    };
+
+    audio.addEventListener("canplay", onReady);
+    audio.addEventListener("error", onError);
+    signal.addEventListener("abort", onAbort);
+  });
+}
+
 /**
  * Fetch OpenAI TTS via `/api/tts` and play as HTMLAudioElement.
- * Caches the last generated blob for instant Replay of the same text.
- * Coordinates with other pages via the shared TTS audio bus.
+ * Reuses one Audio element per hook instance so the first gesture-unlocked
+ * play keeps subsequent plays allowed. Caches the last blob for Replay.
  */
 export function useTtsPlayback() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
   const cacheKeyRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const onEndedRef = useRef<() => void>(() => setStatus("ended"));
+  const playGenerationRef = useRef(0);
   const stopRef = useRef<() => void>(() => undefined);
+  /** Stable identity for the TTS bus — must match claimExclusiveTts(self). */
+  const stopperRef = useRef<(() => void) | null>(null);
 
   const [status, setStatus] = useState<TtsPlaybackStatus>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const revokeUrl = useCallback(() => {
-    if (urlRef.current) {
-      URL.revokeObjectURL(urlRef.current);
-      urlRef.current = null;
-    }
-    cacheKeyRef.current = null;
-  }, []);
+  const ensureAudio = useCallback((): HTMLAudioElement => {
+    if (audioRef.current) return audioRef.current;
 
-  const detachAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.removeEventListener("ended", onEndedRef.current);
-      audio.pause();
-    }
-    audioRef.current = null;
-  }, []);
+    const audio = new Audio();
+    audio.preload = "auto";
 
-  const bindAudio = useCallback(
-    (audio: HTMLAudioElement) => {
-      detachAudio();
-      audioRef.current = audio;
-      audio.addEventListener("ended", onEndedRef.current);
-    },
-    [detachAudio]
-  );
+    audio.addEventListener("ended", () => {
+      ttsLog("ended", { src: audio.src?.slice(0, 48) });
+      setStatus("ended");
+    });
+
+    audio.addEventListener("error", () => {
+      const mediaError = audio.error;
+      ttsLog("element error", {
+        code: mediaError?.code,
+        message: mediaError?.message,
+      });
+      setStatus((current) =>
+        current === "loading" || current === "playing" ? "error" : current
+      );
+      setError((prev) => prev ?? "Audio playback failed");
+    });
+
+    audioRef.current = audio;
+    return audio;
+  }, []);
 
   const stop = useCallback(() => {
+    ttsLog("stop");
+    playGenerationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
 
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
-      audio.currentTime = 0;
+      try {
+        audio.currentTime = 0;
+      } catch {
+        // ignore
+      }
     }
 
-    setStatus((current) => {
-      if (current === "loading") return "idle";
-      if (urlRef.current) return "ended";
-      return "idle";
-    });
+    // Explicit stop → idle (not ended) so callers don't treat interrupt as success.
+    setStatus("idle");
   }, []);
 
   stopRef.current = stop;
 
+  if (!stopperRef.current) {
+    stopperRef.current = () => stopRef.current();
+  }
+
   useEffect(() => {
-    const stopper = () => stopRef.current();
-    return registerTtsStopper(stopper);
+    return registerTtsStopper(stopperRef.current!);
   }, []);
 
-  const playCached = useCallback(async (silentFail?: boolean) => {
-    if (!urlRef.current) return false;
-    const audio = audioRef.current ?? new Audio(urlRef.current);
-    bindAudio(audio);
-    audio.currentTime = 0;
-    setStatus("playing");
-    try {
-      await audio.play();
-      return true;
-    } catch {
-      setStatus(silentFail ? "idle" : "error");
-      if (!silentFail) {
-        setError("Tap Start Brief again — the browser blocked autoplay.");
+  const playSrc = useCallback(
+    async (
+      url: string,
+      silentFail: boolean,
+      signal: AbortSignal,
+      generation: number
+    ): Promise<boolean> => {
+      const audio = ensureAudio();
+      unlockTtsAudio(audio);
+
+      if (audio.src !== url) {
+        audio.src = url;
       }
-      return false;
-    }
-  }, [bindAudio]);
+      audio.currentTime = 0;
+
+      ttsLog("waiting canplay", { url: url.slice(0, 48) });
+      await waitForCanPlay(audio, signal);
+      if (signal.aborted || generation !== playGenerationRef.current) {
+        ttsLog("play aborted before start");
+        return false;
+      }
+
+      setStatus("playing");
+      ttsLog("play() called", { url: url.slice(0, 48) });
+
+      try {
+        await audio.play();
+        ttsLog("play() resolved");
+        return true;
+      } catch (err) {
+        const name = err instanceof Error ? err.name : "Error";
+        const message = err instanceof Error ? err.message : String(err);
+        ttsLog("play() rejected", { name, message });
+
+        if (name === "AbortError" || generation !== playGenerationRef.current) {
+          setStatus("idle");
+          return false;
+        }
+
+        setStatus(silentFail ? "idle" : "error");
+        if (!silentFail) {
+          setError("Playback was blocked — tap again to hear Ema.");
+        }
+        return false;
+      }
+    },
+    [ensureAudio]
+  );
 
   const play = useCallback(
-    async (text: string, options?: TtsPlayOptions) => {
+    async (text: string, options?: TtsPlayOptions): Promise<boolean> => {
       const trimmed = text.trim();
       const silentFail = Boolean(options?.silentFail);
       if (!trimmed) {
+        ttsLog("play skipped — empty text");
         if (!silentFail) {
-          setError("Nothing to speak — agenda brief is empty.");
+          setError("Nothing to speak.");
           setStatus("error");
+        } else {
+          setStatus("idle");
         }
-        return;
+        return false;
       }
 
-      // Keep user-gesture unlock warm when play is called from a click path
-      unlockTtsAudio();
-      claimExclusiveTts(() => stopRef.current());
+      const generation = ++playGenerationRef.current;
+      const selfStopper = stopperRef.current!;
+
+      // Keep user-gesture unlock warm; claim exclusive with STABLE stopper id.
+      unlockTtsAudio(audioRef.current);
+      claimExclusiveTts(selfStopper);
 
       setError(null);
 
       if (cacheKeyRef.current === trimmed && urlRef.current) {
-        await playCached(silentFail);
-        return;
+        ttsLog("cache hit", { textLen: trimmed.length });
+        abortRef.current?.abort();
+        const controller = new AbortController();
+        abortRef.current = controller;
+        setStatus("loading");
+        try {
+          const ok = await playSrc(
+            urlRef.current,
+            silentFail,
+            controller.signal,
+            generation
+          );
+          return ok;
+        } finally {
+          if (abortRef.current === controller) abortRef.current = null;
+        }
       }
 
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
-      detachAudio();
-      revokeUrl();
+      // Pause current audio but keep the element; revoke previous blob after replace.
+      const audio = ensureAudio();
+      audio.pause();
+
       setStatus("loading");
+      ttsLog("request sent", {
+        textLen: trimmed.length,
+        voice: options?.voice ?? "default",
+      });
 
       try {
         const response = await fetch("/api/tts", {
@@ -151,6 +261,13 @@ export function useTtsPlayback() {
           signal: controller.signal,
         });
 
+        const contentType = response.headers.get("content-type") ?? "";
+        ttsLog("response", {
+          status: response.status,
+          contentType,
+          ok: response.ok,
+        });
+
         if (!response.ok) {
           const data = (await response.json().catch(() => null)) as {
             error?: string;
@@ -159,52 +276,81 @@ export function useTtsPlayback() {
         }
 
         const blob = await response.blob();
-        if (controller.signal.aborted) return;
+        ttsLog("blob", { size: blob.size, type: blob.type || contentType });
 
+        if (controller.signal.aborted || generation !== playGenerationRef.current) {
+          ttsLog("aborted after blob");
+          setStatus("idle");
+          return false;
+        }
+
+        if (blob.size < 64) {
+          throw new Error("TTS returned empty audio");
+        }
+
+        const previousUrl = urlRef.current;
         const url = URL.createObjectURL(blob);
         urlRef.current = url;
         cacheKeyRef.current = trimmed;
+        ttsLog("blob URL created", { url: url.slice(0, 48), size: blob.size });
 
-        const audio = new Audio(url);
-        bindAudio(audio);
-        setStatus("playing");
+        // Point the element at the new URL before revoking the old blob.
+        const audioEl = ensureAudio();
+        audioEl.src = url;
 
-        try {
-          await audio.play();
-        } catch {
-          setStatus(silentFail ? "idle" : "error");
-          if (!silentFail) {
-            setError("Tap Start Brief again — the browser blocked autoplay.");
-          }
+        if (previousUrl && previousUrl !== url) {
+          URL.revokeObjectURL(previousUrl);
+          ttsLog("revoked", {
+            reason: "replaced",
+            url: previousUrl.slice(0, 48),
+          });
         }
+
+        const ok = await playSrc(url, silentFail, controller.signal, generation);
+        return ok;
       } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") return;
+        if (err instanceof Error && err.name === "AbortError") {
+          ttsLog("fetch aborted");
+          setStatus("idle");
+          return false;
+        }
+        if (generation !== playGenerationRef.current) {
+          setStatus("idle");
+          return false;
+        }
+
+        const message =
+          err instanceof Error ? err.message : "Failed to play speech";
+        ttsLog("play failed", { message });
         setStatus(silentFail ? "idle" : "error");
         if (!silentFail) {
-          setError(
-            err instanceof Error ? err.message : "Failed to play Daily Brief"
-          );
+          setError(message);
         }
+        return false;
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
         }
       }
     },
-    [bindAudio, detachAudio, playCached, revokeUrl]
+    [ensureAudio, playSrc]
   );
 
   useEffect(() => {
     return () => {
+      playGenerationRef.current += 1;
       abortRef.current?.abort();
       const audio = audioRef.current;
       if (audio) {
-        audio.removeEventListener("ended", onEndedRef.current);
         audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
       }
       audioRef.current = null;
       if (urlRef.current) {
         URL.revokeObjectURL(urlRef.current);
+        ttsLog("revoked", { reason: "unmount" });
+        urlRef.current = null;
       }
     };
   }, []);
