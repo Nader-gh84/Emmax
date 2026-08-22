@@ -44,11 +44,14 @@ export function isTtsAudioUnlocked(): boolean {
 
 /**
  * Call synchronously from a user gesture (click/tap) before any await.
- * Unlocks HTMLAudioElement.play() for later TTS after async work.
- * When `target` is provided, also warms that element (reuse across plays).
+ * Unlocks autoplay via a dedicated silent element + AudioContext resume.
+ *
+ * Do NOT play/pause the caller's TTS element here — that races with the real
+ * playback path (play → unlock pause → status stuck on "playing" with silence).
  */
-export function unlockTtsAudio(target?: HTMLAudioElement | null): void {
+export function unlockTtsAudio(_target?: HTMLAudioElement | null): void {
   if (typeof window === "undefined") return;
+  void _target;
 
   try {
     const AudioCtx =
@@ -81,22 +84,6 @@ export function unlockTtsAudio(target?: HTMLAudioElement | null): void {
         // Gesture was present; mark unlocked so later play() is still attempted.
         audioUnlocked = true;
       });
-
-    if (target && target.src) {
-      const prevVolume = target.volume;
-      target.volume = Math.min(prevVolume || 1, 0.01);
-      void target
-        .play()
-        .then(() => {
-          target.pause();
-          target.currentTime = 0;
-          target.volume = prevVolume || 1;
-          audioUnlocked = true;
-        })
-        .catch(() => {
-          target.volume = prevVolume || 1;
-        });
-    }
   } catch {
     audioUnlocked = true;
   }
