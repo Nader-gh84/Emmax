@@ -1,4 +1,7 @@
 import { generateId } from "@/lib/id";
+import type { LabourBillingMode } from "@/types/labour-quoting";
+
+export type { LabourBillingMode } from "@/types/labour-quoting";
 
 export interface MaterialItem {
   id: string;
@@ -179,6 +182,11 @@ export interface Quote {
   quote_number?: string | null;
   valid_until?: string | null;
   price_display_mode?: "detailed" | "merged";
+  /**
+   * Customer labour presentation: hours×rate vs single agreed amount.
+   * Internal cost still tracks per-employee hours separately.
+   */
+  labour_billing_mode?: LabourBillingMode | null;
   validity_days: number;
   subtotal: number;
   tax: number;

@@ -1,5 +1,11 @@
 import type { Employee } from "@/types/employee";
+import {
+  normalizeTimeEntrySource,
+  type TimeEntrySource,
+} from "@/types/labour-quoting";
 import type { AgendaPriority } from "@/types/schedule-item";
+
+export type { TimeEntrySource } from "@/types/labour-quoting";
 
 export type TaskStatus = "todo" | "in_progress" | "completed" | "overdue";
 
@@ -71,11 +77,37 @@ export interface TimeEntry {
   notes: string | null;
   /** Whether labour for this entry has been paid out. Default: unpaid. */
   payment_status: CostPaymentStatus;
+  /**
+   * quote_estimate = Create Quote planned hours (cost / margin only).
+   * actual = job-logged hours (payroll / labour invoices only).
+   * Default actual for legacy rows.
+   */
+  entry_source: TimeEntrySource;
+  /** Quote that wrote a quote_estimate row; null for actual. */
+  quote_id?: string | null;
+  /** Employee pay_rate frozen at write time (esp. estimates). */
+  pay_rate_snapshot?: number | null;
   created_at: string;
   employees?: Pick<
     Employee,
     "id" | "full_name" | "role" | "pay_rate" | "pay_type"
   > | null;
+}
+
+/** Normalize DB/legacy time entry rows for app use. */
+export function normalizeTimeEntryRow(row: TimeEntry): TimeEntry {
+  const payment = String(row.payment_status ?? "");
+  const snapshot =
+    row.pay_rate_snapshot == null ? null : Number(row.pay_rate_snapshot);
+  return {
+    ...row,
+    hours: Number(row.hours) || 0,
+    payment_status: payment === "paid" ? "paid" : "unpaid",
+    entry_source: normalizeTimeEntrySource(row.entry_source),
+    quote_id: row.quote_id ?? null,
+    pay_rate_snapshot:
+      snapshot != null && Number.isFinite(snapshot) ? snapshot : null,
+  };
 }
 
 export type ChangeOrderStatus = "pending" | "approved" | "rejected";
@@ -189,6 +221,9 @@ export type FinancialSummaryMaterialOrder = {
 export type FinancialSummaryTimeEntry = {
   hours: number;
   payment_status?: string | null;
+  /** Prefer actual; fall back to quote_estimate when no actuals yet. */
+  entry_source?: TimeEntrySource | string | null;
+  pay_rate_snapshot?: number | null;
   employees?: {
     pay_rate?: number | null;
     pay_type?: string | null;

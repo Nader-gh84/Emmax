@@ -31,6 +31,7 @@ import {
   isCostPaymentStatus,
   isExpenseBillingStatus,
   isExpenseKind,
+  normalizeTimeEntryRow,
   type ChangeOrder,
   type ProjectExpense,
   type ProjectPayment,
@@ -64,12 +65,7 @@ function normalizeExpense(row: ProjectExpense): ProjectExpense {
 }
 
 function normalizeTimeEntry(row: TimeEntry): TimeEntry {
-  const payment = String(row.payment_status ?? "");
-  return {
-    ...row,
-    hours: Number(row.hours) || 0,
-    payment_status: isCostPaymentStatus(payment) ? payment : "unpaid",
-  };
+  return normalizeTimeEntryRow(row);
 }
 
 function normalizeChangeOrder(row: ChangeOrder): ChangeOrder {

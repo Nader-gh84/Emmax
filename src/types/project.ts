@@ -1,3 +1,4 @@
+import type { LabourBillingMode } from "@/types/labour-quoting";
 import type { StoredLabourItem, StoredMaterial } from "@/types/quote";
 
 export type ProjectStatus = "active" | "in_progress" | "completed" | "on_hold";
@@ -15,6 +16,8 @@ export interface Project {
   end_date: string | null;
   materials: StoredMaterial[] | null;
   labour_items: StoredLabourItem[] | null;
+  /** Snapshot of quote labour_billing_mode. */
+  labour_billing_mode?: LabourBillingMode | null;
   notes: string | null;
   project_type: string | null;
   project_manager: string | null;

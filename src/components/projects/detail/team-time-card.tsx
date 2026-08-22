@@ -140,6 +140,7 @@ export function TeamTimeCard({
         entry_date: entryDate,
         notes: notes.trim() || null,
         payment_status: "unpaid",
+        entry_source: "actual",
       })
       .select("*")
       .single();
@@ -154,6 +155,7 @@ export function TeamTimeCard({
       ...(data as TimeEntry),
       payment_status:
         (data as TimeEntry).payment_status === "paid" ? "paid" : "unpaid",
+      entry_source: "actual",
       employees: employee
         ? {
             id: employee.id,
