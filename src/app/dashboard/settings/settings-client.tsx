@@ -53,7 +53,7 @@ const SETTINGS_SECTIONS = [
   {
     id: "employees",
     label: "Employees",
-    description: "Crew registry and future HR / payroll options.",
+    description: "Crew registry, pay rates, and labour quoting warnings.",
   },
 ] as const;
 

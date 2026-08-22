@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { EmployeeFormModal } from "@/components/settings/employee-form-modal";
 import { EmployeesEmptyState } from "@/components/settings/employees-empty-state";
+import { LabourQuotingSettingsCard } from "@/components/settings/labour-quoting-settings-card";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -272,13 +273,13 @@ export function EmployeesSettingsPanel() {
 
   return (
     <div className="space-y-6">
-      {/* Future expansion: permissions, roles, payroll settings panels go here. */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-white">Employees</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Register crew members, then assign them on Project Detail so they
-            get notified when a project starts.
+            Register crew members with pay rates for labour cost at Create Quote
+            and Team &amp; Time. Assign them on Project Detail so they get
+            notified when a project starts.
           </p>
         </div>
         {employees.length > 0 ? (
@@ -291,6 +292,8 @@ export function EmployeesSettingsPanel() {
           </button>
         ) : null}
       </div>
+
+      <LabourQuotingSettingsCard />
 
       {success ? (
         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">

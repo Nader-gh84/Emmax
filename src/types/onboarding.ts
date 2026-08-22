@@ -33,6 +33,12 @@ export interface QuoteDefaults {
   defaultTaxRate: number;
   defaultValidityDays: number;
   quoteTemplate: QuoteTemplateId;
+  /**
+   * Warn at Create Quote when labour margin % ≤ this value.
+   * Default 0 = warn only at zero/negative margin.
+   * Edited under Settings → Employees (Labour quoting).
+   */
+  labourMarginWarnPercent?: number;
 }
 
 export interface BusinessProfile extends ProfileData, QuoteDefaults {
