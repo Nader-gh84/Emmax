@@ -3,7 +3,14 @@ import { fetchQuotePdfBlob } from "@/lib/quote-pdf-client";
 import { quoteToWizardState } from "@/lib/quotes";
 import { createClient } from "@/lib/supabase";
 import { ensureProjectForQuote } from "@/lib/ensure-project-for-quote";
+import {
+  buildCustomerLabourItems,
+  employeeCostRate,
+  summarizeCreateQuoteLabour,
+} from "@/lib/create-quote-labour";
 import { loadCompanyBrandingForPdf } from "@/lib/pdf/load-company-branding";
+import type { Employee } from "@/types/employee";
+import type { LabourBillingMode } from "@/types/labour-quoting";
 import {
   calculateVoiceQuoteTotals,
   materialsToStored,
@@ -14,6 +21,183 @@ import {
 
 export function quoteToActionState(quote: Quote): QuoteActionState {
   return quoteToWizardState(quote);
+}
+
+export type SaveCreateQuoteLabourInput = {
+  quote: Quote;
+  employees: Employee[];
+  hoursByEmployeeId: Record<string, number>;
+  billingMode: LabourBillingMode;
+  sellHourlyRate: number;
+  sellFlatAmount: number;
+};
+
+/**
+ * Persist Create Quote labour: customer labour_items + billing mode,
+ * replace quote_estimate time_entries (never touch actual), refresh project.
+ */
+export async function saveCreateQuoteLabour(
+  input: SaveCreateQuoteLabourInput
+): Promise<{ quote: Quote; projectId: string }> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be logged in.");
+
+  const { quote, employees, billingMode } = input;
+  if (!quote.supplier_pricing_uploaded_at) {
+    throw new Error("Upload supplier prices before creating the quote.");
+  }
+
+  if (employees.length === 0) {
+    throw new Error(
+      "I can't work out labour cost yet — you haven't added any employees. Add them with their pay rates first."
+    );
+  }
+
+  const summary = summarizeCreateQuoteLabour({
+    employees,
+    hoursByEmployeeId: input.hoursByEmployeeId,
+    billingMode,
+    sellHourlyRate: input.sellHourlyRate,
+    sellFlatAmount: input.sellFlatAmount,
+    warnBelowPercent: 0,
+  });
+
+  if (summary.lines.length === 0) {
+    throw new Error("Assign hours to at least one employee before continuing.");
+  }
+
+  if (summary.missingRateNames.length > 0) {
+    throw new Error(
+      `Missing hourly pay rate for: ${summary.missingRateNames.join(", ")}. ` +
+        "Add pay rates in Settings → Employees first."
+    );
+  }
+
+  if (summary.charged <= 0) {
+    throw new Error(
+      billingMode === "flat"
+        ? "Enter the flat labour amount you're charging the customer."
+        : "Enter the customer labour rate ($/hour) you're charging."
+    );
+  }
+
+  const labourItems = buildCustomerLabourItems({
+    billingMode,
+    totalHours: summary.totalHours,
+    sellHourlyRate: input.sellHourlyRate,
+    sellFlatAmount: input.sellFlatAmount,
+  });
+
+  const state = quoteToActionState(quote);
+  const totals = calculateVoiceQuoteTotals({
+    materials: state.materials,
+    labourItems,
+    gstRate: state.gstRate,
+    pstRate: state.pstRate,
+    discountMode: state.discountMode,
+    discountAmount: state.discountAmount,
+    discountPercent: state.discountPercent,
+  });
+
+  if (totals.grandTotal <= 0) {
+    throw new Error(
+      "Quote total is $0 after labour. Check material prices and labour charge."
+    );
+  }
+
+  const now = new Date().toISOString();
+  const { data: updatedQuote, error: quoteError } = await supabase
+    .from("quotes")
+    .update({
+      labour_items: labourToStored(labourItems),
+      labour_billing_mode: billingMode,
+      subtotal: totals.subtotal,
+      tax: totals.gst + totals.pst,
+      grand_total: totals.grandTotal,
+      updated_at: now,
+    })
+    .eq("id", quote.id)
+    .eq("user_id", user.id)
+    .select("*")
+    .single();
+
+  if (quoteError || !updatedQuote) {
+    const hint =
+      quoteError?.message?.includes("labour_billing_mode") ||
+      quoteError?.code === "42703"
+        ? " Run migration 043_labour_quote_estimates.sql in Supabase."
+        : "";
+    throw new Error(
+      `Failed to save labour on quote.${hint || ` ${quoteError?.message || ""}`}`.trim()
+    );
+  }
+
+  const projectId = await ensureProjectForQuote({
+    userId: user.id,
+    quoteId: quote.id,
+    projectName: state.projectName,
+    customerId: state.selectedCustomerId,
+    customerName: state.customerName,
+    materials: state.materials,
+    labourItems,
+    grandTotal: totals.grandTotal,
+    labourBillingMode: billingMode,
+  });
+
+  if (!projectId) {
+    throw new Error(
+      "Labour saved on the quote, but no project row was found to store cost estimates."
+    );
+  }
+
+  // Replace quote_estimate rows only — never delete actual job hours.
+  const { error: deleteError } = await supabase
+    .from("time_entries")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("user_id", user.id)
+    .eq("entry_source", "quote_estimate");
+
+  if (deleteError) {
+    const hint =
+      deleteError.message?.includes("entry_source") ||
+      deleteError.code === "42703"
+        ? " Run migration 043_labour_quote_estimates.sql in Supabase."
+        : "";
+    throw new Error(`Failed to replace labour estimates.${hint}`);
+  }
+
+  const estimateRows = summary.lines.map((line) => {
+    const employee = employees.find((row) => row.id === line.employeeId);
+    const rate = employee ? employeeCostRate(employee) : null;
+    return {
+      user_id: user.id,
+      project_id: projectId,
+      employee_id: line.employeeId,
+      hours: line.hours,
+      entry_date: now.slice(0, 10),
+      notes: "Create Quote labour estimate",
+      payment_status: "unpaid" as const,
+      entry_source: "quote_estimate" as const,
+      quote_id: quote.id,
+      pay_rate_snapshot: rate,
+    };
+  });
+
+  const { error: insertError } = await supabase
+    .from("time_entries")
+    .insert(estimateRows);
+
+  if (insertError) {
+    throw new Error(
+      insertError.message || "Failed to save labour cost estimates."
+    );
+  }
+
+  return { quote: updatedQuote as Quote, projectId };
 }
 
 /**
