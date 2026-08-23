@@ -112,6 +112,11 @@ export function ProjectsCapturePanel({
   onEmaTypeIt,
   onEmaSave,
   isTitleCaptureRecording,
+  supplierSendConfirm,
+  onConfirmSupplierSend,
+  onCancelSupplierSend,
+  onChangeSupplierSend,
+  isSupplierSending,
 }: {
   projectName: string;
   onProjectNameChange: (value: string) => void;
@@ -177,6 +182,21 @@ export function ProjectsCapturePanel({
   onEmaTypeIt: () => void;
   onEmaSave: () => void;
   isTitleCaptureRecording: boolean;
+  supplierSendConfirm: {
+    supplierName: string;
+    supplierEmail: string;
+    projectTitle: string;
+    materials: Array<{
+      item: string;
+      brand: string;
+      quantity: number;
+      unit: string;
+    }>;
+  } | null;
+  onConfirmSupplierSend: () => void;
+  onCancelSupplierSend: () => void;
+  onChangeSupplierSend: () => void;
+  isSupplierSending: boolean;
 }) {
   const bannerText =
     recorderError ||
@@ -195,7 +215,7 @@ export function ProjectsCapturePanel({
       : phase === "extracting"
         ? "Extracting…"
         : isRecording
-          ? "Listening…"
+          ? "I'm listening…"
           : hasTranscript
             ? "Ready to extract"
             : "Ready";
@@ -243,39 +263,49 @@ export function ProjectsCapturePanel({
           <IdleWave side="left" />
         )}
 
-        {isRecording ? (
-          <button
-            type="button"
-            className={styles.stopBtn}
-            onClick={onMicClick}
-            disabled={phase === "transcribing"}
-            aria-label="Stop recording"
-          >
-            <span className={styles.stopIcon} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={styles.micBtn}
-            onClick={onMicClick}
-            disabled={phase === "transcribing" || phase === "extracting"}
-            aria-label="Start recording"
-          >
-            {phase === "transcribing" ? (
-              <span className={styles.spinner} />
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none">
-                <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                <path
-                  d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-            )}
-          </button>
-        )}
+        <div className={styles.micCluster}>
+          {isRecording ? (
+            <img
+              src="/Emmax.png"
+              alt=""
+              className={styles.emaPresence}
+              aria-hidden="true"
+            />
+          ) : null}
+          {isRecording ? (
+            <button
+              type="button"
+              className={styles.stopBtn}
+              onClick={onMicClick}
+              disabled={phase === "transcribing"}
+              aria-label="Stop recording"
+            >
+              <span className={styles.stopIcon} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.micBtn}
+              onClick={onMicClick}
+              disabled={phase === "transcribing" || phase === "extracting"}
+              aria-label="Start recording"
+            >
+              {phase === "transcribing" ? (
+                <span className={styles.spinner} />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                  <path
+                    d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )}
+            </button>
+          )}
+        </div>
 
         {isRecording ? (
           <LiveWave levels={micLevels} listening />
@@ -287,11 +317,7 @@ export function ProjectsCapturePanel({
       <div className={styles.recMeta}>
         <span className={`${styles.live} ${isRecording ? "" : styles.liveIdle}`}>
           {isRecording ? <span className={styles.liveDot} /> : null}
-          {isRecording
-            ? isTitleCaptureRecording
-              ? "Recording title…"
-              : "Recording…"
-            : listeningLabel}
+          {isRecording ? "I'm listening…" : listeningLabel}
         </span>
         <span className={styles.timer}>
           <svg viewBox="0 0 16 16" fill="none">
@@ -383,15 +409,7 @@ export function ProjectsCapturePanel({
       {emaTitleState !== "hidden" ? (
         <div className={styles.emaBar} role="status">
           <span className={styles.emaBarAvatar} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <rect x="9" y="2.5" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.7" />
-              <path
-                d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-              />
-            </svg>
+            <img src="/Emmax.png" alt="" className={styles.emaBarFace} />
           </span>
           <div className={styles.emaBarBody}>
             {emaTitleState === "confirm" ? (
@@ -467,6 +485,85 @@ export function ProjectsCapturePanel({
                 </div>
               </>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {supplierSendConfirm ? (
+        <div className={styles.supplierConfirm} role="status">
+          <div className={styles.supplierConfirmHead}>
+            <img
+              src="/Emmax.png"
+              alt=""
+              className={styles.supplierConfirmFace}
+              aria-hidden="true"
+            />
+            <div>
+              <p className={styles.supplierConfirmTitle}>
+                Ready to send to {supplierSendConfirm.supplierName}
+              </p>
+              <p className={styles.supplierConfirmHint}>
+                Take a look and confirm — voice alone won&apos;t send this.
+              </p>
+            </div>
+          </div>
+          <dl className={styles.supplierConfirmMeta}>
+            <div>
+              <dt>Supplier</dt>
+              <dd>{supplierSendConfirm.supplierName}</dd>
+            </div>
+            <div>
+              <dt>Email</dt>
+              <dd>{supplierSendConfirm.supplierEmail || "—"}</dd>
+            </div>
+            <div>
+              <dt>PO / title</dt>
+              <dd>{supplierSendConfirm.projectTitle || "Untitled"}</dd>
+            </div>
+          </dl>
+          <div className={styles.supplierConfirmMaterials}>
+            <p className={styles.supplierConfirmMaterialsLabel}>
+              Materials ({supplierSendConfirm.materials.length})
+            </p>
+            <ul>
+              {supplierSendConfirm.materials.map((material, index) => (
+                <li key={`${material.item}-${index}`}>
+                  <span>{material.item || "Material"}</span>
+                  <span>
+                    {material.quantity} {material.unit}
+                    {material.brand?.trim() ? ` · ${material.brand}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className={styles.supplierConfirmActions}>
+            <button
+              type="button"
+              className={styles.poBtn}
+              onClick={onCancelSupplierSend}
+              disabled={isSupplierSending}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.poBtn}
+              onClick={onChangeSupplierSend}
+              disabled={isSupplierSending}
+            >
+              Change supplier
+            </button>
+            <button
+              type="button"
+              className={`${styles.poBtn} ${styles.poBtnPrimary}`}
+              onClick={onConfirmSupplierSend}
+              disabled={
+                isSupplierSending || !supplierSendConfirm.supplierEmail.trim()
+              }
+            >
+              {isSupplierSending ? "Sending…" : "Confirm & send"}
+            </button>
           </div>
         </div>
       ) : null}
