@@ -48,6 +48,9 @@ import {
   type QuoteActionState,
 } from "@/lib/quote-actions";
 import { mapExtractionToLineItems } from "@/lib/quote-extraction";
+import { resolveEntityQuery } from "@/lib/entity-resolve";
+import type { EntityCandidate } from "@/lib/entity-resolve";
+import { buildDefaultSupplierMessage } from "@/lib/email/supplier-email";
 import {
   downloadPdfBlob,
   fetchQuotePdfBlob,
@@ -75,6 +78,57 @@ import {
   labourLineTotal,
   materialLineTotal,
 } from "@/types/quote";
+
+type ConversationalPrompt =
+  | { kind: "title_confirm"; retry: number }
+  | { kind: "title_say"; retry: number }
+  | { kind: "supplier_name"; retry: number };
+
+type SupplierSendConfirmState = {
+  supplier: Supplier;
+  supplierEmail: string;
+  messageBody: string;
+};
+
+function isAffirmativeUtterance(text: string): boolean {
+  const t = text
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return false;
+  if (
+    /^(yes|yeah|yep|yup|correct|right|sure|ok|okay|confirm|absolutely)\b/.test(
+      t
+    )
+  ) {
+    return true;
+  }
+  return /\b(yes|yeah|that's right|that is right|looks good|sounds right|sounds good|send it)\b/.test(
+    t
+  );
+}
+
+function isNegativeUtterance(text: string): boolean {
+  const t = text
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return false;
+  if (/^(no|nope|nah|wrong|edit|change|incorrect)\b/.test(t)) return true;
+  return /\b(not right|that's wrong|that is wrong|change it|edit it)\b/.test(t);
+}
+
+function extractSupplierHint(text: string): string | null {
+  const match = text.match(
+    /\b(?:send(?:\s+it)?\s+to|to)\s+(.+?)(?:\s+please)?$/i
+  );
+  const hint = match?.[1]?.trim();
+  if (!hint || hint.length < 2) return null;
+  if (/^(my|the|a|an)\s+supplier\b/i.test(hint)) return null;
+  return hint.replace(/[.!?]+$/, "").trim();
+}
 
 type PipelinePhase =
   | "idle"
@@ -309,6 +363,22 @@ function VoiceQuoteBuilderInner({
   const titleCaptureModeRef = useRef(false);
   const titleManuallySetRef = useRef(false);
   const titleConfirmedRef = useRef(false);
+  const conversationalModeRef = useRef(false);
+  const conversationalPromptRef = useRef<ConversationalPrompt | null>(null);
+  const speakThenListenGenerationRef = useRef(0);
+  const speakThenListenRef = useRef<
+    (
+      text: string,
+      eventKey: string,
+      prompt: ConversationalPrompt
+    ) => Promise<void>
+  >(async () => undefined);
+  const beginSupplierVoiceFlowRef = useRef<(namedHint?: string) => void>(
+    () => undefined
+  );
+  const resolveSupplierFromUtteranceRef = useRef<
+    (utterance: string) => Promise<void>
+  >(async () => undefined);
   const [liveDraft, setLiveDraft] = useState("");
   const [supplierPricingApplied, setSupplierPricingApplied] = useState(false);
   const [emaTitleState, setEmaTitleState] = useState<
@@ -316,26 +386,34 @@ function VoiceQuoteBuilderInner({
   >("hidden");
   const [emaDraftTitle, setEmaDraftTitle] = useState("");
   const [isTitleCaptureRecording, setIsTitleCaptureRecording] = useState(false);
+  const [supplierSendConfirm, setSupplierSendConfirm] =
+    useState<SupplierSendConfirmState | null>(null);
   const tts = useTtsPlayback();
   const ttsPlayRef = useRef(tts.play);
   ttsPlayRef.current = tts.play;
   const lastSpokenRef = useRef<string | null>(null);
+  const startRecordingRef = useRef<() => Promise<void>>(async () => undefined);
+  const materialsRef = useRef(materials);
+  materialsRef.current = materials;
 
   projectNameRef.current = projectName;
   transcriptRef.current = transcript;
 
-  const speakEma = useCallback((text: string, eventKey?: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    const key = eventKey ?? trimmed;
-    if (lastSpokenRef.current === key) return;
-    lastSpokenRef.current = key;
-    void ttsPlayRef.current(trimmed, {
-      voice: EM_CALL_TTS_VOICE,
-      instructions: EM_CALL_TTS_INSTRUCTIONS,
-      silentFail: true,
-    });
-  }, []);
+  const speakEma = useCallback(
+    async (text: string, eventKey?: string): Promise<boolean> => {
+      const trimmed = text.trim();
+      if (!trimmed) return false;
+      const key = eventKey ?? trimmed;
+      if (lastSpokenRef.current === key) return false;
+      lastSpokenRef.current = key;
+      return ttsPlayRef.current(trimmed, {
+        voice: EM_CALL_TTS_VOICE,
+        instructions: EM_CALL_TTS_INSTRUCTIONS,
+        silentFail: true,
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (transcript.length < extractOffsetRef.current) {
@@ -545,77 +623,169 @@ function VoiceQuoteBuilderInner({
     []
   );
 
-  const handleProjectsSegmentComplete = useCallback(async (blob: Blob) => {
-    const wasTitleCapture = titleCaptureModeRef.current;
-    titleCaptureModeRef.current = false;
-    setIsTitleCaptureRecording(false);
+  const handleProjectsSegmentComplete = useCallback(
+    async (blob: Blob, meta?: VoiceRecordingMeta) => {
+      const wasTitleCapture = titleCaptureModeRef.current;
+      const prompt = conversationalPromptRef.current;
+      titleCaptureModeRef.current = false;
+      conversationalModeRef.current = false;
+      conversationalPromptRef.current = null;
+      setIsTitleCaptureRecording(false);
 
-    const settlePhase = () => {
-      setPhase(materials.length > 0 ? "ready" : "idle");
-    };
+      const settlePhase = () => {
+        setPhase(materialsRef.current.length > 0 ? "ready" : "idle");
+      };
 
-    if (blob.size === 0) {
-      settlePhase();
-      return;
-    }
+      const handleNoSpeechForPrompt = (active: ConversationalPrompt) => {
+        settlePhase();
+        if (active.retry < 1) {
+          const next = { ...active, retry: 1 } as ConversationalPrompt;
+          if (active.kind === "title_confirm") {
+            void speakThenListenRef.current(
+              "I didn't catch that — is that project name right?",
+              `po-confirm-retry:${projectNameRef.current}`,
+              next
+            );
+          } else if (active.kind === "title_say") {
+            void speakThenListenRef.current(
+              "I didn't catch that — what's the PO for this job?",
+              "po-say-retry",
+              next
+            );
+          } else {
+            void speakThenListenRef.current(
+              "I didn't catch that — which supplier should I send this to?",
+              "supplier-ask-retry",
+              next
+            );
+          }
+          return;
+        }
+        setActionFeedback({
+          type: "info",
+          message: "Tap the mic when you're ready",
+        });
+      };
 
-    setPhase("transcribing");
-    setPipelineError(null);
-    setIsEditingTranscript(false);
+      if (blob.size === 0 || meta?.hasSpeech === false) {
+        if (prompt) {
+          handleNoSpeechForPrompt(prompt);
+          return;
+        }
+        settlePhase();
+        return;
+      }
 
-    try {
-      const formData = new FormData();
-      formData.append("audio", blob, "recording.webm");
-      formData.append("extract", "false");
+      setPhase("transcribing");
+      setPipelineError(null);
+      setIsEditingTranscript(false);
 
-      const response = await fetch("/api/transcribe", {
-        method: "POST",
-        body: formData,
-      });
+      try {
+        const formData = new FormData();
+        formData.append("audio", blob, "recording.webm");
+        formData.append("extract", "false");
 
-      const data = await response.json();
-      if (!response.ok) {
+        const response = await fetch("/api/transcribe", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          if (data.noSpeech) {
+            if (prompt) {
+              handleNoSpeechForPrompt(prompt);
+              return;
+            }
+            settlePhase();
+            return;
+          }
+          throw new Error(data.error || "Transcription failed");
+        }
+
         if (data.noSpeech) {
+          if (prompt) {
+            handleNoSpeechForPrompt(prompt);
+            return;
+          }
           settlePhase();
           return;
         }
-        throw new Error(data.error || "Transcription failed");
-      }
 
-      if (data.noSpeech) {
+        const nextChunk =
+          typeof data.transcript === "string" ? data.transcript.trim() : "";
+        if (!nextChunk) {
+          if (prompt) {
+            handleNoSpeechForPrompt(prompt);
+            return;
+          }
+          settlePhase();
+          return;
+        }
+
+        setLiveDraft("");
+
+        if (prompt?.kind === "title_confirm") {
+          settlePhase();
+          if (isAffirmativeUtterance(nextChunk)) {
+            const hint = extractSupplierHint(nextChunk);
+            beginSupplierVoiceFlowRef.current(hint ?? undefined);
+            return;
+          }
+          if (isNegativeUtterance(nextChunk)) {
+            setEmaDraftTitle(projectNameRef.current);
+            setEmaTitleState("editing");
+            lastSpokenRef.current = null;
+            void speakEma(
+              "Go ahead — what should I call this job?",
+              "po-edit-from-voice"
+            );
+            return;
+          }
+          const cleaned = nextChunk.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, "");
+          setProjectName(cleaned);
+          setEmaDraftTitle(cleaned);
+          setEmaTitleState("confirm");
+          void speakThenListenRef.current(
+            `I've got this job as ${cleaned}. If that's right, I'll get the materials ready to send to your supplier.`,
+            `po-confirm:${cleaned}`,
+            { kind: "title_confirm", retry: 0 }
+          );
+          return;
+        }
+
+        if (prompt?.kind === "title_say" || wasTitleCapture) {
+          const cleaned = nextChunk.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, "");
+          setEmaDraftTitle(cleaned);
+          setProjectName(cleaned);
+          setEmaTitleState("editing");
+          settlePhase();
+          lastSpokenRef.current = null;
+          void speakEma("Got it — does that look right?", "po-title-said");
+          return;
+        }
+
+        if (prompt?.kind === "supplier_name") {
+          settlePhase();
+          await resolveSupplierFromUtteranceRef.current(nextChunk);
+          return;
+        }
+
+        setTranscript((previous) =>
+          previous.trim() ? `${previous.trim()} ${nextChunk}` : nextChunk
+        );
         settlePhase();
-        return;
+      } catch (error) {
+        setPhase("error");
+        setPipelineError(
+          error instanceof Error
+            ? error.message
+            : "Failed to transcribe recording"
+        );
       }
-
-      const nextChunk =
-        typeof data.transcript === "string" ? data.transcript.trim() : "";
-      if (!nextChunk) {
-        settlePhase();
-        return;
-      }
-
-      setLiveDraft("");
-
-      if (wasTitleCapture) {
-        const cleaned = nextChunk.replace(/^[\s.,;:!?-]+|[\s.,;:!?-]+$/g, "");
-        setEmaDraftTitle(cleaned);
-        setEmaTitleState("editing");
-        setPhase(materials.length > 0 ? "ready" : "idle");
-        speakEma("Got it — does that look right?");
-        return;
-      }
-
-      setTranscript((previous) =>
-        previous.trim() ? `${previous.trim()} ${nextChunk}` : nextChunk
-      );
-      setPhase(materials.length > 0 ? "ready" : "idle");
-    } catch (error) {
-      setPhase("error");
-      setPipelineError(
-        error instanceof Error ? error.message : "Failed to transcribe recording"
-      );
-    }
-  }, [materials.length, speakEma]);
+    },
+    [speakEma]
+  );
 
   const handleLegacyRecordingComplete = useCallback(
     async (blob: Blob, meta: VoiceRecordingMeta) => {
@@ -676,13 +846,19 @@ function VoiceQuoteBuilderInner({
   const handleRecordingComplete = useCallback(
     async (blob: Blob, meta: VoiceRecordingMeta) => {
       if (embedded) {
-        await handleProjectsSegmentComplete(blob);
+        await handleProjectsSegmentComplete(blob, meta);
         return;
       }
       await handleLegacyRecordingComplete(blob, meta);
     },
     [embedded, handleLegacyRecordingComplete, handleProjectsSegmentComplete]
   );
+
+  const getManualStopOnly = useCallback(() => {
+    if (!embedded) return false;
+    // Dictation stays manual; conversational Q&A uses post-speech silence.
+    return !conversationalModeRef.current;
+  }, [embedded]);
 
   const {
     status: recorderStatus,
@@ -694,10 +870,188 @@ function VoiceQuoteBuilderInner({
   } = useVoiceRecorder({
     onRecordingComplete: handleRecordingComplete,
     manualStopOnly: embedded,
-    preSpeechSilenceMs: embedded ? undefined : 7000,
-    postSpeechSilenceMs: embedded ? undefined : 1500,
+    getManualStopOnly,
+    preSpeechSilenceMs: 7000,
+    postSpeechSilenceMs: 1500,
     barCount: embedded ? 18 : 24,
   });
+
+  startRecordingRef.current = startRecording;
+
+  const speakThenListen = useCallback(
+    async (
+      text: string,
+      eventKey: string,
+      prompt: ConversationalPrompt
+    ) => {
+      if (!embedded) {
+        lastSpokenRef.current = null;
+        void speakEma(text, eventKey);
+        return;
+      }
+      const generation = ++speakThenListenGenerationRef.current;
+      conversationalPromptRef.current = prompt;
+      unlockTtsAudio();
+      lastSpokenRef.current = null;
+      const ok = await speakEma(text, eventKey);
+      if (generation !== speakThenListenGenerationRef.current) return;
+      if (!ok) {
+        conversationalPromptRef.current = null;
+        setActionFeedback({
+          type: "info",
+          message: "Tap the mic when you're ready",
+        });
+        return;
+      }
+      conversationalModeRef.current = true;
+      if (prompt.kind === "title_say") {
+        titleCaptureModeRef.current = true;
+        setIsTitleCaptureRecording(true);
+      } else {
+        titleCaptureModeRef.current = false;
+        setIsTitleCaptureRecording(false);
+      }
+      try {
+        await startRecordingRef.current();
+      } catch {
+        conversationalModeRef.current = false;
+        conversationalPromptRef.current = null;
+        titleCaptureModeRef.current = false;
+        setIsTitleCaptureRecording(false);
+        setActionFeedback({
+          type: "info",
+          message: "Tap the mic when you're ready",
+        });
+      }
+    },
+    [embedded, speakEma]
+  );
+
+  speakThenListenRef.current = speakThenListen;
+
+  const loadSuppliersForVoice = useCallback(async (): Promise<Supplier[]> => {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("suppliers")
+      .select("*")
+      .order("supplier_name", { ascending: true });
+    return (data as Supplier[]) ?? [];
+  }, []);
+
+  const loadDefaultSupplierMessage = useCallback(async (): Promise<string> => {
+    const supabase = createClient();
+    const [profileResult, authResult] = await Promise.all([
+      supabase
+        .from("business_profiles")
+        .select("company_name, full_name")
+        .maybeSingle(),
+      supabase.auth.getUser(),
+    ]);
+    const profile = profileResult.data;
+    const user = authResult.data.user;
+    const companyName = profile?.company_name?.trim() || "";
+    const metaName =
+      typeof user?.user_metadata?.full_name === "string"
+        ? user.user_metadata.full_name
+        : "";
+    const ownerName = profile?.full_name?.trim() || metaName.trim() || "";
+    return buildDefaultSupplierMessage(companyName, ownerName);
+  }, []);
+
+  const presentSupplierConfirm = useCallback(
+    async (supplier: Supplier) => {
+      const email = supplier.email?.trim() || "";
+      const messageBody = await loadDefaultSupplierMessage();
+      setSupplierSendConfirm({
+        supplier,
+        supplierEmail: email,
+        messageBody,
+      });
+      lastSpokenRef.current = null;
+      void speakEma(
+        `Ready to send to ${supplier.supplier_name} — take a look and confirm.`,
+        `supplier-confirm:${supplier.id}`
+      );
+      if (!email) {
+        setActionFeedback({
+          type: "info",
+          message: `${supplier.supplier_name} has no email on file. Add one before sending.`,
+        });
+      }
+    },
+    [loadDefaultSupplierMessage, speakEma]
+  );
+
+  const resolveSupplierFromUtterance = useCallback(
+    async (utterance: string) => {
+      const suppliers = await loadSuppliersForVoice();
+      if (suppliers.length === 0) {
+        lastSpokenRef.current = null;
+        void speakEma(
+          "You don't have any suppliers yet. Add one from the Suppliers page first.",
+          "supplier-none"
+        );
+        setActionFeedback({
+          type: "info",
+          message: "No suppliers yet — add one from the Suppliers page.",
+        });
+        return;
+      }
+
+      const candidates: EntityCandidate[] = suppliers.map((supplier) => ({
+        id: supplier.id,
+        kind: "supplier" as const,
+        label: supplier.supplier_name,
+        meta: supplier.email,
+      }));
+
+      const resolved = resolveEntityQuery(utterance, candidates, {
+        kind: "supplier",
+      });
+
+      if (!resolved.needs_clarification && resolved.match) {
+        const matched =
+          suppliers.find((row) => row.id === resolved.match!.id) ?? null;
+        if (matched) {
+          await presentSupplierConfirm(matched);
+          return;
+        }
+      }
+
+      const clarification =
+        resolved.clarification ||
+        "I couldn't match that supplier. Tap Send to Supplier to pick one.";
+      lastSpokenRef.current = null;
+      void speakEma(clarification, `supplier-clarify:${utterance}`);
+      setActionFeedback({ type: "info", message: clarification });
+    },
+    [loadSuppliersForVoice, presentSupplierConfirm, speakEma]
+  );
+
+  resolveSupplierFromUtteranceRef.current = resolveSupplierFromUtterance;
+
+  const beginSupplierVoiceFlow = useCallback(
+    async (namedHint?: string) => {
+      titleConfirmedRef.current = true;
+      setEmaTitleState("hidden");
+      setSupplierSendConfirm(null);
+      unlockTtsAudio();
+
+      if (namedHint?.trim()) {
+        await resolveSupplierFromUtterance(namedHint.trim());
+        return;
+      }
+
+      void speakThenListen(
+        "Which supplier should I send this materials list to?",
+        "supplier-ask",
+        { kind: "supplier_name", retry: 0 }
+      );
+    },
+    [resolveSupplierFromUtterance, speakThenListen]
+  );
+
+  beginSupplierVoiceFlowRef.current = beginSupplierVoiceFlow;
 
   const isRecording = recorderStatus === "recording";
   const isBusy =
@@ -786,15 +1140,17 @@ function VoiceQuoteBuilderInner({
         setProjectName(mapped.projectTitle);
         setEmaDraftTitle(mapped.projectTitle);
         setEmaTitleState("confirm");
-        speakEma(
+        void speakThenListen(
           `I've got this job as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`,
-          `po-confirm:${mapped.projectTitle}`
+          `po-confirm:${mapped.projectTitle}`,
+          { kind: "title_confirm", retry: 0 }
         );
       } else {
         setEmaTitleState("unknown");
-        speakEma(
+        void speakThenListen(
           "I couldn't find a project name in what you said. What's the PO for this job?",
-          "po-unknown"
+          "po-unknown",
+          { kind: "title_say", retry: 0 }
         );
       }
 
@@ -807,7 +1163,7 @@ function VoiceQuoteBuilderInner({
           : "Couldn't parse that, try again or add items manually"
       );
     }
-  }, [isRecording, materials.length, phase, speakEma]);
+  }, [isRecording, materials.length, phase, speakThenListen]);
 
   useEffect(() => {
     if (!embedded || !isRecording) return;
@@ -978,9 +1334,21 @@ function VoiceQuoteBuilderInner({
     // Keep TTS unlock warm from mic start/stop gestures (used after async extract).
     unlockTtsAudio();
     if (isRecording) {
+      const wasConversational = conversationalModeRef.current;
+      const wasTitleCapture = titleCaptureModeRef.current;
       await stopRecording();
+      if (embedded && !wasConversational && !wasTitleCapture) {
+        lastSpokenRef.current = null;
+        void speakEma(
+          "Got it. Anything else, or should I pull the materials out?",
+          "dictation-stop-ack"
+        );
+      }
       return;
     }
+    speakThenListenGenerationRef.current += 1;
+    conversationalModeRef.current = false;
+    conversationalPromptRef.current = null;
     titleCaptureModeRef.current = false;
     setIsTitleCaptureRecording(false);
     await startRecording();
@@ -988,45 +1356,44 @@ function VoiceQuoteBuilderInner({
 
   function handleContinueSpeaking() {
     if (isBusy) return;
+    conversationalModeRef.current = false;
+    conversationalPromptRef.current = null;
     void startRecording();
   }
 
   function openSupplierAfterTitleConfirm() {
-    titleConfirmedRef.current = true;
-    setEmaTitleState("hidden");
-    unlockTtsAudio();
-    lastSpokenRef.current = null;
-    speakEma(
-      "Great, sending this to your supplier now.",
-      "po-sending-supplier"
-    );
-    setActiveModal("supplier");
+    void beginSupplierVoiceFlow();
   }
 
   function handleEmaEdit() {
+    speakThenListenGenerationRef.current += 1;
+    conversationalModeRef.current = false;
+    conversationalPromptRef.current = null;
     unlockTtsAudio();
     lastSpokenRef.current = null;
     setEmaDraftTitle(projectNameRef.current);
     setEmaTitleState("editing");
-    speakEma("Go ahead — what should I call this job?", "po-edit-prompt");
+    void speakEma("Go ahead — what should I call this job?", "po-edit-prompt");
   }
 
   function handleEmaTypeIt() {
+    speakThenListenGenerationRef.current += 1;
+    conversationalModeRef.current = false;
+    conversationalPromptRef.current = null;
     unlockTtsAudio();
     lastSpokenRef.current = null;
     setEmaDraftTitle("");
     setEmaTitleState("editing");
-    speakEma("Go ahead — what should I call this job?", "po-type-prompt");
+    void speakEma("Go ahead — what should I call this job?", "po-type-prompt");
   }
 
   function handleEmaSayIt() {
     if (isBusy) return;
-    unlockTtsAudio();
-    lastSpokenRef.current = null;
-    titleCaptureModeRef.current = true;
-    setIsTitleCaptureRecording(true);
-    speakEma("I'm listening — say the project name.", "po-say-listening");
-    void startRecording();
+    void speakThenListen(
+      "I'm listening — say the project name.",
+      "po-say-listening",
+      { kind: "title_say", retry: 0 }
+    );
   }
 
   function handleEmaSave() {
@@ -1040,6 +1407,24 @@ function VoiceQuoteBuilderInner({
   function handleEmaConfirm() {
     if (!projectNameRef.current.trim()) return;
     openSupplierAfterTitleConfirm();
+  }
+
+  function handleConfirmSupplierSend() {
+    if (!supplierSendConfirm) return;
+    void handleSendToSupplier({
+      supplier: supplierSendConfirm.supplier,
+      supplierEmail: supplierSendConfirm.supplierEmail,
+      messageBody: supplierSendConfirm.messageBody,
+    });
+  }
+
+  function handleCancelSupplierSend() {
+    setSupplierSendConfirm(null);
+  }
+
+  function handleChangeSupplierSend() {
+    setSupplierSendConfirm(null);
+    void beginSupplierVoiceFlow();
   }
 
   function handleProjectTitleFieldChange(value: string) {
@@ -1154,9 +1539,13 @@ function VoiceQuoteBuilderInner({
     titleCaptureModeRef.current = false;
     titleManuallySetRef.current = false;
     titleConfirmedRef.current = false;
+    conversationalModeRef.current = false;
+    conversationalPromptRef.current = null;
+    speakThenListenGenerationRef.current += 1;
     setIsTitleCaptureRecording(false);
     setEmaTitleState("hidden");
     setEmaDraftTitle("");
+    setSupplierSendConfirm(null);
     lastSpokenRef.current = null;
     tts.stop();
     setActionFeedback(null);
@@ -1510,6 +1899,7 @@ function VoiceQuoteBuilderInner({
       setQuoteId(result.quoteId);
       setQuoteNumber(result.quoteNumber);
       setActiveModal(null);
+      setSupplierSendConfirm(null);
       showFeedback(
         "success",
         `Materials list sent to ${payload.supplier.supplier_name}. Awaiting pricing.`
@@ -1882,6 +2272,27 @@ function VoiceQuoteBuilderInner({
           onEmaTypeIt={handleEmaTypeIt}
           onEmaSave={handleEmaSave}
           isTitleCaptureRecording={isTitleCaptureRecording}
+          supplierSendConfirm={
+            supplierSendConfirm
+              ? {
+                  supplierName: supplierSendConfirm.supplier.supplier_name,
+                  supplierEmail: supplierSendConfirm.supplierEmail,
+                  projectTitle: projectName,
+                  materials: materials.map(
+                    ({ item, brand, quantity, unit }) => ({
+                      item,
+                      brand,
+                      quantity,
+                      unit,
+                    })
+                  ),
+                }
+              : null
+          }
+          onConfirmSupplierSend={handleConfirmSupplierSend}
+          onCancelSupplierSend={handleCancelSupplierSend}
+          onChangeSupplierSend={handleChangeSupplierSend}
+          isSupplierSending={isActionBusy}
         />
         {sharedModals}
       </div>

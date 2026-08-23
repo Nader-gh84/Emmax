@@ -247,6 +247,37 @@
   align-items: center;
 }
 
+.micCluster {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emaPresence {
+  position: absolute;
+  left: -54px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(140, 190, 255, 0.5);
+  box-shadow: 0 0 22px -6px rgba(77, 141, 255, 0.75);
+  animation: emaPresenceIn 0.35s ease-out;
+}
+
+@keyframes emaPresenceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .micBtn {
   position: relative;
   flex-shrink: 0;
@@ -613,6 +644,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
+  overflow: hidden;
   background: radial-gradient(
     circle at 40% 34%,
     rgba(140, 190, 255, 0.35) 0%,
@@ -621,6 +653,12 @@
   border: 1px solid rgba(140, 190, 255, 0.4);
   box-shadow: 0 0 22px -10px var(--glow);
   color: var(--blue-pale);
+}
+
+.emaBarFace {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .emaBarAvatar svg {
@@ -643,6 +681,119 @@
 .emaBarMsg strong {
   color: #fff;
   font-weight: 600;
+}
+
+.supplierConfirm {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid rgba(107, 164, 255, 0.28);
+  background: rgba(77, 141, 255, 0.08);
+}
+
+.supplierConfirmHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.supplierConfirmFace {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(140, 190, 255, 0.4);
+}
+
+.supplierConfirmTitle {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.supplierConfirmHint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.supplierConfirmMeta {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.supplierConfirmMeta div {
+  display: grid;
+  gap: 2px;
+}
+
+.supplierConfirmMeta dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-mute, #8aa0bf);
+}
+
+.supplierConfirmMeta dd {
+  margin: 0;
+  font-size: 13.5px;
+  color: #fff;
+}
+
+.supplierConfirmMaterials {
+  margin-bottom: 14px;
+  padding: 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(140, 180, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.supplierConfirmMaterialsLabel {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-mute, #8aa0bf);
+}
+
+.supplierConfirmMaterials ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.supplierConfirmMaterials li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--text-soft);
+  border-top: 1px solid rgba(140, 180, 255, 0.08);
+}
+
+.supplierConfirmMaterials li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.supplierConfirmMaterials li span:first-child {
+  color: #fff;
+}
+
+.supplierConfirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .poValue {

@@ -40,6 +40,12 @@ interface UseVoiceRecorderOptions {
    * Silence-based auto-stop is disabled (Projects materials capture).
    */
   manualStopOnly?: boolean;
+  /**
+   * Dynamic override read each monitor frame. Prefer this when silence
+   * mode can change between dictation and conversational turns.
+   * When provided, takes precedence over `manualStopOnly`.
+   */
+  getManualStopOnly?: () => boolean;
 }
 
 const DEFAULT_PRE_SPEECH_SILENCE_MS = 7000;
@@ -61,6 +67,7 @@ export function useVoiceRecorder({
   minSpeechDurationMs = MIN_SPEECH_DURATION_MS,
   barCount = DEFAULT_BAR_COUNT,
   manualStopOnly = false,
+  getManualStopOnly,
 }: UseVoiceRecorderOptions) {
   const resolvedPreSpeech =
     preSpeechSilenceMs ?? silenceDurationMs ?? DEFAULT_PRE_SPEECH_SILENCE_MS;
@@ -69,6 +76,11 @@ export function useVoiceRecorder({
     (silenceDurationMs != null
       ? Math.min(silenceDurationMs, DEFAULT_POST_SPEECH_SILENCE_MS)
       : DEFAULT_POST_SPEECH_SILENCE_MS);
+
+  const manualStopOnlyRef = useRef(manualStopOnly);
+  manualStopOnlyRef.current = manualStopOnly;
+  const getManualStopOnlyRef = useRef(getManualStopOnly);
+  getManualStopOnlyRef.current = getManualStopOnly;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -252,6 +264,9 @@ export function useVoiceRecorder({
         smoothedLevelsRef.current = next;
         setLevels(next.slice());
 
+        const isManualStopOnly =
+          getManualStopOnlyRef.current?.() ?? manualStopOnlyRef.current;
+
         if (volume >= silenceThreshold) {
           if (lastSpeechSampleAtRef.current != null) {
             speechDurationMsRef.current += now - lastSpeechSampleAtRef.current;
@@ -261,7 +276,7 @@ export function useVoiceRecorder({
             heardSpeechRef.current = true;
           }
           silenceStartRef.current = null;
-        } else if (!manualStopOnly) {
+        } else if (!isManualStopOnly) {
           lastSpeechSampleAtRef.current = null;
           if (!silenceStartRef.current) {
             silenceStartRef.current = now;
@@ -298,7 +313,6 @@ export function useVoiceRecorder({
     cleanupStream,
     finishRecording,
     minSpeechDurationMs,
-    manualStopOnly,
     resolvedPostSpeech,
     resolvedPreSpeech,
     silenceThreshold,
