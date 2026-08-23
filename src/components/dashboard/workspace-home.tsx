@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useEmCall } from "@/components/em-call/em-call-provider";
 import {
   IconCalendar,
   IconDocument,
@@ -8,108 +11,12 @@ import {
   IconUsers,
 } from "@/components/dashboard/icons";
 import {
-  IconMore,
   IconProjects,
   IconSend,
-  IconTrendUp,
 } from "@/components/dashboard/workspace-icons";
 import { WorkspaceCustomersPanel } from "@/components/dashboard/workspace-customers-panel";
-
-function buildStatCards(activeProjectsCount: number) {
-  return [
-    {
-      label: "Customers",
-      value: "128",
-      trend: "+12%",
-      icon: IconUsers,
-    },
-    {
-      label: "Suppliers",
-      value: "46",
-      trend: "+4%",
-      icon: IconSuppliers,
-    },
-    {
-      label: "Quotes",
-      value: "87",
-      trend: "+18%",
-      icon: IconDocument,
-    },
-    {
-      label: "Active Projects",
-      value: String(activeProjectsCount),
-      trend: "Live",
-      icon: IconProjects,
-    },
-  ];
-}
-
-const DETAIL_ROWS = [
-  [
-    {
-      title: "Customer",
-      href: "/dashboard/customers",
-      icon: IconUsers,
-      stats: [
-        { label: "Total", value: "128" },
-        { label: "Active", value: "96" },
-        { label: "New this month", value: "14" },
-      ],
-    },
-    {
-      title: "Supplier",
-      href: "/dashboard/suppliers",
-      icon: IconSuppliers,
-      stats: [
-        { label: "Total", value: "46" },
-        { label: "Preferred", value: "12" },
-        { label: "Orders open", value: "8" },
-      ],
-    },
-    {
-      title: "Projects",
-      href: "/dashboard/projects",
-      icon: IconProjects,
-      stats: [
-        { label: "Draft", value: "11" },
-        { label: "Sent", value: "29" },
-        { label: "Accepted", value: "47" },
-      ],
-    },
-  ],
-  [
-    {
-      title: "Employee",
-      href: "/dashboard/settings?section=employees",
-      icon: IconEmployee,
-      stats: [
-        { label: "Team size", value: "9" },
-        { label: "On site", value: "6" },
-        { label: "Available", value: "3" },
-      ],
-    },
-    {
-      title: "Advanced Setting",
-      href: "/dashboard/settings",
-      icon: IconSettings,
-      stats: [
-        { label: "Tax rate", value: "13%" },
-        { label: "Validity", value: "30d" },
-        { label: "Profile", value: "Complete" },
-      ],
-    },
-    {
-      title: "Calendar",
-      href: "/dashboard/calendar",
-      icon: IconCalendar,
-      stats: [
-        { label: "Today", value: "3 jobs" },
-        { label: "This week", value: "14" },
-        { label: "Next up", value: "2:30 PM" },
-      ],
-    },
-  ],
-];
+import { unlockTtsAudio } from "@/lib/tts-audio-bus";
+import type { DashboardMetrics } from "@/lib/dashboard-metrics";
 
 function formatTodayLabel() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -127,17 +34,121 @@ function greetingForNow() {
   return "Good evening";
 }
 
-interface WorkspaceHomeProps {
-  firstName: string;
-  activeProjectsCount?: number;
+function buildStatCards(metrics: DashboardMetrics) {
+  return [
+    {
+      label: "Customers",
+      value: String(metrics.customersTotal),
+      icon: IconUsers,
+    },
+    {
+      label: "Suppliers",
+      value: String(metrics.suppliersTotal),
+      icon: IconSuppliers,
+    },
+    {
+      label: "Quotes",
+      value: String(metrics.quotesTotal),
+      icon: IconDocument,
+    },
+    {
+      label: "Active Projects",
+      value: String(metrics.projectsActive),
+      icon: IconProjects,
+    },
+  ];
 }
 
-export function WorkspaceHome({
-  firstName,
-  activeProjectsCount = 0,
-}: WorkspaceHomeProps) {
+function buildDetailRows(metrics: DashboardMetrics) {
+  return [
+    [
+      {
+        title: "Customer",
+        href: "/dashboard/customers",
+        icon: IconUsers,
+        stats: [
+          { label: "Total", value: String(metrics.customersTotal) },
+          { label: "Active", value: String(metrics.customersActive) },
+          {
+            label: "New this month",
+            value: String(metrics.customersNewThisMonth),
+          },
+        ],
+      },
+      {
+        title: "Supplier",
+        href: "/dashboard/suppliers",
+        icon: IconSuppliers,
+        stats: [
+          { label: "Total", value: String(metrics.suppliersTotal) },
+          { label: "Orders open", value: String(metrics.ordersOpen) },
+        ],
+      },
+      {
+        title: "Projects",
+        href: "/dashboard/projects",
+        icon: IconProjects,
+        stats: [
+          { label: "Active", value: String(metrics.projectsActive) },
+          { label: "On hold", value: String(metrics.projectsOnHold) },
+          { label: "Completed", value: String(metrics.projectsCompleted) },
+        ],
+      },
+    ],
+    [
+      {
+        title: "Employee",
+        href: "/dashboard/settings?section=employees",
+        icon: IconEmployee,
+        stats: [
+          { label: "Team size", value: String(metrics.employeesTotal) },
+        ],
+      },
+      {
+        title: "Advanced Setting",
+        href: "/dashboard/settings",
+        icon: IconSettings,
+        stats: [
+          { label: "Tax rate", value: metrics.taxRateLabel },
+          { label: "Validity", value: metrics.validityLabel },
+          { label: "Profile", value: metrics.profileLabel },
+        ],
+      },
+      {
+        title: "Calendar",
+        href: "/dashboard/calendar",
+        icon: IconCalendar,
+        stats: [
+          {
+            label: "Today",
+            value:
+              metrics.scheduleToday === 1
+                ? "1 item"
+                : `${metrics.scheduleToday} items`,
+          },
+          { label: "This week", value: String(metrics.scheduleThisWeek) },
+          { label: "Next up", value: metrics.nextUpLabel },
+        ],
+      },
+    ],
+  ];
+}
+
+interface WorkspaceHomeProps {
+  firstName: string;
+  metrics: DashboardMetrics;
+}
+
+export function WorkspaceHome({ firstName, metrics }: WorkspaceHomeProps) {
+  const { startCall } = useEmCall();
   const displayName = firstName || "there";
-  const statCards = buildStatCards(activeProjectsCount);
+  const statCards = buildStatCards(metrics);
+  const detailRows = buildDetailRows(metrics);
+
+  function openEmCall() {
+    unlockTtsAudio();
+    startCall();
+  }
 
   return (
     <div className="flex min-h-full min-w-0 flex-1">
@@ -151,13 +162,13 @@ export function WorkspaceHome({
               Here&apos;s what&apos;s happening with your business today.
             </p>
           </div>
-          <button
-            type="button"
+          <Link
+            href="/dashboard/today"
             className="inline-flex items-center gap-2 self-start rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10"
           >
             <IconCalendar className="h-4 w-4 text-cyan-400" />
             {formatTodayLabel()}
-          </button>
+          </Link>
         </header>
 
         <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -168,14 +179,8 @@ export function WorkspaceHome({
                 key={stat.label}
                 className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400">
-                    <IconTrendUp className="h-3.5 w-3.5" />
-                    {stat.trend}
-                  </span>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
+                  <Icon className="h-5 w-5" />
                 </div>
                 <p className="mt-4 text-3xl font-bold text-white">{stat.value}</p>
                 <p className="mt-1 text-sm font-medium text-slate-400">
@@ -186,7 +191,7 @@ export function WorkspaceHome({
           })}
         </section>
 
-        {DETAIL_ROWS.map((row, rowIndex) => (
+        {detailRows.map((row, rowIndex) => (
           <section
             key={rowIndex}
             className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3"
@@ -198,22 +203,13 @@ export function WorkspaceHome({
                   key={card.title}
                   className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400">
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      <h2 className="text-base font-semibold text-white">
-                        {card.title}
-                      </h2>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-400">
+                      <Icon className="h-5 w-5" />
                     </div>
-                    <button
-                      type="button"
-                      className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/5 hover:text-white"
-                      aria-label={`${card.title} menu`}
-                    >
-                      <IconMore className="h-4 w-4" />
-                    </button>
+                    <h2 className="text-base font-semibold text-white">
+                      {card.title}
+                    </h2>
                   </div>
 
                   <dl className="mt-5 space-y-3">
@@ -243,48 +239,34 @@ export function WorkspaceHome({
         ))}
 
         <section className="mt-6 mb-2 overflow-hidden rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/20 via-white/[0.04] to-cyan-500/10 p-5 sm:p-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-cyan-400 text-base font-bold text-white shadow-lg shadow-accent/30">
-                Ema
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">
-                  {greetingForNow()}, {displayName}
-                </h2>
-                <p className="mt-1 text-sm text-slate-300">
-                  Ready to quote faster? Ask Ema or jump into today&apos;s work.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {[
-                    "3 quotes due",
-                    "2 follow-ups",
-                    "1 job starting",
-                  ].map((chip) => (
-                    <span
-                      key={chip}
-                      className="rounded-full border border-white/10 bg-navy/40 px-3 py-1 text-xs font-medium text-slate-300"
-                    >
-                      {chip}
-                    </span>
-                  ))}
-                </div>
-              </div>
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-cyan-400 text-base font-bold text-white shadow-lg shadow-accent/30">
+              Ema
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                {greetingForNow()}, {displayName}
+              </h2>
+              <p className="mt-1 text-sm text-slate-300">
+                Ready to quote faster? Start an Em Call with Ema.
+              </p>
             </div>
           </div>
 
           <div className="mt-5 flex items-center gap-2 rounded-2xl border border-white/10 bg-navy/50 p-2">
-            <input
-              type="text"
-              placeholder="Ask Ema anything..."
-              className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-white placeholder-slate-500 outline-none"
-              readOnly
-              aria-label="Ask Ema anything"
-            />
             <button
               type="button"
+              onClick={openEmCall}
+              className="min-w-0 flex-1 rounded-xl px-3 py-2.5 text-left text-sm text-slate-400 transition hover:bg-white/5 hover:text-slate-200"
+              aria-label="Ask Ema — start Em Call"
+            >
+              Ask Ema anything…
+            </button>
+            <button
+              type="button"
+              onClick={openEmCall}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent text-white transition hover:bg-blue-600"
-              aria-label="Send message"
+              aria-label="Start Em Call with Ema"
             >
               <IconSend className="h-4 w-4" />
             </button>
@@ -292,7 +274,7 @@ export function WorkspaceHome({
         </section>
       </main>
 
-      <WorkspaceCustomersPanel />
+      <WorkspaceCustomersPanel customers={metrics.recentCustomers} />
     </div>
   );
 }
