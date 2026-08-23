@@ -12,6 +12,10 @@ import {
   IconSend,
 } from "@/components/dashboard/workspace-icons";
 import { EnterSupplierPricesModal } from "@/components/quotes/enter-supplier-prices-modal";
+import {
+  CreateQuoteLabourModal,
+  type CreateQuoteLabourConfirmPayload,
+} from "@/components/quotes/create-quote-labour-modal";
 import { PreInvoiceVoiceCapture } from "@/components/quotes/pre-invoice-voice-capture";
 import {
   ProjectsProcessColumn,
@@ -28,6 +32,7 @@ import {
   applySupplierPricesToQuote,
   prepareCustomerQuote,
   quoteToActionState,
+  saveCreateQuoteLabour,
 } from "@/lib/pre-invoice-actions";
 import { deletePreInvoiceByQuoteId } from "@/lib/delete-pre-invoice";
 import {
@@ -54,6 +59,7 @@ type ActiveModal =
   | null
   | { kind: "supplier"; quoteId: string }
   | { kind: "upload_prices"; quoteId: string }
+  | { kind: "create_quote_labour"; quoteId: string }
   | { kind: "send_customer"; quoteId: string }
   | { kind: "pdf_preview"; quoteId: string; pdfPath: string }
   | { kind: "start_date"; projectId: string };
@@ -481,25 +487,7 @@ export function PreInvoicesDashboard() {
           showFeedback("error", "Quote not found for this card.");
           return;
         }
-        setActionBusy(true);
-        try {
-          const result = await prepareCustomerQuote(quote);
-          await refreshAfterAction(
-            "Quote PDF created. Preview ready — send, save draft, or download."
-          );
-          setActiveModal({
-            kind: "pdf_preview",
-            quoteId: result.quoteId,
-            pdfPath: result.pdfPath,
-          });
-        } catch (err) {
-          showFeedback(
-            "error",
-            err instanceof Error ? err.message : "Failed to create quote"
-          );
-        } finally {
-          setActionBusy(false);
-        }
+        setActiveModal({ kind: "create_quote_labour", quoteId: quote.id });
         break;
       }
       case "send_customer":
@@ -686,6 +674,51 @@ export function PreInvoicesDashboard() {
       showFeedback(
         "error",
         err instanceof Error ? err.message : "Failed to save prices"
+      );
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function handleConfirmCreateQuoteLabour(
+    payload: CreateQuoteLabourConfirmPayload
+  ) {
+    if (!modalQuote) return;
+    setActionBusy(true);
+    setFeedback(null);
+    try {
+      const supabase = createClient();
+      const { data: employees, error: employeesError } = await supabase
+        .from("employees")
+        .select("*")
+        .order("full_name", { ascending: true });
+
+      if (employeesError) {
+        throw new Error("Failed to load employees for labour cost.");
+      }
+
+      const { quote: updatedQuote } = await saveCreateQuoteLabour({
+        quote: modalQuote,
+        employees: employees ?? [],
+        hoursByEmployeeId: payload.hoursByEmployeeId,
+        billingMode: payload.billingMode,
+        sellHourlyRate: payload.sellHourlyRate,
+        sellFlatAmount: payload.sellFlatAmount,
+      });
+
+      const result = await prepareCustomerQuote(updatedQuote);
+      await refreshAfterAction(
+        "Labour saved and quote PDF created. Preview ready — send, save draft, or download."
+      );
+      setActiveModal({
+        kind: "pdf_preview",
+        quoteId: result.quoteId,
+        pdfPath: result.pdfPath,
+      });
+    } catch (err) {
+      showFeedback(
+        "error",
+        err instanceof Error ? err.message : "Failed to create quote"
       );
     } finally {
       setActionBusy(false);
@@ -991,6 +1024,15 @@ export function PreInvoicesDashboard() {
           isSaving={actionBusy}
           onClose={() => setActiveModal(null)}
           onSave={handleSavePrices}
+        />
+      ) : null}
+
+      {activeModal?.kind === "create_quote_labour" && modalQuote ? (
+        <CreateQuoteLabourModal
+          quote={modalQuote}
+          isSaving={actionBusy}
+          onClose={() => setActiveModal(null)}
+          onConfirm={handleConfirmCreateQuoteLabour}
         />
       ) : null}
 

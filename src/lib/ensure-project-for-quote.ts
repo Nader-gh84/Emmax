@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase";
 import { materialsToStored, labourToStored } from "@/types/quote";
 import type { LabourItem, MaterialItem } from "@/types/quote";
+import type { LabourBillingMode } from "@/types/labour-quoting";
 
 /**
  * Ensures a projects row exists for a quote so the Pre-Invoices dashboard
@@ -18,6 +19,7 @@ export async function ensureProjectForQuote(input: {
   materials: MaterialItem[];
   labourItems: LabourItem[];
   grandTotal: number;
+  labourBillingMode?: LabourBillingMode | null;
 }): Promise<string | null> {
   const supabase = createClient();
   const projectName =
@@ -29,6 +31,7 @@ export async function ensureProjectForQuote(input: {
   const materials = materialsToStored(input.materials);
   const labourItems = labourToStored(input.labourItems);
   const value = Number(input.grandTotal) || 0;
+  const labourBillingMode = input.labourBillingMode ?? null;
 
   const { data: existing } = await supabase
     .from("projects")
@@ -45,6 +48,9 @@ export async function ensureProjectForQuote(input: {
         materials,
         labour_items: labourItems,
         value,
+        ...(labourBillingMode != null
+          ? { labour_billing_mode: labourBillingMode }
+          : {}),
         updated_at: now,
       })
       .eq("id", existing.id);
@@ -69,6 +75,7 @@ export async function ensureProjectForQuote(input: {
       start_date_confirmed: false,
       materials,
       labour_items: labourItems,
+      labour_billing_mode: labourBillingMode,
       updated_at: now,
     })
     .select("id")
@@ -95,6 +102,9 @@ export async function ensureProjectForQuote(input: {
           materials,
           labour_items: labourItems,
           value,
+          ...(labourBillingMode != null
+            ? { labour_billing_mode: labourBillingMode }
+            : {}),
           updated_at: now,
         })
         .eq("id", raced.id);
