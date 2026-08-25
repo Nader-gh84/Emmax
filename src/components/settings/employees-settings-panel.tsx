@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { EmployeeFormModal } from "@/components/settings/employee-form-modal";
 import { EmployeesEmptyState } from "@/components/settings/employees-empty-state";
 import { LabourQuotingSettingsCard } from "@/components/settings/labour-quoting-settings-card";
+import { MarkupSettingsCard } from "@/components/settings/markup-settings-card";
 import {
   touchBtnPrimary,
   touchBtnSecondary,
@@ -307,6 +308,7 @@ export function EmployeesSettingsPanel() {
       </div>
 
       <LabourQuotingSettingsCard />
+      <MarkupSettingsCard />
 
       {success ? (
         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-base text-green-400">

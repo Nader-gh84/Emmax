@@ -48,6 +48,11 @@ import {
   type QuoteActionState,
 } from "@/lib/quote-actions";
 import { mapExtractionToLineItems } from "@/lib/quote-extraction";
+import {
+  applySupplierCostsToMaterials,
+  DEFAULT_MATERIALS_MARKUP_PERCENT,
+  normalizeMaterialsMarkupPercent,
+} from "@/lib/materials-pricing";
 import { resolveEntityQuery } from "@/lib/entity-resolve";
 import type { EntityCandidate } from "@/lib/entity-resolve";
 import { buildDefaultSupplierMessage } from "@/lib/email/supplier-email";
@@ -381,6 +386,9 @@ function VoiceQuoteBuilderInner({
   >(async () => undefined);
   const [liveDraft, setLiveDraft] = useState("");
   const [supplierPricingApplied, setSupplierPricingApplied] = useState(false);
+  const [materialsMarkupPercent, setMaterialsMarkupPercent] = useState(
+    DEFAULT_MATERIALS_MARKUP_PERCENT
+  );
   const [emaTitleState, setEmaTitleState] = useState<
     "hidden" | "confirm" | "unknown" | "editing"
   >("hidden");
@@ -424,6 +432,25 @@ function VoiceQuoteBuilderInner({
   useEffect(() => {
     onProjectNameChange?.(projectName);
   }, [projectName, onProjectNameChange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMarkup() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("business_profiles")
+        .select("materials_markup_percent")
+        .maybeSingle();
+      if (cancelled) return;
+      setMaterialsMarkupPercent(
+        normalizeMaterialsMarkupPercent(data?.materials_markup_percent)
+      );
+    }
+    void loadMarkup();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!quoteParam) {
@@ -1304,20 +1331,12 @@ function VoiceQuoteBuilderInner({
   }
 
   function handleApplySupplierPrices(
-    updates: { materialId: string; unitPrice: number }[]
+    updates: { materialId: string; unitCost: number }[]
   ) {
     if (updates.length === 0) return;
 
-    const priceById = new Map(
-      updates.map((update) => [update.materialId, update.unitPrice])
-    );
-
     setMaterials((current) =>
-      current.map((item) => {
-        const nextPrice = priceById.get(item.id);
-        if (nextPrice == null) return item;
-        return { ...item, unitPrice: nextPrice };
-      })
+      applySupplierCostsToMaterials(current, updates, materialsMarkupPercent)
     );
     setIsEditingItems(false);
     setSupplierPricingApplied(true);
@@ -1325,7 +1344,7 @@ function VoiceQuoteBuilderInner({
     window.setTimeout(() => setCalcFlash(false), 700);
     showFeedback(
       "success",
-      `Applied ${updates.length} supplier price${updates.length === 1 ? "" : "s"}. Review totals, then save or send.`
+      `Applied ${updates.length} supplier cost${updates.length === 1 ? "" : "s"}. Review sell prices and totals, then save or send.`
     );
   }
 
@@ -1442,7 +1461,7 @@ function VoiceQuoteBuilderInner({
     setMaterials((current) =>
       current.map((item) => {
         if (item.id !== id) return item;
-        if (field === "quantity" || field === "unitPrice") {
+        if (field === "quantity" || field === "unitPrice" || field === "unitCost") {
           return { ...item, [field]: parseFloat(value) || 0 };
         }
         return { ...item, [field]: value };
@@ -2642,7 +2661,17 @@ function VoiceQuoteBuilderInner({
                       <th className="pb-3 pr-2 font-medium">Brand</th>
                       <th className="pb-3 pr-2 font-medium">Qty</th>
                       <th className="pb-3 pr-2 font-medium">Unit</th>
-                      <th className="pb-3 pr-2 font-medium">Unit Price</th>
+                      {showPriceColumns ? (
+                        <th
+                          className="pb-3 pr-2 font-medium"
+                          title="Internal — never on PDF or customer email"
+                        >
+                          Cost (internal)
+                        </th>
+                      ) : null}
+                      <th className="pb-3 pr-2 font-medium">
+                        {showPriceColumns ? "Sell" : "Unit Price"}
+                      </th>
                       <th className="pb-3 pr-2 font-medium">Total</th>
                       <th className="pb-3 font-medium">Action</th>
                     </tr>
@@ -2651,7 +2680,7 @@ function VoiceQuoteBuilderInner({
                     {displayRows.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={8}
+                          colSpan={showPriceColumns ? 9 : 8}
                           className="py-8 text-center text-sm text-slate-500"
                         >
                           No items yet. Record a quote or add an item manually.
@@ -2678,6 +2707,9 @@ function VoiceQuoteBuilderInner({
                               <td className="py-3 pr-2 text-slate-300">—</td>
                               <td className="py-3 pr-2 text-slate-300">1</td>
                               <td className="py-3 pr-2 text-slate-300">lot</td>
+                              {showPriceColumns ? (
+                                <td className="py-3 pr-2 text-slate-300">—</td>
+                              ) : null}
                               <td className="py-3 pr-2 text-slate-300">
                                 {formatCurrency(row.total)}
                               </td>
@@ -2769,6 +2801,14 @@ function VoiceQuoteBuilderInner({
                                   item.unit
                                 )}
                               </td>
+                              {showPriceColumns ? (
+                                <td
+                                  className="py-3 pr-2 text-slate-400"
+                                  title="Internal supplier cost — never on PDF or customer email"
+                                >
+                                  {formatCurrency(item.unitCost)}
+                                </td>
+                              ) : null}
                               <td className="py-3 pr-2 text-slate-300">
                                 {isEditingItems ? (
                                   <input
@@ -2852,6 +2892,9 @@ function VoiceQuoteBuilderInner({
                               )}
                             </td>
                             <td className="py-3 pr-2 text-slate-300">hour</td>
+                            {showPriceColumns ? (
+                              <td className="py-3 pr-2 text-slate-500">—</td>
+                            ) : null}
                             <td className="py-3 pr-2 text-slate-300">
                               {isEditingItems ? (
                                 <input

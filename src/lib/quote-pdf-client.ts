@@ -27,6 +27,7 @@ export interface QuotePdfInput {
 }
 
 function serializeMaterials(materials: MaterialItem[]) {
+  // Customer-facing only — never include unitCost (internal).
   return materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
     item,
     brand,

@@ -10,7 +10,8 @@ export interface MaterialOrderLine {
   supplier?: string;
   quantity: number;
   unit: string;
-  unitPrice?: number;
+  /** Supplier cost per unit. Orders never carry customer sell price. */
+  unitCost?: number;
   status?: string;
 }
 

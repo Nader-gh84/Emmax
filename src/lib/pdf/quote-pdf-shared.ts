@@ -46,6 +46,7 @@ export function formatCompanyAddress(branding: CompanyBrandingForPdf): string {
 export function buildPdfLineRows(data: QuotePdfData) {
   const materials = data.materials.map((item, index) => ({
     id: `m-${index}`,
+    unitCost: 0,
     ...item,
   }));
   const labour = (data.labourItems ?? []).map((item, index) => ({
@@ -102,6 +103,7 @@ export function computePdfTotals(data: QuotePdfData) {
   return calculateVoiceQuoteTotals({
     materials: data.materials.map((item, index) => ({
       id: `m-${index}`,
+      unitCost: 0,
       ...item,
     })),
     labourItems: (data.labourItems ?? []).map((item, index) => ({

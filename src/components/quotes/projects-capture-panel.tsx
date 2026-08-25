@@ -636,7 +636,10 @@ export function ProjectsCapturePanel({
                 <th>Unit</th>
                 {showPriceColumns ? (
                   <>
-                    <th className={styles.num}>Unit Price</th>
+                    <th className={styles.num} title="Internal — never on PDF or customer email">
+                      Cost (internal)
+                    </th>
+                    <th className={styles.num}>Sell</th>
                     <th className={styles.num}>Total</th>
                     <th> </th>
                   </>
@@ -649,7 +652,7 @@ export function ProjectsCapturePanel({
               {materials.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showPriceColumns || isEditingItems ? 8 : 5}
+                    colSpan={showPriceColumns || isEditingItems ? 9 : 5}
                     className={styles.empty}
                   >
                     No materials yet. Speak a list or add an item manually.
@@ -669,6 +672,7 @@ export function ProjectsCapturePanel({
                   <td className={styles.unit}>lot</td>
                   {showPriceColumns ? (
                     <>
+                      <td className={styles.num}>—</td>
                       <td className={styles.num}>{formatCurrency(materialsTotal)}</td>
                       <td className={styles.num}>{formatCurrency(materialsTotal)}</td>
                       <td />
@@ -734,6 +738,11 @@ export function ProjectsCapturePanel({
                     </td>
                     {showPriceColumns ? (
                       <>
+                        <td className={styles.num}>
+                          <span title="Internal supplier cost — never on PDF or customer email">
+                            {formatCurrency(item.unitCost)}
+                          </span>
+                        </td>
                         <td className={styles.num}>
                           {isEditingItems ? (
                             <input

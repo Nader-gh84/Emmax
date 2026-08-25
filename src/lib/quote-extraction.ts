@@ -68,7 +68,9 @@ export function mapExtractionToLineItems(
         brand: material.brand ?? "",
         quantity: sanitizeNumber(material.quantity, 1),
         unit: material.unit ?? "each",
-        unitPrice: sanitizeNumber(material.unitPrice, 0),
+        // AI guesses are neither real supplier cost nor agreed sell price.
+        unitCost: 0,
+        unitPrice: 0,
       })
     );
   }
@@ -200,7 +202,9 @@ Rules:
 - materials.brand: manufacturer or brand name if mentioned (e.g. "Leviton", "Legrand"); use "Generic" if not mentioned
 - materials.quantity: numeric quantity mentioned or reasonable default of 1
 - materials.unit: each, ft, sq ft, roll, box, etc. Never use hour/hours for materials
-- materials.unitPrice: estimated CAD price per unit
+- materials.unitPrice: ignored by the app for materials (always stored as 0 until
+  supplier pricing is applied). Still accepted in JSON for labour lines misclassified
+  as materials. Do not invent prices.
 - labourItems: put ALL labour/installation/rough-in/service time here (not in materials)
 - labourItems.description: clear labour description (e.g. "Labour – Installation")
 - labourItems.hours: numeric hours mentioned or reasonable default of 1

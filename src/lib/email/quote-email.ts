@@ -44,6 +44,7 @@ export interface QuoteEmailData {
 function toMaterialItems(data: QuoteEmailData) {
   return data.materials.map((item, index) => ({
     id: `m-${index}`,
+    unitCost: 0,
     ...item,
   }));
 }

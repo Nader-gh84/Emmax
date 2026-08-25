@@ -52,7 +52,7 @@ export function UploadSupplierPricingModal({
   materials: MaterialItem[];
   quoteId: string | null;
   onClose: () => void;
-  onApply: (updates: { materialId: string; unitPrice: number }[]) => void;
+  onApply: (updates: { materialId: string; unitCost: number }[]) => void;
 }) {
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
@@ -192,7 +192,7 @@ export function UploadSupplierPricingModal({
     setError(null);
 
     try {
-      const updates: { materialId: string; unitPrice: number }[] = [];
+      const updates: { materialId: string; unitCost: number }[] = [];
 
       for (const row of rows) {
         if (!selected[row.materialId]) continue;
@@ -200,10 +200,10 @@ export function UploadSupplierPricingModal({
         const price = Number(raw);
         if (!Number.isFinite(price) || price < 0) {
           throw new Error(
-            `Enter a valid price for “${row.materialItem || "material"}” or uncheck it.`
+            `Enter a valid supplier cost for “${row.materialItem || "material"}” or uncheck it.`
           );
         }
-        updates.push({ materialId: row.materialId, unitPrice: price });
+        updates.push({ materialId: row.materialId, unitCost: price });
       }
 
       if (updates.length === 0) {
@@ -327,7 +327,7 @@ export function UploadSupplierPricingModal({
                       <th className="px-3 py-2">Apply</th>
                       <th className="px-3 py-2">Quote material</th>
                       <th className="px-3 py-2">Supplier match</th>
-                      <th className="px-3 py-2 text-right">New unit price</th>
+                      <th className="px-3 py-2 text-right">Supplier unit cost</th>
                     </tr>
                   </thead>
                   <tbody>

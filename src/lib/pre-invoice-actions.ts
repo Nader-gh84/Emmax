@@ -8,6 +8,10 @@ import {
   employeeCostRate,
   summarizeCreateQuoteLabour,
 } from "@/lib/create-quote-labour";
+import {
+  applySupplierCostsToMaterials,
+  normalizeMaterialsMarkupPercent,
+} from "@/lib/materials-pricing";
 import { loadCompanyBrandingForPdf } from "@/lib/pdf/load-company-branding";
 import type { Employee } from "@/types/employee";
 import type { LabourBillingMode } from "@/types/labour-quoting";
@@ -201,13 +205,15 @@ export async function saveCreateQuoteLabour(
 }
 
 /**
- * Persist confirmed supplier unit prices for EVERY material line.
+ * Persist confirmed supplier unit costs for EVERY material line.
+ * Sell price (unitPrice) is derived from materials_markup_percent at apply time;
+ * the contractor can edit sell afterward without changing cost.
  * File attachment is optional audit only — it cannot complete step 3 alone.
  */
 export async function applySupplierPricesToQuote(
   quote: Quote,
   materials: MaterialItem[],
-  updates: { materialId: string; unitPrice: number }[],
+  updates: { materialId: string; unitCost: number }[],
   options: {
     file?: File | null;
     removeExistingFile?: boolean;
@@ -225,32 +231,43 @@ export async function applySupplierPricesToQuote(
 
   if (updates.length !== materials.length) {
     throw new Error(
-      "Every material line must have a confirmed unit price before completing Upload Prices."
+      "Every material line must have a confirmed supplier cost before completing Upload Prices."
     );
   }
 
-  const priceById = new Map(
-    updates.map((update) => [update.materialId, update.unitPrice])
+  const costById = new Map(
+    updates.map((update) => [update.materialId, update.unitCost])
   );
 
   for (const item of materials) {
-    if (!priceById.has(item.id)) {
+    if (!costById.has(item.id)) {
       throw new Error(
-        `Missing confirmed price for “${item.item || "material"}”.`
+        `Missing confirmed supplier cost for “${item.item || "material"}”.`
       );
     }
-    const price = priceById.get(item.id);
-    if (price == null || !Number.isFinite(price) || price < 0) {
+    const cost = costById.get(item.id);
+    if (cost == null || !Number.isFinite(cost) || cost < 0) {
       throw new Error(
-        `Invalid price for “${item.item || "material"}”.`
+        `Invalid supplier cost for “${item.item || "material"}”.`
       );
     }
   }
 
-  const nextMaterials = materials.map((item) => ({
-    ...item,
-    unitPrice: priceById.get(item.id) as number,
-  }));
+  const { data: profile } = await supabase
+    .from("business_profiles")
+    .select("materials_markup_percent")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const markupPercent = normalizeMaterialsMarkupPercent(
+    profile?.materials_markup_percent
+  );
+
+  const nextMaterials = applySupplierCostsToMaterials(
+    materials,
+    updates,
+    markupPercent
+  );
 
   const state = quoteToActionState({
     ...quote,

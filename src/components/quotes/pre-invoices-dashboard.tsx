@@ -649,7 +649,7 @@ export function PreInvoicesDashboard() {
   }
 
   async function handleSavePrices(payload: {
-    updates: { materialId: string; unitPrice: number }[];
+    updates: { materialId: string; unitCost: number }[];
     file: File | null;
     removeExistingFile: boolean;
   }) {
