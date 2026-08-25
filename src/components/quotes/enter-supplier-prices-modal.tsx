@@ -65,15 +65,15 @@ function buildConfirmedPrices(materials: MaterialItem[]): Record<string, string>
   const initial: Record<string, string> = {};
   for (const item of materials) {
     initial[item.id] =
-      Number.isFinite(item.unitPrice) && item.unitPrice >= 0
-        ? String(item.unitPrice)
+      Number.isFinite(item.unitCost) && item.unitCost >= 0
+        ? String(item.unitCost)
         : "";
   }
   return initial;
 }
 
 export type EnterSupplierPricesSavePayload = {
-  updates: { materialId: string; unitPrice: number }[];
+  updates: { materialId: string; unitCost: number }[];
   file: File | null;
   removeExistingFile: boolean;
 };
@@ -81,7 +81,7 @@ export type EnterSupplierPricesSavePayload = {
 /**
  * Pre-Invoice step 3: AI extract (same /api/extract-supplier-pricing as Voice
  * Quote Builder) + review, or full manual entry. Save requires EVERY material
- * line to have a confirmed real unit price — no file-only / partial completion.
+ * line to have a confirmed real supplier unit cost — no file-only / partial completion.
  */
 export function EnterSupplierPricesModal({
   materials,
@@ -258,7 +258,7 @@ export function EnterSupplierPricesModal({
 
   async function handleSave() {
     setError(null);
-    const updates: { materialId: string; unitPrice: number }[] = [];
+    const updates: { materialId: string; unitCost: number }[] = [];
     const missing: string[] = [];
 
     for (const item of materials) {
@@ -269,15 +269,15 @@ export function EnterSupplierPricesModal({
       }
       const price = Number(raw);
       if (!Number.isFinite(price) || price < 0) {
-        setError(`Invalid price for “${item.item || "material"}”.`);
+        setError(`Invalid supplier cost for “${item.item || "material"}”.`);
         return;
       }
-      updates.push({ materialId: item.id, unitPrice: price });
+      updates.push({ materialId: item.id, unitCost: price });
     }
 
     if (missing.length > 0) {
       setError(
-        `Every material needs a confirmed unit price before step 3 can complete. Missing: ${missing
+        `Every material needs a confirmed supplier cost before step 3 can complete. Missing: ${missing
           .slice(0, 3)
           .join(", ")}${missing.length > 3 ? ` (+${missing.length - 3} more)` : ""}.`
       );
@@ -285,7 +285,7 @@ export function EnterSupplierPricesModal({
     }
 
     if (updates.length !== materials.length) {
-      setError("Every material needs a confirmed unit price before saving.");
+      setError("Every material needs a confirmed supplier cost before saving.");
       return;
     }
 
@@ -306,7 +306,7 @@ export function EnterSupplierPricesModal({
               Upload Supplier Prices
             </h2>
             <p className="mt-1 text-sm text-slate-400">
-              Ema reads the supplier reply and suggests unit prices. Review and
+              Ema reads the supplier reply and suggests unit costs. Review and
               confirm every line before saving — estimated voice prices are not
               used.
             </p>
@@ -431,16 +431,17 @@ export function EnterSupplierPricesModal({
           ) : (
             <div className="space-y-5">
               <p className="text-sm text-slate-400">
-                Confirm a unit price for every material. Lines without a match
-                are flagged — fill them in before saving. Voice estimates are
-                not carried over.
+                Confirm a supplier unit cost for every material. Lines without a
+                match are flagged — fill them in before saving. Voice estimates
+                are not carried over. Sell price is set from your materials
+                markup after you save.
               </p>
 
               {!allLinesReady ? (
                 <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
                   {missingCount} of {materials.length} line
                   {materials.length === 1 ? "" : "s"} still need a confirmed
-                  unit price.
+                  supplier cost.
                 </div>
               ) : null}
 
@@ -450,7 +451,7 @@ export function EnterSupplierPricesModal({
                     <tr>
                       <th className="px-3 py-2">Quote material</th>
                       <th className="px-3 py-2">Match</th>
-                      <th className="px-3 py-2 text-right">Unit price</th>
+                      <th className="px-3 py-2 text-right">Supplier unit cost</th>
                     </tr>
                   </thead>
                   <tbody>

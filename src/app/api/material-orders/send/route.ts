@@ -24,6 +24,8 @@ interface SendMaterialOrderBody {
     supplier?: string;
     quantity?: number;
     unit?: string;
+    unitCost?: number;
+    /** @deprecated Accepted only to migrate old clients; mapped to unitCost. */
     unitPrice?: number;
     status?: string;
   }>;
@@ -78,7 +80,7 @@ export async function POST(request: Request) {
         supplier: (row.supplier ?? "").trim(),
         quantity: Number(row.quantity) || 0,
         unit: (row.unit ?? "ea").trim() || "ea",
-        unitPrice: Number(row.unitPrice) || 0,
+        unitCost: Number(row.unitCost ?? row.unitPrice) || 0,
         status: row.status ?? "In Quote",
       }))
       .filter((row) => row.name && row.quantity > 0);

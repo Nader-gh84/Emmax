@@ -197,16 +197,25 @@ export function normalizePaymentStatus(
   return isCostPaymentStatus(candidate) ? candidate : "unpaid";
 }
 
-/** Line total for a material order (qty × unitPrice). Tax not included. */
+/** Line total for a material order (qty × unitCost). Tax not included. */
 export function computeMaterialOrderTotal(order: {
   materials?:
-    | { quantity?: number | null; unitPrice?: number | null }[]
+    | {
+        quantity?: number | null;
+        unitCost?: number | null;
+        unit_cost?: number | null;
+        /** @deprecated Legacy conflated field — fallback only. */
+        unitPrice?: number | null;
+        unit_price?: number | null;
+      }[]
     | null;
 }): number {
   if (!Array.isArray(order.materials)) return 0;
   return order.materials.reduce((sum, line) => {
     const qty = asMoney(line.quantity);
-    const unit = asMoney(line.unitPrice);
+    const unit = asMoney(
+      line.unitCost ?? line.unit_cost ?? line.unitPrice ?? line.unit_price ?? 0
+    );
     return sum + qty * unit;
   }, 0);
 }
@@ -214,7 +223,13 @@ export function computeMaterialOrderTotal(order: {
 export type FinancialSummaryMaterialOrder = {
   payment_status?: string | null;
   materials?:
-    | { quantity?: number | null; unitPrice?: number | null }[]
+    | {
+        quantity?: number | null;
+        unitCost?: number | null;
+        unit_cost?: number | null;
+        unitPrice?: number | null;
+        unit_price?: number | null;
+      }[]
     | null;
 };
 

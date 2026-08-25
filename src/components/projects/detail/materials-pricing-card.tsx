@@ -25,7 +25,7 @@ function pricesBadge(materialOrder: MaterialOrder | null): {
     };
   }
   const hasPrices = materialOrder.materials.some(
-    (line) => Number(line.unitPrice) > 0
+    (line) => Number(line.unitCost) > 0
   );
   if (hasPrices) {
     return {
@@ -63,7 +63,7 @@ export function MaterialsPricingCard({
           supplier: (line.supplier || "").trim() || defaultSupplier || "—",
           quantity: Number(line.quantity) || 0,
           unit: line.unit || "ea",
-          unitPrice: Number(line.unitPrice) || 0,
+          unitCost: Number(line.unitCost) || 0,
         }))
       : projectMaterials.map((row) => ({
           name: row.item,
@@ -71,11 +71,11 @@ export function MaterialsPricingCard({
           supplier: defaultSupplier || "—",
           quantity: Number(row.quantity) || 0,
           unit: row.unit || "ea",
-          unitPrice: Number(row.unitPrice) || 0,
+          unitCost: Number(row.unitCost ?? 0) || 0,
         }));
 
   const subtotal = lines.reduce(
-    (sum, line) => sum + line.quantity * line.unitPrice,
+    (sum, line) => sum + line.quantity * line.unitCost,
     0
   );
   const tax = subtotal * taxRate;
@@ -132,7 +132,7 @@ export function MaterialsPricingCard({
                 <th className="pb-2 pr-3 font-semibold">Brand</th>
                 <th className="pb-2 pr-3 font-semibold">Supplier</th>
                 <th className="pb-2 pr-3 font-semibold text-right">Qty</th>
-                <th className="pb-2 pr-3 font-semibold text-right">Unit $</th>
+                <th className="pb-2 pr-3 font-semibold text-right">Cost $</th>
                 <th className="pb-2 font-semibold text-right">Line</th>
               </tr>
             </thead>
@@ -146,10 +146,10 @@ export function MaterialsPricingCard({
                     {line.quantity} {line.unit}
                   </td>
                   <td className="py-2.5 pr-3 text-right text-slate-300">
-                    {formatProjectDetailMoney(line.unitPrice)}
+                    {formatProjectDetailMoney(line.unitCost)}
                   </td>
                   <td className="py-2.5 text-right font-medium text-white">
-                    {formatProjectDetailMoney(line.quantity * line.unitPrice)}
+                    {formatProjectDetailMoney(line.quantity * line.unitCost)}
                   </td>
                 </tr>
               ))}

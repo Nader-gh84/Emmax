@@ -90,11 +90,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       materials: mapped.materials.map(
-        ({ item, brand, quantity, unit, unitPrice }) => ({
+        ({ item, brand, quantity, unit, unitCost, unitPrice }) => ({
           item,
           brand,
           quantity,
           unit,
+          unitCost,
           unitPrice,
         })
       ),

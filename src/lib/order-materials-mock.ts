@@ -6,7 +6,8 @@ export interface OrderMaterialRow {
   supplier: string;
   quantity: number;
   unit: string;
-  unitPrice: number;
+  /** Supplier cost per unit — never customer sell price. */
+  unitCost: number;
   status: "In Quote" | "Added" | "Edited";
 }
 

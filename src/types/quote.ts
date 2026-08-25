@@ -9,6 +9,9 @@ export interface MaterialItem {
   brand: string;
   quantity: number;
   unit: string;
+  /** What the supplier charged (internal). Never show to the customer. */
+  unitCost: number;
+  /** What the customer pays. Used on quote PDF / email. */
   unitPrice: number;
 }
 
@@ -48,6 +51,7 @@ export function createMaterialItem(
     brand: partial.brand ?? "",
     quantity: partial.quantity ?? 1,
     unit: partial.unit ?? "each",
+    unitCost: partial.unitCost ?? 0,
     unitPrice: partial.unitPrice ?? 0,
   };
 }
@@ -65,6 +69,11 @@ export function createLabourItem(
 
 export function materialLineTotal(item: MaterialItem): number {
   return item.quantity * item.unitPrice;
+}
+
+/** Internal cost total for a material line (never customer-facing). */
+export function materialLineCostTotal(item: MaterialItem): number {
+  return item.quantity * item.unitCost;
 }
 
 export function labourLineTotal(item: LabourItem): number {
@@ -154,6 +163,9 @@ export interface StoredMaterial {
   brand?: string;
   quantity: number;
   unit: string;
+  /** Supplier cost per unit (internal). */
+  unitCost: number;
+  /** Customer sell price per unit. */
   unitPrice: number;
 }
 
@@ -212,11 +224,12 @@ export interface Quote {
 }
 
 export function materialsToStored(materials: MaterialItem[]): StoredMaterial[] {
-  return materials.map(({ item, brand, quantity, unit, unitPrice }) => ({
+  return materials.map(({ item, brand, quantity, unit, unitCost, unitPrice }) => ({
     item,
     brand: brand?.trim() || undefined,
     quantity: sanitizeNumeric(quantity),
     unit,
+    unitCost: sanitizeNumeric(unitCost),
     unitPrice: sanitizeNumeric(unitPrice),
   }));
 }
@@ -235,15 +248,27 @@ function sanitizeNumeric(value: number): number {
 }
 
 export function storedToMaterials(stored: StoredMaterial[]): MaterialItem[] {
-  return stored.map((material) =>
-    createMaterialItem({
+  return stored.map((material) => {
+    const raw = material as StoredMaterial & {
+      unit_cost?: number;
+      unit_price?: number;
+    };
+    const unitPrice = sanitizeNumeric(
+      raw.unitPrice ?? raw.unit_price ?? 0
+    );
+    // Migration rule: missing unitCost → assume equal to unitPrice (no margin).
+    const unitCost = sanitizeNumeric(
+      raw.unitCost ?? raw.unit_cost ?? unitPrice
+    );
+    return createMaterialItem({
       item: material.item ?? "",
       brand: material.brand ?? "",
       quantity: sanitizeNumeric(material.quantity ?? 1),
       unit: material.unit ?? "each",
-      unitPrice: sanitizeNumeric(material.unitPrice ?? 0),
-    })
-  );
+      unitCost,
+      unitPrice,
+    });
+  });
 }
 
 export function splitCustomerName(fullName: string): {

@@ -37,7 +37,7 @@ function mapOrderMaterials(lines: MaterialOrderLine[]): OrderMaterialRow[] {
     supplier: line.supplier || "",
     quantity: Number(line.quantity) || 0,
     unit: line.unit || "ea",
-    unitPrice: Number(line.unitPrice) || 0,
+    unitCost: Number(line.unitCost) || 0,
     status: (line.status as OrderMaterialRow["status"]) || "In Quote",
   }));
 }
@@ -51,7 +51,10 @@ function mapStoredMaterials(materials: StoredMaterial[]): OrderMaterialRow[] {
     supplier: "",
     quantity: Number(row.quantity) || 0,
     unit: row.unit || "ea",
-    unitPrice: Number(row.unitPrice) || 0,
+    // Orders carry supplier cost only — never the customer sell price.
+    // Pre-migration rows: unitCost may be absent; fall back once, then migration
+    // backfills unitCost = unitPrice (assumed no margin).
+    unitCost: Number(row.unitCost ?? row.unitPrice) || 0,
     status: "In Quote" as const,
   }));
 }

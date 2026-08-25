@@ -76,7 +76,7 @@ function normalizeOrderMaterials(
     partNumber: row.partNumber,
     quantity: Number(row.quantity) || 0,
     unit: row.unit?.trim() || "each",
-    unitPrice: row.unitPrice,
+    unitCost: row.unitCost,
     status: row.status,
   }));
 }

@@ -228,7 +228,7 @@ export function OrderMaterialsPage({
 
   const subtotal = useMemo(
     () =>
-      materials.reduce((sum, row) => sum + row.quantity * row.unitPrice, 0),
+      materials.reduce((sum, row) => sum + row.quantity * row.unitCost, 0),
     [materials]
   );
   const totalQty = useMemo(
@@ -529,7 +529,7 @@ export function OrderMaterialsPage({
                   </thead>
                   <tbody>
                     {materials.map((row, index) => {
-                      const lineTotal = row.quantity * row.unitPrice;
+                      const lineTotal = row.quantity * row.unitCost;
                       return (
                         <tr
                           key={row.id}
@@ -568,7 +568,7 @@ export function OrderMaterialsPage({
                           </td>
                           <td className="px-3 py-3">{row.unit}</td>
                           <td className="px-3 py-3">
-                            {formatOrderMoney(row.unitPrice)}
+                            {formatOrderMoney(row.unitCost)}
                           </td>
                           <td className="px-3 py-3 font-medium text-white">
                             {formatOrderMoney(lineTotal)}
