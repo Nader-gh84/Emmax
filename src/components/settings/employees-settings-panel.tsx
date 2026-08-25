@@ -96,10 +96,16 @@ function EmployeeCard({
       )}
 
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+        <Link
+          href={`/dashboard/employees/${employee.id}`}
+          className={`${touchBtnSecondary} w-full sm:w-auto`}
+        >
+          View accounting
+        </Link>
         <button
           type="button"
           onClick={onEdit}
-          className={`${touchBtnSecondary} w-full sm:w-auto`}
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-accent/40 px-6 text-base font-medium text-accent transition hover:bg-accent/10 sm:w-auto"
         >
           Edit
         </button>
@@ -278,8 +284,15 @@ export function EmployeesSettingsPanel() {
           <h2 className="text-lg font-semibold text-white">Employees</h2>
           <p className="mt-1 text-sm text-slate-400">
             Register crew members with pay rates for labour cost at Create Quote
-            and Team &amp; Time. Assign them on Project Detail so they get
-            notified when a project starts.
+            and Team &amp; Time. Open an employee&apos;s account to manage labour
+            invoices and payments, or use{" "}
+            <Link
+              href="/dashboard/employees"
+              className="font-medium text-accent hover:text-blue-400"
+            >
+              Employees
+            </Link>{" "}
+            in the sidebar for outstanding balances.
           </p>
         </div>
         {employees.length > 0 ? (

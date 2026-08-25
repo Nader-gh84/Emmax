@@ -98,7 +98,7 @@ function buildDetailRows(metrics: DashboardMetrics) {
     [
       {
         title: "Employee",
-        href: "/dashboard/settings?section=employees",
+        href: "/dashboard/employees",
         icon: IconEmployee,
         stats: [
           { label: "Team size", value: String(metrics.employeesTotal) },

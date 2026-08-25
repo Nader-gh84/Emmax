@@ -42,18 +42,14 @@ export const workspaceNavItems = [
   },
   {
     label: "Employee",
-    // Points into Advance Setting > Employees (no separate data store on the old placeholder route).
-    href: "/dashboard/settings?section=employees",
-    matchPath: "/dashboard/settings",
-    matchSection: "employees",
+    href: "/dashboard/employees",
+    matchPath: "/dashboard/employees",
     icon: IconEmployee,
   },
   {
     label: "Advance Setting",
     href: "/dashboard/settings",
     matchPath: "/dashboard/settings",
-    // Active for business settings (and any future non-employee sections).
-    matchSection: null,
     icon: IconSettings,
   },
   {
@@ -67,7 +63,7 @@ export const workspaceNavItems = [
 export function isWorkspaceNavItemActive(
   item: (typeof workspaceNavItems)[number],
   pathname: string,
-  section: string | null
+  _section: string | null
 ): boolean {
   if (item.matchPath === "/dashboard") {
     return pathname === "/dashboard";
@@ -80,18 +76,5 @@ export function isWorkspaceNavItemActive(
     );
   }
 
-  if (!pathname.startsWith(item.matchPath)) {
-    return false;
-  }
-
-  if ("matchSection" in item) {
-    if (item.matchSection === "employees") {
-      return section === "employees";
-    }
-    if (item.matchSection === null) {
-      return section !== "employees";
-    }
-  }
-
-  return true;
+  return pathname.startsWith(item.matchPath);
 }

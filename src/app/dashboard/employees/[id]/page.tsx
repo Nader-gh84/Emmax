@@ -76,7 +76,7 @@ export default async function EmployeeDetailsRoute({
           This employee may have been deleted, or the link is invalid.
         </p>
         <Link
-          href="/dashboard/settings?section=employees"
+          href="/dashboard/employees"
           className="mt-6 text-sm font-semibold text-accent hover:text-blue-400"
         >
           Back to Employees
