@@ -190,7 +190,7 @@ export function EmployeeDetailsPage({
       <div className="border-b border-white/10 bg-[#14263D]/80 px-4 py-5 sm:px-6 lg:px-8">
         <nav className="text-sm text-slate-500">
           <Link
-            href="/dashboard/settings?section=employees"
+            href="/dashboard/employees"
             className="transition hover:text-accent"
           >
             Employees
@@ -276,10 +276,10 @@ export function EmployeeDetailsPage({
 
           <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
             <Link
-              href="/dashboard/settings?section=employees"
+              href="/dashboard/employees"
               className={touchBtnSecondary}
             >
-              Back to Settings
+              Back to Employees
             </Link>
             <button
               type="button"
