@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   IconCalendar,
   IconCheckCircle,
@@ -189,6 +189,9 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
   const [timeEntries, setTimeEntries] = useState(props.initialTimeEntries);
   const [changeOrders, setChangeOrders] = useState(props.initialChangeOrders);
   const [activities, setActivities] = useState(props.initialActivities);
+  const [assignedEmployees, setAssignedEmployees] = useState<Employee[]>(
+    props.assignedEmployees
+  );
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -202,6 +205,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     setTimeEntries(props.initialTimeEntries);
     setChangeOrders(props.initialChangeOrders);
     setActivities(props.initialActivities);
+    setAssignedEmployees(props.assignedEmployees);
     setMaterialOrders(
       props.materialOrders?.length
         ? props.materialOrders
@@ -216,6 +220,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
     props.initialTimeEntries,
     props.initialChangeOrders,
     props.initialActivities,
+    props.assignedEmployees,
     props.materialOrders,
     props.materialOrder,
   ]);
@@ -230,6 +235,10 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
       return next;
     });
   }, [liveOrder]);
+
+  const handleAssignmentsChange = useCallback((assigned: Employee[]) => {
+    setAssignedEmployees(assigned);
+  }, []);
 
   const projectStarted =
     liveStatus === "in_progress" || liveStatus === "completed";
@@ -846,7 +855,10 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               />
             </div>
             <div className="space-y-5 xl:col-span-4">
-              <ProjectAssignedEmployees projectId={projectId} />
+              <ProjectAssignedEmployees
+                projectId={projectId}
+                onAssignmentsChange={handleAssignmentsChange}
+              />
               <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
@@ -918,7 +930,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               />
               <TeamTimeCard
                 projectId={projectId}
-                assignedEmployees={props.assignedEmployees}
+                assignedEmployees={assignedEmployees}
                 initialEntries={timeEntries}
                 onEntriesChange={setTimeEntries}
                 readOnly={projectClosed}
@@ -963,6 +975,7 @@ export function ProjectDetailPage(props: ProjectDetailDashboardProps) {
               <ProjectAssignedEmployees
                 projectId={projectId}
                 readOnly={projectClosed}
+                onAssignmentsChange={handleAssignmentsChange}
               />
               <RecentActivityCard activities={activities} />
             </div>
