@@ -236,7 +236,7 @@ function ProjectCard({
                   onEdit();
                 }}
               >
-                Edit
+                Edit Materials
               </button>
               {project.pdfPath ? (
                 <button
@@ -293,6 +293,7 @@ export function PreInvoicesDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const voiceSectionRef = useRef<HTMLDivElement | null>(null);
+  const processSectionRef = useRef<HTMLDivElement | null>(null);
   const [cards, setCards] = useState<PreInvoiceProjectCard[]>([]);
   const [quotesById, setQuotesById] = useState<Record<string, Quote>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -421,6 +422,21 @@ export function PreInvoicesDashboard() {
   const processSteps = selectedCard
     ? selectedCard.steps
     : newProjectWorkflowSteps();
+
+  function selectProjectCard(card: PreInvoiceProjectCard) {
+    const nextId = card.quoteId || card.id;
+    setSelectedQuoteId(nextId);
+
+    // On tablet/mobile the process column stacks above the list — bring it into view.
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1279px)").matches) {
+      window.requestAnimationFrame(() => {
+        processSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    }
+  }
 
   const modalQuote =
     activeModal && "quoteId" in activeModal
@@ -903,16 +919,21 @@ export function PreInvoicesDashboard() {
             }}
           />
         </div>
-        <ProjectsProcessColumn
-          projectTitle={processTitle}
-          steps={processSteps}
-          busy={actionBusy}
-          interactive={Boolean(selectedCard)}
-          onStepAction={(stepId) => {
-            if (!selectedCard) return;
-            void handleStepAction(selectedCard, stepId);
-          }}
-        />
+        <div ref={processSectionRef}>
+          <ProjectsProcessColumn
+            projectTitle={processTitle}
+            projectNumber={selectedCard?.projectNumber ?? null}
+            statusLabel={selectedCard?.statusLabel ?? null}
+            nextActionText={selectedCard?.nextActionText ?? null}
+            steps={processSteps}
+            busy={actionBusy}
+            interactive={Boolean(selectedCard)}
+            onStepAction={(stepId) => {
+              if (!selectedCard) return;
+              void handleStepAction(selectedCard, stepId);
+            }}
+          />
+        </div>
       </div>
 
       {(feedback || error) && (
@@ -970,9 +991,7 @@ export function PreInvoicesDashboard() {
                   selectedQuoteId === project.quoteId ||
                   selectedQuoteId === project.id
                 }
-                onSelect={() =>
-                  setSelectedQuoteId(project.quoteId || project.id)
-                }
+                onSelect={() => selectProjectCard(project)}
                 onEdit={() => {
                   if (!project.quoteId) return;
                   router.push(
