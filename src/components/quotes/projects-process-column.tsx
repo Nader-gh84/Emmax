@@ -98,12 +98,18 @@ function StepGlyph({ id }: { id: WorkflowStepId }) {
   }
 }
 
-function tagForState(state: ProjectWorkflowStep["state"]) {
+function tagForStep(
+  state: ProjectWorkflowStep["state"],
+  actionable: boolean
+): { label: string; className: string } {
   if (state === "completed") {
     return { label: "Done", className: `${styles.tag} ${styles.tagDone}` };
   }
   if (state === "active") {
-    return { label: "In Progress", className: `${styles.tag} ${styles.tagActive}` };
+    if (actionable) {
+      return { label: "Current", className: `${styles.tag} ${styles.tagActive}` };
+    }
+    return { label: "Waiting", className: `${styles.tag} ${styles.tagWaiting}` };
   }
   return { label: "Pending", className: styles.tag };
 }
@@ -119,40 +125,64 @@ export function newProjectWorkflowSteps(): ProjectWorkflowStep[] {
 
 export function ProjectsProcessColumn({
   projectTitle,
+  projectNumber,
+  statusLabel,
+  nextActionText,
   steps,
   busy,
   interactive,
   onStepAction,
 }: {
   projectTitle: string;
+  projectNumber?: string | null;
+  statusLabel?: string | null;
+  nextActionText?: string | null;
   steps: ProjectWorkflowStep[];
   busy: boolean;
   interactive: boolean;
   onStepAction: (stepId: WorkflowStepId) => void;
 }) {
   const heading = projectTitle.trim() || "New project";
+  const waitingCopy = nextActionText?.trim() || null;
 
   return (
     <section className={`${styles.card} ${styles.process}`}>
       <p className={styles.processEyebrow}>Project process</p>
       <h2>{heading}</h2>
-      <p className={styles.sub}>Follow these simple steps from start to finish.</p>
+      {interactive ? (
+        <div className={styles.processMeta}>
+          {projectNumber?.trim() ? (
+            <span className={styles.processNumber}>{projectNumber.trim()}</span>
+          ) : null}
+          {statusLabel?.trim() ? (
+            <span className={`${styles.tag} ${styles.tagActive}`}>
+              {statusLabel.trim()}
+            </span>
+          ) : null}
+        </div>
+      ) : (
+        <p className={styles.sub}>Follow these simple steps from start to finish.</p>
+      )}
+      {interactive && waitingCopy ? (
+        <p className={styles.processNext}>{waitingCopy}</p>
+      ) : null}
 
       <div className={styles.steps}>
         {PRE_INVOICE_WORKFLOW_STEPS.map((definition, index) => {
           const step = steps[index] ?? {
             id: definition.id,
             state: "locked" as const,
+            actionLabel: null,
           };
-          const tag = tagForState(step.state);
-          const clickable =
-            interactive &&
-            !busy &&
-            (step.state === "active" || step.state === "completed");
+          const isActive = step.state === "active";
+          const actionLabel = step.actionLabel?.trim() || null;
+          const actionable =
+            interactive && isActive && Boolean(actionLabel) && !busy;
+          const tag = tagForStep(step.state, Boolean(actionLabel));
           const stepClass =
             step.state === "completed"
               ? `${styles.step} ${styles.stepDone}`
-              : step.state === "active"
+              : isActive
                 ? `${styles.step} ${styles.stepActive}`
                 : styles.step;
 
@@ -161,23 +191,29 @@ export function ProjectsProcessColumn({
               <div className={styles.stepRail}>
                 <span className={styles.stepNum}>{definition.number}</span>
               </div>
-              <button
-                type="button"
-                className={`${styles.stepBody} ${clickable ? styles.stepClickable : ""}`}
-                disabled={!clickable}
-                onClick={() => {
-                  if (step.state === "active") onStepAction(definition.id);
-                }}
-              >
+              <div className={styles.stepBody}>
                 <span className={`${styles.stepIcon} ${ICON_CLASS[definition.id]}`}>
                   <StepGlyph id={definition.id} />
                 </span>
                 <div className={styles.stepText}>
                   <h4>{definition.title}</h4>
                   <p>{definition.description}</p>
+                  {actionable ? (
+                    <button
+                      type="button"
+                      className={styles.stepCta}
+                      disabled={busy}
+                      onClick={() => onStepAction(definition.id)}
+                    >
+                      {actionLabel}
+                    </button>
+                  ) : null}
+                  {isActive && !actionLabel && interactive && waitingCopy ? (
+                    <p className={styles.stepWaiting}>{waitingCopy}</p>
+                  ) : null}
                 </div>
                 <span className={tag.className}>{tag.label}</span>
-              </button>
+              </div>
             </div>
           );
         })}
