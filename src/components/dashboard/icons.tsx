@@ -257,3 +257,15 @@ export function IconTrash({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function IconTranslate({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 5h12M9 3v2m4 13l4-10 4 10M10.5 16h7M5 9a7 7 0 007 7h1"
+      />
+    </svg>
+  );
+}

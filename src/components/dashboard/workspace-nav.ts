@@ -5,6 +5,7 @@ import {
   IconInbox,
   IconSettings,
   IconSuppliers,
+  IconTranslate,
   IconUsers,
 } from "@/components/dashboard/icons";
 import { IconProjects } from "@/components/dashboard/workspace-icons";
@@ -21,6 +22,12 @@ export const workspaceNavItems = [
     href: "/dashboard/inbox",
     matchPath: "/dashboard/inbox",
     icon: IconInbox,
+  },
+  {
+    label: "Translator",
+    href: "/dashboard/translator",
+    matchPath: "/dashboard/translator",
+    icon: IconTranslate,
   },
   {
     label: "Customer",
