@@ -399,10 +399,14 @@ export function PreInvoicesDashboard() {
 
   const stats = useMemo(() => buildPreInvoiceStats(cards), [cards]);
 
-  const selectedCard =
-    cards.find((card) => card.quoteId === selectedQuoteId) ??
-    cards.find((card) => card.id === selectedQuoteId) ??
-    null;
+  const selectedCard = useMemo(() => {
+    if (!selectedQuoteId) return null;
+    return (
+      cards.find((card) => card.quoteId === selectedQuoteId) ??
+      cards.find((card) => card.id === selectedQuoteId) ??
+      null
+    );
+  }, [cards, selectedQuoteId]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -416,6 +420,7 @@ export function PreInvoicesDashboard() {
     }
   }, [cards, isLoading, selectedQuoteId]);
 
+  // Single source of truth: the same `steps` array rendered on the project card.
   const processTitle = selectedCard
     ? selectedCard.title
     : captureProjectName.trim() || "New project";
@@ -424,7 +429,9 @@ export function PreInvoicesDashboard() {
     : newProjectWorkflowSteps();
 
   function selectProjectCard(card: PreInvoiceProjectCard) {
-    const nextId = card.quoteId || card.id;
+    // Prefer quoteId — that is the pipeline identity shared with ?quote= deep links.
+    const nextId = (card.quoteId || card.id || "").trim();
+    if (!nextId) return;
     setSelectedQuoteId(nextId);
 
     // On tablet/mobile the process column stacks above the list — bring it into view.
@@ -921,6 +928,7 @@ export function PreInvoicesDashboard() {
         </div>
         <div ref={processSectionRef}>
           <ProjectsProcessColumn
+            key={selectedCard?.quoteId || selectedCard?.id || "new-project"}
             projectTitle={processTitle}
             projectNumber={selectedCard?.projectNumber ?? null}
             statusLabel={selectedCard?.statusLabel ?? null}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef } from "react";
 import styles from "@/components/quotes/projects-page.module.css";
 import {
   PRE_INVOICE_WORKFLOW_STEPS,
@@ -100,12 +101,17 @@ function StepGlyph({ id }: { id: WorkflowStepId }) {
 
 function tagForStep(
   state: ProjectWorkflowStep["state"],
-  actionable: boolean
+  actionable: boolean,
+  interactive: boolean
 ): { label: string; className: string } {
   if (state === "completed") {
     return { label: "Done", className: `${styles.tag} ${styles.tagDone}` };
   }
   if (state === "active") {
+    // Unselected "new project" ladder must not look like a real project's Current step.
+    if (!interactive) {
+      return { label: "Start", className: `${styles.tag} ${styles.tagActive}` };
+    }
     if (actionable) {
       return { label: "Current", className: `${styles.tag} ${styles.tagActive}` };
     }
@@ -144,6 +150,27 @@ export function ProjectsProcessColumn({
 }) {
   const heading = projectTitle.trim() || "New project";
   const waitingCopy = nextActionText?.trim() || null;
+  const activeStepRef = useRef<HTMLDivElement | null>(null);
+
+  // Canonical lookup by step id — never trust array index alignment.
+  const stepById = useMemo(() => {
+    const map = new Map<WorkflowStepId, ProjectWorkflowStep>();
+    for (const step of steps) {
+      map.set(step.id, step);
+    }
+    return map;
+  }, [steps]);
+
+  const activeStepId =
+    steps.find((step) => step.state === "active")?.id ?? null;
+
+  useEffect(() => {
+    if (!interactive || !activeStepId) return;
+    activeStepRef.current?.scrollIntoView({
+      block: "nearest",
+      behavior: "smooth",
+    });
+  }, [interactive, activeStepId, projectNumber, statusLabel]);
 
   return (
     <section className={`${styles.card} ${styles.process}`}>
@@ -168,8 +195,8 @@ export function ProjectsProcessColumn({
       ) : null}
 
       <div className={styles.steps}>
-        {PRE_INVOICE_WORKFLOW_STEPS.map((definition, index) => {
-          const step = steps[index] ?? {
+        {PRE_INVOICE_WORKFLOW_STEPS.map((definition) => {
+          const step = stepById.get(definition.id) ?? {
             id: definition.id,
             state: "locked" as const,
             actionLabel: null,
@@ -178,7 +205,7 @@ export function ProjectsProcessColumn({
           const actionLabel = step.actionLabel?.trim() || null;
           const actionable =
             interactive && isActive && Boolean(actionLabel) && !busy;
-          const tag = tagForStep(step.state, Boolean(actionLabel));
+          const tag = tagForStep(step.state, Boolean(actionLabel), interactive);
           const stepClass =
             step.state === "completed"
               ? `${styles.step} ${styles.stepDone}`
@@ -187,7 +214,13 @@ export function ProjectsProcessColumn({
                 : styles.step;
 
           return (
-            <div key={definition.id} className={stepClass}>
+            <div
+              key={definition.id}
+              className={stepClass}
+              ref={isActive ? activeStepRef : undefined}
+              data-step-id={definition.id}
+              data-step-state={step.state}
+            >
               <div className={styles.stepRail}>
                 <span className={styles.stepNum}>{definition.number}</span>
               </div>
