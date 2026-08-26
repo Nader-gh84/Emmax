@@ -12,9 +12,12 @@ import type { Employee } from "@/types/employee";
 export function ProjectAssignedEmployees({
   projectId,
   readOnly = false,
+  onAssignmentsChange,
 }: {
   projectId: string;
   readOnly?: boolean;
+  /** Persist-confirmed assignees (after load/save). Not called for unsaved checkbox toggles. */
+  onAssignmentsChange?: (assigned: Employee[]) => void;
 }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -23,6 +26,14 @@ export function ProjectAssignedEmployees({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loadFailedMissingTable, setLoadFailedMissingTable] = useState(false);
+
+  function employeesForIds(
+    roster: Employee[],
+    ids: string[]
+  ): Employee[] {
+    const idSet = new Set(ids);
+    return roster.filter((employee) => idSet.has(employee.id));
+  }
 
   const load = useCallback(async () => {
     setError(null);
@@ -59,16 +70,19 @@ export function ProjectAssignedEmployees({
       );
       setEmployees([]);
       setSelectedIds([]);
+      // Do not clear parent on load failure — keep last known good state.
       return;
     }
 
-    setEmployees((employeeRows as Employee[]) ?? []);
-    setSelectedIds(
-      ((assignmentRows as { employee_id: string }[] | null) ?? []).map(
-        (row) => row.employee_id
-      )
-    );
-  }, [projectId]);
+    const roster = (employeeRows as Employee[]) ?? [];
+    const ids = (
+      (assignmentRows as { employee_id: string }[] | null) ?? []
+    ).map((row) => row.employee_id);
+
+    setEmployees(roster);
+    setSelectedIds(ids);
+    onAssignmentsChange?.(employeesForIds(roster, ids));
+  }, [projectId, onAssignmentsChange]);
 
   useEffect(() => {
     async function init() {
@@ -106,11 +120,11 @@ export function ProjectAssignedEmployees({
       if (!response.ok) {
         throw new Error(data.error || "Failed to save assignments.");
       }
-      setSelectedIds(
-        Array.isArray(data.employeeIds)
-          ? (data.employeeIds as string[])
-          : selectedIds
-      );
+      const savedIds = Array.isArray(data.employeeIds)
+        ? (data.employeeIds as string[])
+        : selectedIds;
+      setSelectedIds(savedIds);
+      onAssignmentsChange?.(employeesForIds(employees, savedIds));
       setSuccess("Assigned employees saved.");
     } catch (saveError) {
       setError(
