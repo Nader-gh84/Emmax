@@ -61,10 +61,10 @@ console.log(
   )
 );
 
-const expectedMaterialsTotal = 250 * 0.85;
-const expectedLabourTotal = 6 * 95 + 3 * 85;
+const expectedMaterialsTotal = 0;
+const expectedLabourTotal = 0;
 const expectedSubtotal = expectedMaterialsTotal + expectedLabourTotal;
-const expectedTaxable = expectedSubtotal - 50;
+const expectedTaxable = Math.max(0, expectedSubtotal - 50);
 const expectedGst = expectedTaxable * 0.05;
 const expectedPst = expectedTaxable * 0.07;
 const expectedGrand = expectedTaxable + expectedGst + expectedPst;
@@ -87,6 +87,12 @@ if (mapped.materials.length !== 1) {
 }
 if (mapped.labourItems.length !== 2) {
   throw new Error(`Expected 2 labour items, got ${mapped.labourItems.length}`);
+}
+if (mapped.materials.some((row) => row.unitCost !== 0 || row.unitPrice !== 0)) {
+  throw new Error("Extraction must not persist material prices");
+}
+if (mapped.labourItems.some((row) => row.rate !== 0)) {
+  throw new Error("Extraction must not persist labour rates");
 }
 
 console.log("smoke-voice-quote: OK");

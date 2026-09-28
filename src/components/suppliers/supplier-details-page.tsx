@@ -36,6 +36,7 @@ import {
 } from "@/lib/supplier-logo-storage";
 import {
   confirmSupplierInvoice,
+  deleteOrVoidSupplierInvoice,
   recordSupplierPayment,
 } from "@/lib/supplier-payment-actions";
 import { createClient } from "@/lib/supabase";
@@ -207,6 +208,7 @@ export function SupplierDetailsPage({
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<SupplierDetailsTab>("invoices");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -249,6 +251,40 @@ export function SupplierDetailsPage({
     }
 
     setActionSuccess(`Invoice ${invoice.invoiceNumber} confirmed.`);
+    router.refresh();
+  }
+
+  async function handleDeleteInvoice(invoice: SupplierInvoice) {
+    const linked = Boolean(invoice.materialOrderId);
+    const ok = window.confirm(
+      linked
+        ? `Void invoice ${invoice.invoiceNumber}? It will drop from accounts payable but stay on file because it is linked to a material order.`
+        : `Delete invoice ${invoice.invoiceNumber}? This cannot be undone.`
+    );
+    if (!ok) return;
+
+    setDeletingId(invoice.id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    const supabase = createClient();
+    const result = await deleteOrVoidSupplierInvoice(supabase, {
+      invoiceId: invoice.id,
+      supplierId: supplier.id,
+    });
+
+    setDeletingId(null);
+
+    if (!result.ok) {
+      setActionError(result.error);
+      return;
+    }
+
+    setActionSuccess(
+      result.action === "voided"
+        ? `Invoice ${invoice.invoiceNumber} voided.`
+        : `Invoice ${invoice.invoiceNumber} deleted.`
+    );
     router.refresh();
   }
 
@@ -630,10 +666,14 @@ export function SupplierDetailsPage({
                 <SupplierInvoicesTab
                   invoices={supplier.invoices}
                   confirmingId={confirmingId}
+                  deletingId={deletingId}
                   onConfirmInvoice={(invoice) =>
                     void handleConfirmInvoice(invoice)
                   }
                   onRecordPayment={(invoice) => openPaymentModal(invoice)}
+                  onDeleteInvoice={(invoice) =>
+                    void handleDeleteInvoice(invoice)
+                  }
                 />
               ) : null}
               {activeTab === "payments" ? (

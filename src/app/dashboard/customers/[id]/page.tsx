@@ -285,6 +285,8 @@ export default async function CustomerDetailsRoute({
         }[]
       | null) ?? [];
 
+  const financialLoadErrors: string[] = [];
+
   if (financialBundle) {
     const [
       paymentsResult,
@@ -300,11 +302,17 @@ export default async function CustomerDetailsRoute({
         "[CustomerDetails] project_payments query failed:",
         paymentsResult.error.message
       );
+      financialLoadErrors.push(
+        "Customer payments could not be loaded. Outstanding may be incomplete."
+      );
     }
     if (expensesResult.error) {
       console.error(
         "[CustomerDetails] project_expenses query failed:",
         expensesResult.error.message
+      );
+      financialLoadErrors.push(
+        "Project expenses could not be loaded. Total costs may be incomplete."
       );
     }
     if (ordersResult.error) {
@@ -312,17 +320,26 @@ export default async function CustomerDetailsRoute({
         "[CustomerDetails] material_orders query failed:",
         ordersResult.error.message
       );
+      financialLoadErrors.push(
+        "Supplier orders could not be loaded. Total costs may be incomplete."
+      );
     }
     if (timeResult.error) {
       console.error(
         "[CustomerDetails] time_entries query failed:",
         timeResult.error.message
       );
+      financialLoadErrors.push(
+        "Time entries could not be loaded. Labour cost is missing from Total Costs."
+      );
     }
     if (changeOrdersResult.error) {
       console.error(
         "[CustomerDetails] change_orders query failed:",
         changeOrdersResult.error.message
+      );
+      financialLoadErrors.push(
+        "Change orders could not be loaded. Contract value may be incomplete."
       );
     }
     if (activityResult.error) {
@@ -332,20 +349,30 @@ export default async function CustomerDetailsRoute({
       );
     }
 
-    paymentRows = ((paymentsResult.data as ProjectPayment[] | null) ?? []).map(
-      (row) => ({ ...row, amount: Number(row.amount) || 0 })
-    );
-    expenseRows = (
-      (expensesResult.data as ProjectExpense[] | null) ?? []
-    ).map((row) => normalizeExpense(row));
-    materialOrderRows =
-      (ordersResult.data as MaterialOrder[] | null) ?? [];
-    timeEntryRows = ((timeResult.data as TimeEntry[] | null) ?? []).map(
-      (row) => normalizeTimeEntry(row)
-    );
-    changeOrderRows = (
-      (changeOrdersResult.data as ChangeOrder[] | null) ?? []
-    ).map((row) => normalizeChangeOrder(row));
+    if (!paymentsResult.error) {
+      paymentRows = ((paymentsResult.data as ProjectPayment[] | null) ?? []).map(
+        (row) => ({ ...row, amount: Number(row.amount) || 0 })
+      );
+    }
+    if (!expensesResult.error) {
+      expenseRows = (
+        (expensesResult.data as ProjectExpense[] | null) ?? []
+      ).map((row) => normalizeExpense(row));
+    }
+    if (!ordersResult.error) {
+      materialOrderRows =
+        (ordersResult.data as MaterialOrder[] | null) ?? [];
+    }
+    if (!timeResult.error) {
+      timeEntryRows = ((timeResult.data as TimeEntry[] | null) ?? []).map(
+        (row) => normalizeTimeEntry(row)
+      );
+    }
+    if (!changeOrdersResult.error) {
+      changeOrderRows = (
+        (changeOrdersResult.data as ChangeOrder[] | null) ?? []
+      ).map((row) => normalizeChangeOrder(row));
+    }
     activityRows =
       (activityResult.data as typeof activityRows | null) ?? [];
   }
@@ -394,6 +421,11 @@ export default async function CustomerDetailsRoute({
       customerRecord={customerRow}
       projects={projects}
       projectFinancials={projectFinancials}
+      financialLoadError={
+        financialLoadErrors.length > 0
+          ? financialLoadErrors.join(" ")
+          : null
+      }
       customerPayments={paymentList}
       documents={documents}
       notes={notes}

@@ -26,13 +26,17 @@ const PAGE_SIZE = 5;
 export function SupplierInvoicesTab({
   invoices,
   confirmingId = null,
+  deletingId = null,
   onConfirmInvoice,
   onRecordPayment,
+  onDeleteInvoice,
 }: {
   invoices: SupplierInvoice[];
   confirmingId?: string | null;
+  deletingId?: string | null;
   onConfirmInvoice?: (invoice: SupplierInvoice) => void;
   onRecordPayment?: (invoice?: SupplierInvoice) => void;
+  onDeleteInvoice?: (invoice: SupplierInvoice) => void;
 }) {
   const [statusFilter, setStatusFilter] = useState<"all" | SupplierInvoiceStatus>(
     "all"
@@ -271,10 +275,23 @@ export function SupplierInvoicesTab({
                         ) : null}
                         <button
                           type="button"
+                          disabled={deletingId === invoice.id}
+                          onClick={() => {
+                            setOpenMenuId(null);
+                            onDeleteInvoice?.(invoice);
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40"
+                        >
+                          {invoice.materialOrderId
+                            ? "Void invoice"
+                            : "Delete invoice"}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setOpenMenuId(null)}
                           className="block w-full px-3 py-2 text-left text-sm text-slate-500"
                         >
-                          View details
+                          Close
                         </button>
                       </div>
                     ) : null}

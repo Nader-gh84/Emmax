@@ -12,8 +12,11 @@ import { logProjectActivity } from "@/lib/project-activity";
 import { createClient } from "@/lib/supabase";
 import { getUserInitials } from "@/lib/user-display";
 import type { Employee } from "@/types/employee";
-import type { TimeEntry } from "@/types/project-operations";
 import { formatProjectDate, formatProjectMoney } from "@/types/project";
+import {
+  selectLabourCostTimeEntries,
+  type TimeEntry,
+} from "@/types/project-operations";
 
 const AVATAR_COLORS = [
   "bg-sky-600",
@@ -81,9 +84,17 @@ export function TeamTimeCard({
     }
   }, [assignedEmployees, employeeId]);
 
+  const costEntries = useMemo(
+    () => selectLabourCostTimeEntries(entries),
+    [entries]
+  );
+  const usingEstimatesOnly =
+    costEntries.length > 0 &&
+    costEntries.every((entry) => entry.entry_source === "quote_estimate");
+
   const perEmployee = useMemo(() => {
     return assignedEmployees.map((employee) => {
-      const hoursSum = entries
+      const hoursSum = costEntries
         .filter((entry) => entry.employee_id === employee.id)
         .reduce((sum, entry) => sum + (Number(entry.hours) || 0), 0);
       const rate = Number(employee.pay_rate) || 0;
@@ -93,7 +104,7 @@ export function TeamTimeCard({
         cost: hoursSum * rate,
       };
     });
-  }, [assignedEmployees, entries]);
+  }, [assignedEmployees, costEntries]);
 
   const totalHours = perEmployee.reduce((sum, row) => sum + row.hours, 0);
   const totalCost = perEmployee.reduce((sum, row) => sum + row.cost, 0);
@@ -195,6 +206,9 @@ export function TeamTimeCard({
           </h2>
           <p className="mt-1 text-sm text-slate-500">
             Hours and labor cost by assigned crew
+            {usingEstimatesOnly
+              ? " · quote estimates (no time logged yet)"
+              : ""}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -290,6 +304,9 @@ export function TeamTimeCard({
                     </p>
                     <p className="text-xs text-slate-500">
                       {formatProjectDate(entry.entry_date)}
+                      {entry.entry_source === "quote_estimate"
+                        ? " · estimate"
+                        : ""}
                       {entry.notes ? ` · ${entry.notes}` : ""}
                     </p>
                   </div>

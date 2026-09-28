@@ -10,9 +10,6 @@ import { computeMaterialOrderTotal } from "@/types/project-operations";
 /** Default: no markup — unitPrice starts equal to unitCost. */
 export const DEFAULT_MATERIALS_MARKUP_PERCENT = 0;
 
-/** Default labour markup for Final Invoice (column shipped in 044). */
-export const DEFAULT_LABOUR_MARKUP_PERCENT = 0;
-
 /** Confirmed supplier cost for one material line (Upload Prices). */
 export type SupplierCostUpdate = {
   materialId: string;
@@ -28,17 +25,6 @@ export function normalizeMaterialsMarkupPercent(value: unknown): number {
         ? Number.parseFloat(value)
         : Number.NaN;
   if (!Number.isFinite(n)) return DEFAULT_MATERIALS_MARKUP_PERCENT;
-  return Math.min(100, Math.max(0, n));
-}
-
-export function normalizeLabourMarkupPercent(value: unknown): number {
-  const n =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number.parseFloat(value)
-        : Number.NaN;
-  if (!Number.isFinite(n)) return DEFAULT_LABOUR_MARKUP_PERCENT;
   return Math.min(100, Math.max(0, n));
 }
 

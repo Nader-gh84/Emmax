@@ -157,6 +157,7 @@ export function CustomerDetailsPage({
   customerRecord,
   projects = [],
   projectFinancials = [],
+  financialLoadError = null,
   customerPayments = [],
   documents = [],
   notes = [],
@@ -166,6 +167,7 @@ export function CustomerDetailsPage({
   customerRecord: Customer;
   projects?: Project[];
   projectFinancials?: CustomerProjectFinancial[];
+  financialLoadError?: string | null;
   customerPayments?: CustomerPaymentListItem[];
   documents?: CustomerDocument[];
   notes?: CustomerNote[];
@@ -543,6 +545,7 @@ export function CustomerDetailsPage({
               customerName={customerWithCounts.fullName}
               projects={projects}
               projectFinancials={projectFinancials}
+              financialLoadError={financialLoadError}
               customerPayments={customerPayments}
               documents={documents}
               notes={noteRows}
@@ -706,6 +709,7 @@ function TabPanel({
   customerName,
   projects,
   projectFinancials,
+  financialLoadError,
   customerPayments,
   documents,
   notes,
@@ -721,6 +725,7 @@ function TabPanel({
   customerName: string;
   projects: Project[];
   projectFinancials: CustomerProjectFinancial[];
+  financialLoadError?: string | null;
   customerPayments: CustomerPaymentListItem[];
   documents: CustomerDocument[];
   notes: CustomerNote[];
@@ -808,6 +813,7 @@ function TabPanel({
       <FinancialTab
         customerId={customerId}
         financials={projectFinancials}
+        loadError={financialLoadError ?? null}
       />
     );
   }
@@ -845,11 +851,13 @@ function TabPanel({
 function FinancialTab({
   customerId,
   financials,
+  loadError,
 }: {
   customerId: string;
   financials: CustomerProjectFinancial[];
+  loadError: string | null;
 }) {
-  if (financials.length === 0) {
+  if (financials.length === 0 && !loadError) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
         <h2 className="text-lg font-semibold text-white">Financial</h2>
@@ -880,6 +888,14 @@ function FinancialTab({
 
   return (
     <div className="space-y-5">
+      {loadError ? (
+        <p
+          className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+          role="alert"
+        >
+          {loadError} Totals below omit any data that failed to load.
+        </p>
+      ) : null}
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <h2 className="text-lg font-semibold text-white">
           Financial summary
