@@ -1,17 +1,15 @@
 "use client";
 
 /**
- * Global materials + labour markup % under Settings → Employees.
- * materials_markup_percent: default sell = cost × (1 + %/100) at Upload Prices.
- * labour_markup_percent: reserved for Final Invoice T&M billing (column in 044).
+ * Materials markup % under Settings → Employees.
+ * Default sell = cost × (1 + %/100) at Upload Prices.
+ * Labour sell is the rate/amount the contractor types at Create Quote — no markup %.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { touchBtnPrimary, touchInput } from "@/components/quotes/ui";
 import {
-  DEFAULT_LABOUR_MARKUP_PERCENT,
   DEFAULT_MATERIALS_MARKUP_PERCENT,
-  normalizeLabourMarkupPercent,
   normalizeMaterialsMarkupPercent,
 } from "@/lib/materials-pricing";
 import { createClient } from "@/lib/supabase";
@@ -19,9 +17,6 @@ import { createClient } from "@/lib/supabase";
 export function MarkupSettingsCard() {
   const [materialsMarkup, setMaterialsMarkup] = useState(
     String(DEFAULT_MATERIALS_MARKUP_PERCENT)
-  );
-  const [labourMarkup, setLabourMarkup] = useState(
-    String(DEFAULT_LABOUR_MARKUP_PERCENT)
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,15 +37,14 @@ export function MarkupSettingsCard() {
 
     const { data, error: fetchError } = await supabase
       .from("business_profiles")
-      .select("materials_markup_percent, labour_markup_percent")
+      .select("materials_markup_percent")
       .eq("user_id", user.id)
       .maybeSingle();
 
     if (fetchError) {
       const missingColumn =
         fetchError.code === "42703" ||
-        fetchError.message?.includes("materials_markup_percent") ||
-        fetchError.message?.includes("labour_markup_percent");
+        fetchError.message?.includes("materials_markup_percent");
       setError(
         missingColumn
           ? "Failed to load markup settings. Run migration 044_materials_cost_price_split.sql in Supabase."
@@ -61,9 +55,6 @@ export function MarkupSettingsCard() {
 
     setMaterialsMarkup(
       String(normalizeMaterialsMarkupPercent(data?.materials_markup_percent))
-    );
-    setLabourMarkup(
-      String(normalizeLabourMarkupPercent(data?.labour_markup_percent))
     );
   }, []);
 
@@ -82,9 +73,7 @@ export function MarkupSettingsCard() {
     setSuccess(null);
 
     const nextMaterials = normalizeMaterialsMarkupPercent(materialsMarkup);
-    const nextLabour = normalizeLabourMarkupPercent(labourMarkup);
     setMaterialsMarkup(String(nextMaterials));
-    setLabourMarkup(String(nextLabour));
 
     setIsSaving(true);
     try {
@@ -101,7 +90,6 @@ export function MarkupSettingsCard() {
         .from("business_profiles")
         .update({
           materials_markup_percent: nextMaterials,
-          labour_markup_percent: nextLabour,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", user.id);
@@ -109,8 +97,7 @@ export function MarkupSettingsCard() {
       if (updateError) {
         const missingColumn =
           updateError.code === "42703" ||
-          updateError.message?.includes("materials_markup_percent") ||
-          updateError.message?.includes("labour_markup_percent");
+          updateError.message?.includes("materials_markup_percent");
         throw new Error(
           missingColumn
             ? "Failed to save. Run migration 044_materials_cost_price_split.sql in Supabase."
@@ -118,9 +105,7 @@ export function MarkupSettingsCard() {
         );
       }
 
-      setSuccess(
-        `Saved — materials markup ${nextMaterials}%, labour markup ${nextLabour}%.`
-      );
+      setSuccess(`Saved — materials markup ${nextMaterials}%.`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save markup settings."
@@ -135,8 +120,9 @@ export function MarkupSettingsCard() {
       <h3 className="text-base font-semibold text-white">Default markups</h3>
       <p className="mt-1 text-sm text-slate-400">
         Materials markup sets the starting sell price when you apply supplier
-        costs. Labour markup is used later on Final Invoice for time-and-materials
-        billing. You can still edit sell prices line by line after apply.
+        costs. You can still edit sell prices line by line after apply. Labour
+        is priced at Create Quote (T&amp;M sell rate or flat amount), not by a
+        markup percentage.
       </p>
 
       {isLoading ? (
@@ -170,37 +156,6 @@ export function MarkupSettingsCard() {
             </div>
             <p id="materials-markup-hint" className="mt-2 text-xs text-slate-500">
               0% (default) means sell starts equal to supplier cost.
-            </p>
-          </div>
-
-          <div>
-            <label
-              htmlFor="labour-markup"
-              className="block text-sm font-medium text-slate-300"
-            >
-              Labour markup
-            </label>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                id="labour-markup"
-                type="number"
-                min={0}
-                max={100}
-                step={0.5}
-                inputMode="decimal"
-                value={labourMarkup}
-                onChange={(event) => {
-                  setLabourMarkup(event.target.value);
-                  setSuccess(null);
-                }}
-                className={`${touchInput} w-28`}
-                aria-describedby="labour-markup-hint"
-              />
-              <span className="text-sm text-slate-400">%</span>
-            </div>
-            <p id="labour-markup-hint" className="mt-2 text-xs text-slate-500">
-              Added to employee pay rate for T&amp;M customer labour on Final
-              Invoice. Flat labour ignores this.
             </p>
           </div>
 

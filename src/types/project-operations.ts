@@ -247,6 +247,32 @@ export type FinancialSummaryTimeEntry = {
   hourlyRate?: number | null;
 };
 
+/**
+ * Labour cost uses actual job hours when any exist; otherwise quote estimates.
+ * Never sum both — that double-counts Create Quote planned hours.
+ */
+export function selectLabourCostTimeEntries<T extends FinancialSummaryTimeEntry>(
+  entries: T[] | null | undefined
+): T[] {
+  const rows = entries ?? [];
+  const actual = rows.filter(
+    (entry) => normalizeTimeEntrySource(entry.entry_source) === "actual"
+  );
+  if (actual.length > 0) return actual;
+  return rows.filter(
+    (entry) =>
+      normalizeTimeEntrySource(entry.entry_source) === "quote_estimate"
+  );
+}
+
+function labourCostRate(entry: FinancialSummaryTimeEntry): number {
+  const payType = entry.employees?.pay_type ?? "hourly";
+  if (payType === "salary") return 0;
+  const snapshot = asMoney(entry.pay_rate_snapshot);
+  if (snapshot > 0) return snapshot;
+  return asMoney(entry.employees?.pay_rate ?? entry.hourlyRate ?? 0);
+}
+
 export type FinancialSummaryExpense = {
   amount: number;
   billing_status?: string | null;
@@ -266,7 +292,8 @@ export type FinancialSummaryChangeOrder = {
  * Costs: Supplier (material orders) + Extra Purchases + Labour + Other Expenses
  *   (pending_review expenses excluded until resolved)
  * Cash: Customer Payments − Total Money Paid Out
- * Labour uses employees.pay_rate when pay_type is hourly; salary → $0 for now.
+ * Labour cost: actual hours when present, else quote estimates.
+ * Rate: pay_rate_snapshot, else employees.pay_rate. Salary → $0.
  * Outstanding Customer Balance may be negative (overpayment).
  */
 export function computeFinancialSummary(input: {
@@ -351,15 +378,9 @@ export function computeFinancialSummary(input: {
   let paidLabourCost = 0;
   let unpaidLabourCost = 0;
 
-  for (const entry of input.timeEntries ?? []) {
+  for (const entry of selectLabourCostTimeEntries(input.timeEntries)) {
     const hours = asMoney(entry.hours);
-    const payType = entry.employees?.pay_type ?? "hourly";
-    const rate =
-      payType === "salary"
-        ? 0
-        : asMoney(
-            entry.employees?.pay_rate ?? entry.hourlyRate ?? 0
-          );
+    const rate = labourCostRate(entry);
     const cost = hours * rate;
     labourCost += cost;
     if (normalizePaymentStatus(entry.payment_status) === "paid") {

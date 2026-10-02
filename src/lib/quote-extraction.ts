@@ -56,7 +56,8 @@ export function mapExtractionToLineItems(
         createLabourItem({
           description: material.item?.trim() || "Labour",
           hours: sanitizeNumber(material.quantity, 1),
-          rate: sanitizeNumber(material.unitPrice, 0),
+          // Never take a model-invented rate.
+          rate: 0,
         })
       );
       continue;
@@ -68,7 +69,7 @@ export function mapExtractionToLineItems(
         brand: material.brand ?? "",
         quantity: sanitizeNumber(material.quantity, 1),
         unit: material.unit ?? "each",
-        // AI guesses are neither real supplier cost nor agreed sell price.
+        // AI must not set cost or sell — supplier apply + contractor edit only.
         unitCost: 0,
         unitPrice: 0,
       })
@@ -80,7 +81,7 @@ export function mapExtractionToLineItems(
       createLabourItem({
         description: labour.description?.trim() || "Labour",
         hours: sanitizeNumber(labour.hours, 1),
-        rate: sanitizeNumber(labour.rate, 0),
+        rate: 0,
       })
     );
   }
@@ -202,13 +203,12 @@ Rules:
 - materials.brand: manufacturer or brand name if mentioned (e.g. "Leviton", "Legrand"); use "Generic" if not mentioned
 - materials.quantity: numeric quantity mentioned or reasonable default of 1
 - materials.unit: each, ft, sq ft, roll, box, etc. Never use hour/hours for materials
-- materials.unitPrice: ignored by the app for materials (always stored as 0 until
-  supplier pricing is applied). Still accepted in JSON for labour lines misclassified
-  as materials. Do not invent prices.
+- materials.unitPrice: ALWAYS 0. Never invent, estimate, or copy a dollar amount.
+  Supplier cost and customer sell are entered later by the contractor, not by you.
 - labourItems: put ALL labour/installation/rough-in/service time here (not in materials)
 - labourItems.description: clear labour description (e.g. "Labour – Installation")
 - labourItems.hours: numeric hours mentioned or reasonable default of 1
-- labourItems.rate: estimated CAD hourly rate
+- labourItems.rate: ALWAYS 0. Never estimate an hourly rate or labour price.
 - scopeOfWork: concise professional summary of the job scope
 
 projectTitle — PARSE, DO NOT COPY:

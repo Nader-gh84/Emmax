@@ -1,4 +1,5 @@
 import {
+  IconEmployee,
   IconHome,
   IconMicrophone,
   IconSettings,
@@ -27,6 +28,13 @@ export const dashboardNavItems = [
     shortLabel: "Projects",
     href: "/dashboard/projects",
     icon: IconProjects,
+    highlight: false,
+  },
+  {
+    label: "Employees",
+    shortLabel: "Crew",
+    href: "/dashboard/employees",
+    icon: IconEmployee,
     highlight: false,
   },
   {

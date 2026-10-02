@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   planFifoAllocations,
+  planSupplierInvoiceRemoval,
   sumAllocationsForInvoice,
   type EnrichedSupplierInvoice,
   type SupplierPaymentAllocationRow,
@@ -49,6 +50,110 @@ export async function confirmSupplierInvoice(
   }
 
   return { ok: true };
+}
+
+/**
+ * Delete a manual invoice, or soft-void an order-linked invoice.
+ * Blocked when any payment has been allocated.
+ */
+export async function deleteOrVoidSupplierInvoice(
+  supabase: SupabaseClient,
+  input: { invoiceId: string; supplierId: string }
+): Promise<
+  | { ok: true; action: "deleted" | "voided" }
+  | { ok: false; error: string }
+> {
+  const { data: invoice, error: loadError } = await supabase
+    .from("supplier_invoices")
+    .select("id, material_order_id, status")
+    .eq("id", input.invoiceId)
+    .eq("supplier_id", input.supplierId)
+    .maybeSingle();
+
+  if (loadError) {
+    return {
+      ok: false,
+      error: `Failed to load invoice. ${loadError.message}`,
+    };
+  }
+  if (!invoice) {
+    return { ok: false, error: "Invoice not found." };
+  }
+  if (invoice.status === "voided") {
+    return { ok: false, error: "Invoice is already voided." };
+  }
+
+  const { data: allocationRows, error: allocError } = await supabase
+    .from("supplier_payment_allocations")
+    .select("amount_applied")
+    .eq("invoice_id", input.invoiceId);
+
+  if (allocError) {
+    return {
+      ok: false,
+      error: `Failed to check payment allocations. ${allocError.message}`,
+    };
+  }
+
+  const allocatedAmount = (allocationRows ?? []).reduce(
+    (sum, row) => sum + asMoney(row.amount_applied),
+    0
+  );
+  const plan = planSupplierInvoiceRemoval({
+    allocatedAmount,
+    materialOrderId: invoice.material_order_id as string | null,
+  });
+
+  if (plan === "block_allocated") {
+    return {
+      ok: false,
+      error:
+        "This invoice has payments allocated to it. Remove or reallocate those payments before deleting.",
+    };
+  }
+
+  if (plan === "void") {
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+      .from("supplier_invoices")
+      .update({
+        status: "voided",
+        updated_at: now,
+      })
+      .eq("id", input.invoiceId)
+      .eq("supplier_id", input.supplierId)
+      .neq("status", "voided")
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      const hint =
+        error.message?.includes("voided") ||
+        error.message?.includes("supplier_invoices_status")
+          ? " Run migration 045_cleanup_labour_markup_and_void_invoices.sql in Supabase."
+          : "";
+      return { ok: false, error: `Failed to void invoice.${hint}` };
+    }
+    if (!data) {
+      return { ok: false, error: "Invoice could not be voided." };
+    }
+    return { ok: true, action: "voided" };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("supplier_invoices")
+    .delete()
+    .eq("id", input.invoiceId)
+    .eq("supplier_id", input.supplierId);
+
+  if (deleteError) {
+    return {
+      ok: false,
+      error: `Failed to delete invoice. ${deleteError.message}`,
+    };
+  }
+
+  return { ok: true, action: "deleted" };
 }
 
 /**

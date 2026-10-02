@@ -2,7 +2,8 @@ import type { Supplier, SupplierPaymentTermsType } from "@/types/supplier";
 
 export type SupplierInvoiceDbStatus =
   | "pending_confirmation"
-  | "confirmed";
+  | "confirmed"
+  | "voided";
 
 /** Row from public.supplier_invoices */
 export type SupplierInvoiceRow = {
@@ -145,6 +146,21 @@ export function sumAllocationsForInvoice(
     .reduce((sum, row) => sum + asMoney(row.amount_applied), 0);
 }
 
+/**
+ * How to remove a supplier invoice:
+ * - any payment allocation → block
+ * - linked to a material order → soft-void (keep row, drop from AP)
+ * - otherwise → hard delete
+ */
+export function planSupplierInvoiceRemoval(input: {
+  allocatedAmount: number;
+  materialOrderId: string | null | undefined;
+}): "block_allocated" | "void" | "delete" {
+  if (asMoney(input.allocatedAmount) > 0.009) return "block_allocated";
+  if (input.materialOrderId) return "void";
+  return "delete";
+}
+
 export function computeInvoiceBillingStatus(input: {
   dbStatus: SupplierInvoiceDbStatus;
   amount: number;
@@ -177,6 +193,7 @@ export function enrichSupplierInvoices(input: {
   const today = input.today ?? todayUtcDateString();
 
   return [...input.invoices]
+    .filter((row) => row.status !== "voided")
     .map((row) => {
       const amount = asMoney(row.amount);
       const paid =
