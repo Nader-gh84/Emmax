@@ -199,6 +199,11 @@ export interface Quote {
    * Internal cost still tracks per-employee hours separately.
    */
   labour_billing_mode?: LabourBillingMode | null;
+  /**
+   * T&M customer sell $/hour typed at Create Quote.
+   * Null for flat labour. Final Invoice reads this, not labour_items JSON.
+   */
+  labour_sell_hourly_rate?: number | null;
   validity_days: number;
   subtotal: number;
   tax: number;

@@ -6,6 +6,7 @@ import { ensureProjectForQuote } from "@/lib/ensure-project-for-quote";
 import {
   buildCustomerLabourItems,
   employeeCostRate,
+  labourSellHourlyRateToPersist,
   summarizeCreateQuoteLabour,
 } from "@/lib/create-quote-labour";
 import {
@@ -112,12 +113,18 @@ export async function saveCreateQuoteLabour(
     );
   }
 
+  const labourSellHourlyRate = labourSellHourlyRateToPersist(
+    billingMode,
+    input.sellHourlyRate
+  );
+
   const now = new Date().toISOString();
   const { data: updatedQuote, error: quoteError } = await supabase
     .from("quotes")
     .update({
       labour_items: labourToStored(labourItems),
       labour_billing_mode: billingMode,
+      labour_sell_hourly_rate: labourSellHourlyRate,
       subtotal: totals.subtotal,
       tax: totals.gst + totals.pst,
       grand_total: totals.grandTotal,
@@ -130,10 +137,12 @@ export async function saveCreateQuoteLabour(
 
   if (quoteError || !updatedQuote) {
     const hint =
-      quoteError?.message?.includes("labour_billing_mode") ||
+      quoteError?.message?.includes("labour_sell_hourly_rate") ||
       quoteError?.code === "42703"
-        ? " Run migration 043_labour_quote_estimates.sql in Supabase."
-        : "";
+        ? " Run migration 046_final_invoices_and_labour_sell_rate.sql in Supabase."
+        : quoteError?.message?.includes("labour_billing_mode")
+          ? " Run migration 043_labour_quote_estimates.sql in Supabase."
+          : "";
     throw new Error(
       `Failed to save labour on quote.${hint || ` ${quoteError?.message || ""}`}`.trim()
     );
@@ -149,6 +158,7 @@ export async function saveCreateQuoteLabour(
     labourItems,
     grandTotal: totals.grandTotal,
     labourBillingMode: billingMode,
+    labourSellHourlyRate,
   });
 
   if (!projectId) {

@@ -20,6 +20,8 @@ export async function ensureProjectForQuote(input: {
   labourItems: LabourItem[];
   grandTotal: number;
   labourBillingMode?: LabourBillingMode | null;
+  /** Pass explicitly (including null) to snapshot T&M sell rate or clear it on flat. */
+  labourSellHourlyRate?: number | null;
 }): Promise<string | null> {
   const supabase = createClient();
   const projectName =
@@ -32,6 +34,10 @@ export async function ensureProjectForQuote(input: {
   const labourItems = labourToStored(input.labourItems);
   const value = Number(input.grandTotal) || 0;
   const labourBillingMode = input.labourBillingMode ?? null;
+  const labourSellPatch =
+    "labourSellHourlyRate" in input
+      ? { labour_sell_hourly_rate: input.labourSellHourlyRate ?? null }
+      : {};
 
   const { data: existing } = await supabase
     .from("projects")
@@ -51,6 +57,7 @@ export async function ensureProjectForQuote(input: {
         ...(labourBillingMode != null
           ? { labour_billing_mode: labourBillingMode }
           : {}),
+        ...labourSellPatch,
         updated_at: now,
       })
       .eq("id", existing.id);
@@ -76,6 +83,7 @@ export async function ensureProjectForQuote(input: {
       materials,
       labour_items: labourItems,
       labour_billing_mode: labourBillingMode,
+      ...labourSellPatch,
       updated_at: now,
     })
     .select("id")
@@ -105,6 +113,7 @@ export async function ensureProjectForQuote(input: {
           ...(labourBillingMode != null
             ? { labour_billing_mode: labourBillingMode }
             : {}),
+          ...labourSellPatch,
           updated_at: now,
         })
         .eq("id", raced.id);
