@@ -129,23 +129,37 @@ export function CreateQuoteLabourModal({
       }
     }
 
-    // Prefill sell from existing labour_items when present.
-    const labour = quote.labour_items ?? [];
-    if (labour.length > 0) {
-      if (mode === "flat" || (labour.length === 1 && labour[0].hours === 1)) {
-        if (mode === "flat" || labour[0].hours === 1) {
-          setBillingMode(mode ?? "flat");
-          setSellFlatAmount(String(labour[0].rate ?? ""));
-        }
-      } else {
-        const rate = labour[0]?.rate;
-        if (rate != null && Number.isFinite(Number(rate))) {
-          setBillingMode("time_and_material");
-          setSellHourlyRate(String(rate));
+    const storedSell = Number(quote.labour_sell_hourly_rate);
+    if (
+      mode === "time_and_material" &&
+      Number.isFinite(storedSell) &&
+      storedSell > 0
+    ) {
+      setSellHourlyRate(String(storedSell));
+    } else {
+      // Prefill sell from existing labour_items when the column is empty.
+      const labour = quote.labour_items ?? [];
+      if (labour.length > 0) {
+        if (mode === "flat" || (labour.length === 1 && labour[0].hours === 1)) {
+          if (mode === "flat" || labour[0].hours === 1) {
+            setBillingMode(mode ?? "flat");
+            setSellFlatAmount(String(labour[0].rate ?? ""));
+          }
+        } else {
+          const rate = labour[0]?.rate;
+          if (rate != null && Number.isFinite(Number(rate))) {
+            setBillingMode("time_and_material");
+            setSellHourlyRate(String(rate));
+          }
         }
       }
     }
-  }, [quote.id, quote.labour_billing_mode, quote.labour_items]);
+  }, [
+    quote.id,
+    quote.labour_billing_mode,
+    quote.labour_items,
+    quote.labour_sell_hourly_rate,
+  ]);
 
   useEffect(() => {
     async function init() {

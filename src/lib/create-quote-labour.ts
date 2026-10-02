@@ -126,6 +126,19 @@ export function summarizeCreateQuoteLabour(input: {
   };
 }
 
+/**
+ * Column value for quotes/projects.labour_sell_hourly_rate.
+ * T&M: the typed customer $/hour. Flat: null (hours must not invent a rate).
+ */
+export function labourSellHourlyRateToPersist(
+  billingMode: LabourBillingMode,
+  sellHourlyRate: number
+): number | null {
+  if (billingMode !== "time_and_material") return null;
+  const rate = roundMoney(Math.max(0, Number(sellHourlyRate) || 0));
+  return rate > 0 ? rate : null;
+}
+
 /** Customer-facing labour_items from sell price (never pay rates). */
 export function buildCustomerLabourItems(input: {
   billingMode: LabourBillingMode;

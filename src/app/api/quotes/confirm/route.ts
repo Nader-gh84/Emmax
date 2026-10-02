@@ -268,6 +268,8 @@ async function confirmQuoteWithAdmin(token: string) {
         value: Number(quote.grand_total) || 0,
         materials: quote.materials ?? [],
         labour_items: quote.labour_items ?? [],
+        labour_billing_mode: quote.labour_billing_mode ?? null,
+        labour_sell_hourly_rate: quote.labour_sell_hourly_rate ?? null,
         updated_at: confirmedAt,
       })
       .eq("id", existingProject.id);
@@ -283,6 +285,8 @@ async function confirmQuoteWithAdmin(token: string) {
       start_date: confirmedAt.slice(0, 10),
       materials: quote.materials ?? [],
       labour_items: quote.labour_items ?? [],
+      labour_billing_mode: quote.labour_billing_mode ?? null,
+      labour_sell_hourly_rate: quote.labour_sell_hourly_rate ?? null,
       updated_at: confirmedAt,
     });
     projectError = error;
@@ -297,6 +301,8 @@ async function confirmQuoteWithAdmin(token: string) {
           value: Number(quote.grand_total) || 0,
           materials: quote.materials ?? [],
           labour_items: quote.labour_items ?? [],
+          labour_billing_mode: quote.labour_billing_mode ?? null,
+          labour_sell_hourly_rate: quote.labour_sell_hourly_rate ?? null,
           updated_at: confirmedAt,
         })
         .eq("quote_id", quote.id);

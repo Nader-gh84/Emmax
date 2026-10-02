@@ -18,6 +18,8 @@ export interface Project {
   labour_items: StoredLabourItem[] | null;
   /** Snapshot of quote labour_billing_mode. */
   labour_billing_mode?: LabourBillingMode | null;
+  /** Snapshot of quotes.labour_sell_hourly_rate (T&M only). */
+  labour_sell_hourly_rate?: number | null;
   notes: string | null;
   project_type: string | null;
   project_manager: string | null;
