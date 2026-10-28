@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { IconInvoice } from "@/components/dashboard/icons";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import {
   isWorkspaceNavItemActive,
@@ -47,6 +48,16 @@ function WorkspaceSidebarNav() {
           </Link>
         );
       })}
+      <span
+        aria-disabled="true"
+        className="flex min-h-[44px] cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 opacity-60"
+      >
+        <IconInvoice className="h-5 w-5 shrink-0 text-slate-500" />
+        <span className="min-w-0 flex-1 truncate">Invoices</span>
+        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+          Coming soon
+        </span>
+      </span>
     </nav>
   );
 }
@@ -86,6 +97,16 @@ export function WorkspaceSidebar() {
                 </Link>
               );
             })}
+            <span
+              aria-disabled="true"
+              className="flex min-h-[44px] cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 opacity-60"
+            >
+              <IconInvoice className="h-5 w-5 shrink-0 text-slate-500" />
+              <span className="min-w-0 flex-1 truncate">Invoices</span>
+              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Coming soon
+              </span>
+            </span>
           </nav>
         }
       >

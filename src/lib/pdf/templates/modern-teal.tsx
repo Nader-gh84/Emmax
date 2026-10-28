@@ -274,7 +274,7 @@ export function QuotePdfModernTeal({ data }: { data: QuotePdfData }) {
             </View>
             <Text style={styles.companyName}>{company.companyName}</Text>
           </View>
-          <Text style={styles.title}>PRE-INVOICE</Text>
+          <Text style={styles.title}>QUOTE</Text>
         </View>
 
         <View style={styles.metaBar}>

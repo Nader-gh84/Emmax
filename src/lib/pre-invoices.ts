@@ -353,7 +353,7 @@ export function buildPreInvoiceStats(cards: PreInvoiceProjectCard[]) {
   return [
     {
       id: "all",
-      label: "All Projects",
+      label: "All Jobs",
       count: cards.length,
       tone: "neutral" as const,
     },

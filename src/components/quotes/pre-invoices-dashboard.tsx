@@ -882,10 +882,10 @@ export function PreInvoicesDashboard() {
     <main className={styles.page}>
       <div className={styles.pageHead}>
         <div>
-          <h1>Projects</h1>
+          <h1>My Jobs</h1>
           <p>
             Create quotes, get supplier prices, send quotes, order materials and start
-            projects.
+            jobs.
           </p>
         </div>
         <div className={styles.headActions}>
@@ -908,7 +908,7 @@ export function PreInvoicesDashboard() {
                 strokeLinecap="round"
               />
             </svg>
-            New Project
+            New Job
           </button>
         </div>
       </div>
@@ -979,13 +979,13 @@ export function PreInvoicesDashboard() {
           {isLoading ? (
             <div className={`${styles.card} ${styles.loading}`}>
               <span className={styles.spinner} />
-              Loading projects…
+              Loading jobs…
             </div>
           ) : cards.length === 0 ? (
             <div className={`${styles.card} ${styles.emptyState}`}>
-              <h2>No projects yet</h2>
+              <h2>No jobs yet</h2>
               <p>
-                Record materials above to start a project in this pipeline. After Start
+                Record materials above to start a job in this pipeline. After Start
                 Project, it moves to the customer&apos;s Projects tab.
               </p>
             </div>

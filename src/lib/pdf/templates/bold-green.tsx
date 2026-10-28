@@ -264,7 +264,7 @@ export function QuotePdfBoldGreen({ data }: { data: QuotePdfData }) {
           </View>
           <View style={styles.greenBlock}>
             <View style={styles.greenInner}>
-              <Text style={styles.greenTitle}>PRE-INVOICE</Text>
+              <Text style={styles.greenTitle}>QUOTE</Text>
               <Text style={styles.greenMeta}>No: {quoteNo}</Text>
               <Text style={styles.greenMeta}>Date: {dates.issued}</Text>
               <Text style={styles.greenMeta}>

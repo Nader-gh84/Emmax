@@ -162,7 +162,7 @@ export function QuotePdfPreviewModal({
               onClick={() => void handleDownload()}
               className={`${touchBtnSecondary} flex-1 sm:min-w-[10rem]`}
             >
-              {isDownloading ? "Downloading…" : "Download PDF"}
+              {isDownloading ? "Downloading…" : "Download Quote PDF"}
             </button>
           </div>
         </div>
