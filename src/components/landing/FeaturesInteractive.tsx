@@ -65,7 +65,7 @@ const HITS: HitLink[] = [
   },
   {
     href: "/login",
-    label: "04 Confirm & Create Pre-Invoice",
+    label: "04 Confirm & Create Quote",
     style: { left: "71%", top: "40%", width: "22%", height: "10%" },
   },
   {

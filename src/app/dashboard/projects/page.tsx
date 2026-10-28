@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { PreInvoicesDashboard } from "@/components/quotes/pre-invoices-dashboard";
 
 export const metadata: Metadata = {
-  title: "Projects",
+  title: "My Jobs",
 };
 
 export default function ProjectsPage() {

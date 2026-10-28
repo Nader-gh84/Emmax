@@ -280,8 +280,7 @@ export function QuotePdfClassicBlue({ data }: { data: QuotePdfData }) {
           </View>
           <View style={styles.titleBlock}>
             <View style={styles.titleRow}>
-              <Text style={styles.titlePre}>PRE-</Text>
-              <Text style={styles.titleAccent}>INVOICE</Text>
+              <Text style={styles.titleAccent}>QUOTE</Text>
             </View>
             <Text style={styles.metaLine}>
               No: <Text style={styles.metaValue}>{quoteNo}</Text>

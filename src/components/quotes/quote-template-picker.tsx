@@ -30,7 +30,7 @@ function TemplateThumb({
           </div>
           <div className="text-right">
             <div className="text-[10px] font-bold text-slate-900">
-              PRE-<span style={{ color: accent }}>INVOICE</span>
+              <span style={{ color: accent }}>QUOTE</span>
             </div>
             <div className="mt-1 space-y-0.5">
               <div className="ml-auto h-1 w-12 rounded bg-slate-200" />
@@ -74,7 +74,7 @@ function TemplateThumb({
             className="w-[45%] skew-x-[-12deg] px-2 pt-2 text-white"
             style={{ background: accent }}
           >
-            <div className="skew-x-[12deg] text-[9px] font-bold">PRE-INVOICE</div>
+            <div className="skew-x-[12deg] text-[9px] font-bold">QUOTE</div>
             <div className="mt-1 skew-x-[12deg] space-y-0.5">
               <div className="h-1 w-10 rounded bg-white/50" />
               <div className="h-1 w-8 rounded bg-white/40" />
@@ -108,7 +108,7 @@ function TemplateThumb({
           LOGO
         </div>
         <div className="text-[10px] font-bold" style={{ color: accent }}>
-          PRE-INVOICE
+          QUOTE
         </div>
       </div>
       <div className="mt-2 h-4 w-full" style={{ background: accent }} />

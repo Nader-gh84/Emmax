@@ -880,7 +880,7 @@ export function ProjectsCapturePanel({
           Save draft
         </button>
         <button type="button" className={styles.toolBtn} onClick={onDownloadPdf} disabled={isBusy}>
-          Download PDF
+          Download Quote PDF
         </button>
         <button type="button" className={styles.toolBtn} onClick={onSendQuote} disabled={isBusy}>
           Send Quote

@@ -98,7 +98,7 @@ export default function FeaturesPageContent() {
                       <path d="M13.5 2.5v5h5M8.5 12h7M8.5 16h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                     </svg>
                   </span>
-                  <span>Pre-Invoice</span>
+                  <span>Quote</span>
                 </div>
 
                 <div className={styles.flowArrow}><svg viewBox="0 0 14 9" fill="none"><path d="M0 4.5h12m0 0L8.5 1M12 4.5 8.5 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
@@ -213,8 +213,8 @@ export default function FeaturesPageContent() {
               </span>
               <span className={styles.fcardNum}>04</span>
             </div>
-            <h3>Confirm & Create<br />Pre-Invoice</h3>
-            <p>Review, confirm and I&apos;ll create a professional pre-invoice with one click.</p>
+            <h3>Confirm & Create<br />Quote</h3>
+            <p>Review, confirm and I&apos;ll create a professional quote with one click.</p>
             <span className={styles.tag}>
               <svg viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.4" stroke="currentColor" strokeWidth="1.3"/><circle cx="7" cy="7" r="1.8" fill="currentColor"/></svg>
               One Click
@@ -229,7 +229,7 @@ export default function FeaturesPageContent() {
               <span className={styles.fcardNum}>05</span>
             </div>
             <h3>Send to Customer</h3>
-            <p>Pre-invoice is sent to your customer by email in seconds. You look professional.</p>
+            <p>Quote is sent to your customer by email in seconds. You look professional.</p>
             <span className={styles.tag}>
               <svg viewBox="0 0 14 14" fill="none"><path d="M2 7v0M4.5 4.5v5M7 2.5v9M9.5 4.5v5M12 7v0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
               Easy Share

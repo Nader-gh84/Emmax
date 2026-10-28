@@ -385,7 +385,7 @@ export function QuoteConfirmClient({
             disabled={isConfirming || isDeclining}
             className={`${touchBtnPrimary} mt-8 w-full`}
           >
-            {isConfirming ? "Confirming..." : "Confirm & Accept Quote"}
+            {isConfirming ? "Confirming..." : "Accept This Quote"}
           </button>
 
           <button

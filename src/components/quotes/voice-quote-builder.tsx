@@ -156,7 +156,7 @@ type ActiveModal =
   | "summary";
 
 const ACTIONS = [
-  { id: "download", label: "Download PDF", icon: IconDocument },
+  { id: "download", label: "Download Quote PDF", icon: IconDocument },
   { id: "draft", label: "Save to Draft", icon: IconBookmark },
   { id: "edit", label: "Edit", icon: IconPencil },
   { id: "summary", label: "View Summary", icon: IconInfo },
