@@ -675,7 +675,7 @@ function VoiceQuoteBuilderInner({
             );
           } else if (active.kind === "title_say") {
             void speakThenListenRef.current(
-              "I didn't catch that — what's the PO for this job?",
+              "I didn't catch that — what's the PO for this quote?",
               "po-say-retry",
               next
             );
@@ -764,7 +764,7 @@ function VoiceQuoteBuilderInner({
             setEmaTitleState("editing");
             lastSpokenRef.current = null;
             void speakEma(
-              "Go ahead — what should I call this job?",
+              "Go ahead — what should I call this quote?",
               "po-edit-from-voice"
             );
             return;
@@ -774,7 +774,7 @@ function VoiceQuoteBuilderInner({
           setEmaDraftTitle(cleaned);
           setEmaTitleState("confirm");
           void speakThenListenRef.current(
-            `I've got this job as ${cleaned}. If that's right, I'll get the materials ready to send to your supplier.`,
+            `I've got this quote as ${cleaned}. If that's right, I'll get the materials ready to send to your supplier.`,
             `po-confirm:${cleaned}`,
             { kind: "title_confirm", retry: 0 }
           );
@@ -1168,14 +1168,14 @@ function VoiceQuoteBuilderInner({
         setEmaDraftTitle(mapped.projectTitle);
         setEmaTitleState("confirm");
         void speakThenListen(
-          `I've got this job as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`,
+          `I've got this quote as ${mapped.projectTitle}. If that's right, I'll get the materials ready to send to your supplier.`,
           `po-confirm:${mapped.projectTitle}`,
           { kind: "title_confirm", retry: 0 }
         );
       } else {
         setEmaTitleState("unknown");
         void speakThenListen(
-          "I couldn't find a project name in what you said. What's the PO for this job?",
+          "I couldn't find a quote name in what you said. What's the PO for this quote?",
           "po-unknown",
           { kind: "title_say", retry: 0 }
         );
@@ -1392,7 +1392,7 @@ function VoiceQuoteBuilderInner({
     lastSpokenRef.current = null;
     setEmaDraftTitle(projectNameRef.current);
     setEmaTitleState("editing");
-    void speakEma("Go ahead — what should I call this job?", "po-edit-prompt");
+    void speakEma("Go ahead — what should I call this quote?", "po-edit-prompt");
   }
 
   function handleEmaTypeIt() {
@@ -1403,7 +1403,7 @@ function VoiceQuoteBuilderInner({
     lastSpokenRef.current = null;
     setEmaDraftTitle("");
     setEmaTitleState("editing");
-    void speakEma("Go ahead — what should I call this job?", "po-type-prompt");
+    void speakEma("Go ahead — what should I call this quote?", "po-type-prompt");
   }
 
   function handleEmaSayIt() {
@@ -2080,7 +2080,7 @@ function VoiceQuoteBuilderInner({
               </button>
             </div>
             <ol className="mt-4 space-y-3 text-sm text-slate-300">
-              <li>1. Tap the mic and describe the job naturally.</li>
+              <li>1. Tap the mic and describe the work and materials.</li>
               <li>2. Ema transcribes your voice and extracts materials.</li>
               <li>3. Review the list, confirm materials, then follow the process steps.</li>
               <li>4. Use Continue speaking in the transcript panel to add more anytime.</li>
@@ -2357,7 +2357,7 @@ function VoiceQuoteBuilderInner({
               type="text"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
-              placeholder="Project name (optional)"
+              placeholder="Quote name (e.g. Smith kitchen)"
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-accent sm:mt-0 sm:max-w-xs"
             />
           </header>
@@ -3317,7 +3317,7 @@ function VoiceQuoteBuilderInner({
                 </>
               ) : (
                 <>
-                  <li>1. Tap the mic and describe the job naturally.</li>
+                  <li>1. Tap the mic and describe the work and materials.</li>
                   <li>2. Ema transcribes your voice and extracts materials + labour.</li>
                   <li>3. Review the project materials, edit items, then save or send.</li>
                   <li>4. Use Continue Speaking to add more details anytime.</li>

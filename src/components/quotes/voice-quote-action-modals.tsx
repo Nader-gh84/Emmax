@@ -170,14 +170,14 @@ export function ProjectEditModal({
 
   return (
     <ModalShell
-      title="Project name"
-      description="Name this job for the project quote and PDF."
+      title="Quote name"
+      description="Name this quote for the PDF."
       onClose={onClose}
     >
       <input
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="e.g. Kitchen Reno — Phase 2"
+        placeholder="Quote name (e.g. Smith kitchen)"
         className={touchInput}
         autoFocus
       />

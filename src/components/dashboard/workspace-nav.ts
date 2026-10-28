@@ -35,7 +35,7 @@ export const workspaceNavItems = [
     icon: IconSuppliers,
   },
   {
-    label: "My Jobs",
+    label: "Create Quote",
     href: "/dashboard/projects",
     matchPath: "/dashboard/projects",
     icon: IconProjects,

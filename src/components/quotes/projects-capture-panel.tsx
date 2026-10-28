@@ -225,7 +225,7 @@ export function ProjectsCapturePanel({
 
   return (
     <section className={`${styles.card} ${styles.recorder}`}>
-      <h2>Start a new project</h2>
+      <h2>Create Quote</h2>
       <p className={styles.sub}>
         Speak the materials list, Ema will turn it into a clean list for you.{" "}
         <button type="button" className={styles.howItWorks} onClick={onHowItWorks}>
@@ -234,13 +234,13 @@ export function ProjectsCapturePanel({
       </p>
 
       <div className={styles.titleField}>
-        <label htmlFor="project-title">Project title</label>
+        <label htmlFor="project-title">Quote name</label>
         <input
           id="project-title"
           type="text"
           value={projectName}
           onChange={(event) => onProjectNameChange(event.target.value)}
-          placeholder="e.g. Kitchen renovation — Sara Emma"
+          placeholder="Quote name (e.g. Smith kitchen)"
         />
         <span className={styles.hint}>
           <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -252,7 +252,7 @@ export function ProjectsCapturePanel({
               strokeLinecap="round"
             />
           </svg>
-          This goes on the request you send to your supplier, and becomes the project name.
+          This goes on the request you send to your supplier, and becomes the quote name.
         </span>
       </div>
 
@@ -415,7 +415,7 @@ export function ProjectsCapturePanel({
             {emaTitleState === "confirm" ? (
               <>
                 <p className={styles.emaBarMsg}>
-                  I&apos;ve got this job as <strong>{projectName.trim() || "Untitled"}</strong>.
+                  I&apos;ve got this quote as <strong>{projectName.trim() || "Untitled"}</strong>.
                   If that&apos;s right, I&apos;ll get the materials ready to send to your supplier.
                 </p>
                 <div className={styles.poValue}>
@@ -440,7 +440,7 @@ export function ProjectsCapturePanel({
             {emaTitleState === "unknown" ? (
               <>
                 <p className={styles.emaBarMsg}>
-                  I couldn&apos;t find a project name in what you said. What&apos;s the PO for this job?
+                  I couldn&apos;t find a quote name in what you said. What&apos;s the PO for this quote?
                 </p>
                 <div className={styles.poValue}>
                   <div className={`${styles.poBox} ${styles.isUnknown}`}>Unknown</div>
@@ -463,13 +463,13 @@ export function ProjectsCapturePanel({
 
             {emaTitleState === "editing" ? (
               <>
-                <p className={styles.emaBarMsg}>Go ahead — what should I call this job?</p>
+                <p className={styles.emaBarMsg}>Go ahead — what should I call this quote?</p>
                 <div className={styles.poValue}>
                   <input
                     className={styles.poInput}
                     value={emaDraftTitle}
                     onChange={(event) => onEmaDraftTitleChange(event.target.value)}
-                    placeholder="e.g. Kitchen renovation — Sara Emma"
+                    placeholder="Quote name (e.g. Smith kitchen)"
                     autoFocus
                   />
                   <div className={styles.poActions}>

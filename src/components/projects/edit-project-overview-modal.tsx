@@ -179,7 +179,7 @@ export function EditProjectOverviewModal({
               value={form.address}
               onChange={(event) => updateField("address", event.target.value)}
               className={`${touchInput} mt-1.5`}
-              placeholder="Job site address"
+              placeholder="Site address"
               autoComplete="street-address"
             />
           </div>

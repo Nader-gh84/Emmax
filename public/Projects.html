@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Jobs — EmaX</title>
+<title>Create Quote — EmaX</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -700,7 +700,7 @@ button:focus-visible, a:focus-visible{
       </a>
       <a href="/dashboard/projects" class="is-active" aria-current="page">
         <svg viewBox="0 0 20 20" fill="none"><rect x="2.4" y="5.8" width="15.2" height="11" rx="2.2" stroke="currentColor" stroke-width="1.5"/><path d="M7 5.8V4.6a1.6 1.6 0 0 1 1.6-1.6h2.8A1.6 1.6 0 0 1 13 4.6v1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <span>My Jobs</span>
+        <span>Create Quote</span>
       </a>
       <a href="/dashboard/employees">
         <svg viewBox="0 0 20 20" fill="none"><circle cx="7.6" cy="7" r="2.8" stroke="currentColor" stroke-width="1.5"/><path d="M2.4 16.4c0-2.8 2.3-4.8 5.2-4.8s5.2 2 5.2 4.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13.6 5.2a2.7 2.7 0 0 1 0 5.3M14.8 11.9c2.1.5 3.6 2.3 3.6 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -737,14 +737,14 @@ button:focus-visible, a:focus-visible{
 
     <div class="page-head">
       <div>
-        <h1>My Jobs</h1>
-        <p>Create quotes, get supplier prices, send quotes, order materials and start jobs.</p>
+        <h1>Create Quote</h1>
+        <p>Tap the mic and describe the work and materials.</p>
       </div>
 
       <div class="head-actions">
         <button class="btn-new" type="button">
           <svg viewBox="0 0 16 16" fill="none"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          New Job
+          New Quote
         </button>
         <button class="bell" type="button" aria-label="Notifications">
           <svg viewBox="0 0 20 20" fill="none">
@@ -760,19 +760,19 @@ button:focus-visible, a:focus-visible{
 
       <!-- ---------- LEFT : recorder ---------- -->
       <section class="card recorder">
-        <h2>Start a new project</h2>
+        <h2>Create Quote</h2>
         <p class="sub">Speak the materials list, Ema will turn it into a clean list for you.</p>
 
         <!-- project title — becomes the PO on the supplier request -->
         <div class="title-field">
-          <label for="project-title">Project title</label>
-          <input id="project-title" type="text" placeholder="e.g. Kitchen renovation — Sara Emma">
+          <label for="project-title">Quote name</label>
+          <input id="project-title" type="text" placeholder="Quote name (e.g. Smith kitchen)">
           <span class="hint">
             <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <circle cx="7" cy="7" r="5.6" stroke="currentColor" stroke-width="1.2"/>
               <path d="M7 6.2v3.4M7 4.4v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
-            This goes on the request you send to your supplier, and becomes the project name.
+            This goes on the request you send to your supplier, and becomes the quote name.
           </span>
         </div>
 
@@ -834,7 +834,7 @@ button:focus-visible, a:focus-visible{
           </span>
           <div class="body">
             <!-- STATE A — title detected -->
-            <p class="msg">I've got this job as <strong>Kitchen renovation — Sara Emma</strong>. If that's right, I'll get the materials ready to send to your supplier.</p>
+            <p class="msg">I've got this quote as <strong>Kitchen renovation — Sara Emma</strong>. If that's right, I'll get the materials ready to send to your supplier.</p>
             <div class="po-value">
               <div class="po-box">Kitchen renovation — Sara Emma</div>
               <div class="po-actions">
@@ -845,7 +845,7 @@ button:focus-visible, a:focus-visible{
 
             <!--
             STATE B — no title detected
-            <p class="msg">I couldn't find a project name in what you said. What's the PO for this job?</p>
+            <p class="msg">I couldn't find a quote name in what you said. What's the PO for this quote?</p>
             <div class="po-value">
               <div class="po-box is-unknown">Unknown</div>
               <div class="po-actions">
@@ -857,9 +857,9 @@ button:focus-visible, a:focus-visible{
 
             <!--
             STATE C — editing
-            <p class="msg">Go ahead — what should I call this job?</p>
+            <p class="msg">Go ahead — what should I call this quote?</p>
             <div class="po-value">
-              <input class="po-input" type="text" placeholder="e.g. Kitchen renovation — Sara Emma" value="">
+              <input class="po-input" type="text" placeholder="Quote name (e.g. Smith kitchen)" value="">
               <div class="po-actions">
                 <button class="po-btn primary" type="button">Save</button>
               </div>
@@ -1075,7 +1075,7 @@ button:focus-visible, a:focus-visible{
               </span>
               <div class="step-text">
                 <h4>Start Project</h4>
-                <p>Kick off the job</p>
+                <p>Kick off the quote</p>
               </div>
               <span class="tag">Pending</span>
             </div>

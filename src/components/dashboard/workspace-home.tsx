@@ -52,7 +52,7 @@ function buildStatCards(metrics: DashboardMetrics) {
       icon: IconDocument,
     },
     {
-      label: "Active Jobs",
+      label: "Active Quotes",
       value: String(metrics.projectsActive),
       icon: IconProjects,
     },
@@ -85,7 +85,7 @@ function buildDetailRows(metrics: DashboardMetrics) {
         ],
       },
       {
-        title: "My Jobs",
+        title: "My Quotes",
         href: "/dashboard/projects",
         icon: IconProjects,
         stats: [

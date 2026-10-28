@@ -460,7 +460,7 @@ export function CustomerDetailsPage({
               href={`/dashboard/voice-quote-builder?customerId=${customerWithCounts.id}`}
               className={touchBtnPrimary}
             >
-              + New Job
+              + New Quote
             </Link>
           </div>
         </div>
@@ -770,7 +770,7 @@ function TabPanel({
 
           {recent.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">
-              No jobs yet. Use + New Job to start a quote for this
+              No quotes yet. Use + New Quote to start a quote for this
               customer, or accept an existing quote.
             </p>
           ) : (
@@ -1562,7 +1562,7 @@ function LocationsTab({
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
         <h2 className="text-lg font-semibold text-white">Locations</h2>
         <p className="mt-2 text-sm text-slate-400">
-          No addresses yet. Add a customer address or set project job-site
+          No addresses yet. Add a customer address or set project site
           addresses to see them here.
         </p>
       </div>
