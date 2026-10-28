@@ -131,7 +131,7 @@ export function buildCustomerLocations(input: {
     seen.add(key);
     locations.push({
       id: `project-${project.id}`,
-      label: project.project_name?.trim() || "Job Site",
+      label: project.project_name?.trim() || "Quote",
       address,
     });
   }
